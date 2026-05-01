@@ -1,0 +1,12 @@
+{
+  "name": "timelapse-capture",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "timelapse-capture": "src/cli/index.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/cli/*.js && node --check test/*.js"
+  }
+}
