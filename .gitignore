@@ -216,19 +216,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# timelapse-capture local artifacts
-timelapse-runs/
-*.mp4
-*.webm
-*.gif
-
-# macOS
-.DS_Store
