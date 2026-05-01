@@ -229,8 +229,8 @@ async function commandStatus({ runDir }) {
   ]);
 
   let staleWarning = null;
-  if (payload.latestFrame && payload.intervalMs && payload.lastUpdatedAt) {
-    const ageMs = Date.now() - new Date(payload.lastUpdatedAt).getTime();
+  if (payload.latestFrameAt && payload.intervalMs) {
+    const ageMs = Date.now() - new Date(payload.latestFrameAt).getTime();
     if (ageMs > payload.intervalMs * 3) {
       staleWarning = `Latest frame is ${Math.round(ageMs / 1000)}s old (interval: ${payload.intervalMs}ms)`;
     }
@@ -239,8 +239,9 @@ async function commandStatus({ runDir }) {
   return {
     ...payload,
     state,
-    diskUsage: { totalBytes: diskUsage.totalBytes, frameBytes: diskUsage.frameBytes },
-    renderedOutput: summary?.render?.outputPath ?? null,
+    diskUsageBytes: diskUsage.totalBytes,
+    framesDiskUsageBytes: diskUsage.frameBytes,
+    renderedOutputPath: summary?.render?.outputPath ?? null,
     cleanupSummary: summary?.cleanup ?? null,
     staleWarning,
   };
@@ -425,11 +426,11 @@ function printHumanStatus(status) {
   if (status.staleWarning) {
     lines.push(`WARNING:       ${status.staleWarning}`);
   }
-  if (status.diskUsage) {
-    lines.push(`disk:          ${formatBytes(status.diskUsage.totalBytes)} total, ${formatBytes(status.diskUsage.frameBytes)} frames`);
+  if (status.diskUsageBytes !== undefined || status.framesDiskUsageBytes !== undefined) {
+    lines.push(`disk:          ${formatBytes(status.diskUsageBytes)} total, ${formatBytes(status.framesDiskUsageBytes)} frames`);
   }
-  if (status.renderedOutput) {
-    lines.push(`rendered:      ${status.renderedOutput}`);
+  if (status.renderedOutputPath) {
+    lines.push(`rendered:      ${status.renderedOutputPath}`);
   }
   if (status.cleanupSummary && status.cleanupSummary.removed !== undefined) {
     lines.push(`cleanup:       ${status.cleanupSummary.removed} frames removed`);
