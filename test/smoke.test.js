@@ -28,6 +28,17 @@ function runCli({ cwd, args, env = {} }) {
   };
 }
 
+function runCliRaw({ cwd, args, env = {} }) {
+  return spawnSync(process.execPath, [CLI_PATH, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      ...env,
+    },
+  });
+}
+
 async function withServer(handler) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-smoke-page-'));
   const indexPath = path.join(dir, 'index.html');
@@ -143,4 +154,75 @@ test('failed frame attempts preserve previous successful frame', async () => {
 
     await fs.rm(workdir, { recursive: true, force: true });
   });
+});
+
+test('status reports enriched JSON and human progress details', async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-status-'));
+  const framesDir = path.join(runDir, 'frames');
+  await fs.mkdir(framesDir);
+
+  const latestFrame = path.join(framesDir, 'frame-0002.png');
+  await fs.writeFile(path.join(framesDir, 'frame-0001.png'), 'first');
+  await fs.writeFile(latestFrame, 'second');
+  await fs.writeFile(path.join(runDir, 'output.mp4'), 'rendered');
+
+  const startedAt = new Date(Date.now() - 20_000).toISOString();
+  const latestFrameTimestamp = new Date(Date.now() - 10_000).toISOString();
+  await fs.writeFile(path.join(runDir, 'status.json'), `${JSON.stringify({
+    runDir,
+    state: 'running',
+    frameCount: 2,
+    failedFrameCount: 1,
+    latestFrame,
+    latestFrameTimestamp,
+    intervalMs: 1000,
+    targetFrames: 5,
+    startedAt,
+    lastUpdatedAt: latestFrameTimestamp,
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(runDir, 'run-summary.json'), `${JSON.stringify({
+    render: { outputPath: path.join(runDir, 'output.mp4') },
+    cleanup: { success: true, removed: 3, retained: 1 },
+  }, null, 2)}\n`);
+
+  try {
+    const jsonStatus = JSON.parse(runCli({ cwd: runDir, args: ['status', runDir, '--json'] }).stdout);
+    assert.deepEqual(jsonStatus.frames, {
+      captured: 2,
+      failed: 1,
+      totalExpected: 5,
+    });
+    assert.equal(jsonStatus.latestFrame, latestFrame);
+    assert.equal(jsonStatus.latestFrameTimestamp, latestFrameTimestamp);
+    assert.equal(jsonStatus.staleWarning.isStale, true);
+    assert.ok(jsonStatus.diskUsage.runDirBytes > jsonStatus.diskUsage.framesBytes);
+    assert.equal(jsonStatus.outputPath, path.join(runDir, 'output.mp4'));
+    assert.deepEqual(jsonStatus.cleanup, { success: true, removed: 3, retained: 1 });
+
+    const humanStatus = runCli({ cwd: runDir, args: ['status', runDir] }).stdout;
+    assert.match(humanStatus, /state: running/);
+    assert.match(humanStatus, /elapsed:/);
+    assert.match(humanStatus, /eta:/);
+    assert.match(humanStatus, /frames: 2 captured, 1 failed, 5 expected/);
+    assert.match(humanStatus, /latest successful frame:/);
+    assert.match(humanStatus, /warning: latest successful frame is stale/);
+    assert.match(humanStatus, /disk usage:/);
+    assert.match(humanStatus, /output: .*output\.mp4/);
+    assert.match(humanStatus, /cleanup: removed 3, retained 1/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test('status reports missing run status file clearly', async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-missing-status-'));
+  try {
+    const result = runCliRaw({ cwd: runDir, args: ['status', runDir] });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /error: missing run status file:/);
+    assert.match(result.stderr, /status\.json/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
 });
