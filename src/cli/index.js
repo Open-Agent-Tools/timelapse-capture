@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const { parseArgs, ParseError } = require('./parser');
+const { renderFrames } = require('./render');
 
 function usage() {
   return [
@@ -233,48 +234,18 @@ async function isValidMP4(filePath) {
 }
 
 async function commandRender({ runDir, options }) {
-  const { execFile } = require('node:child_process');
-  const { promisify } = require('node:util');
-  const execFileAsync = promisify(execFile);
+  const result = renderFrames(runDir, options);
 
-  const framesDir = path.join(runDir, 'frames');
-  const outputPath = path.join(runDir, 'output.mp4');
-
-  try {
-    await fs.access(framesDir);
-  } catch {
-    throw new Error('No frames directory found');
-  }
-
-  const frameFiles = await listFrameFiles(runDir);
-  if (frameFiles.length === 0) {
-    throw new Error('No frames available to render');
-  }
-
-  const inputPattern = path.join(framesDir, 'frame-%04d.png');
-
-  try {
-    await execFileAsync('ffmpeg', [
-      '-y',
-      '-framerate', '24',
-      '-i', inputPattern,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      outputPath,
-    ]);
-  } catch (error) {
-    throw new Error(`ffmpeg render failed: ${error.message}`);
-  }
-
-  const isValid = await isValidMP4(outputPath);
-  if (!isValid) {
-    await fs.rm(outputPath, { force: true });
-    throw new Error('Rendered output is not a valid MP4');
+  if (!result.success) {
+    if (result.error && result.error.includes('validation')) {
+      throw new Error(`Rendered output is not a valid MP4: ${result.error}`);
+    }
+    throw new Error(`ffmpeg render failed: ${result.error}`);
   }
 
   return {
-    path: outputPath,
-    frameCount: frameFiles.length,
+    path: result.outputPath,
+    frameCount: result.metadata?.frameCount,
     message: 'Render successful',
   };
 }
