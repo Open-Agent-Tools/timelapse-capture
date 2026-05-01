@@ -23,30 +23,16 @@ class FakeBinaryManager {
     let script;
     if (mode === 'success') {
       script = '#!/bin/sh\n' +
-        '# Create a minimal valid MP4 file\n' +
-        'python3 -c "\n' +
-        'import struct\n' +
-        '# Minimal valid MP4 with ftyp box and moov box (valid but empty video)\n' +
-        'ftyp = b"ftypiso2" + b"\\x00" * 16  # 24 bytes total\n' +
-        'size = 8 + len(ftyp)\n' +
-        'output = struct.pack(">I", size) + ftyp\n' +
-        '# Add a minimal moov box (100 bytes)\n' +
-        'moov = b"\\x00" * 96\n' +
-        'moov_size = 8 + len(moov)\n' +
-        'output += struct.pack(">I", moov_size) + b"moov" + moov\n' +
-        '# Write to output\n' +
-        'import sys\n' +
-        'out_file = "' + outputPath + '"\n' +
-        'with open(out_file, "wb") as f:\n' +
-        '  f.write(output)\n' +
-        '"\n' +
+        'for arg do out_file="$arg"; done\n' +
+        'printf "fake mp4 bytes" > "$out_file"\n' +
         'exit 0';
     } else if (mode === 'fail') {
       script = '#!/bin/sh\nexit 1';
     } else if (mode === 'invalid-output') {
       script = '#!/bin/sh\n' +
         '# Create a file that\'s not a valid MP4\n' +
-        'echo "not a video file" > "' + outputPath + '"\n' +
+        'for arg do out_file="$arg"; done\n' +
+        'echo "not a video file" > "$out_file"\n' +
         'exit 0';
     }
 
@@ -59,6 +45,7 @@ class FakeBinaryManager {
     let script;
     if (mode === 'success') {
       script = '#!/bin/sh\n' +
+        'if [ "$1" = "-version" ]; then echo "fake ffprobe"; exit 0; fi\n' +
         'cat << \'EOF\'\n' +
         '{\n' +
         '  "streams": [\n' +
@@ -78,7 +65,9 @@ class FakeBinaryManager {
         'EOF\n' +
         'exit 0';
     } else {
-      script = '#!/bin/sh\nexit 1';
+      script = '#!/bin/sh\n' +
+        'if [ "$1" = "-version" ]; then echo "fake ffprobe"; exit 0; fi\n' +
+        'exit 1';
     }
 
     await fs.writeFile(ffprobePath, script, { mode: 0o755 });

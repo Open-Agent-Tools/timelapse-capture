@@ -45,6 +45,35 @@ describe('render with fake ffmpeg', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
+  test('valid render writes metadata summary and deletes frames', async () => {
+    const runDir = await createRunDir(tempDir);
+    const framesDir = await createTestFrames(runDir, 3);
+
+    const oldPath = process.env.PATH;
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        process.env.PATH = manager.getPATHEnv();
+
+        const result = await commandRender({ runDir, options: {} });
+        assert.strictEqual(result.path, path.join(runDir, 'output.mp4'));
+        assert.strictEqual(result.frameCount, 3);
+
+        await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+        const summary = JSON.parse(await fs.readFile(path.join(runDir, 'run-summary.json'), 'utf8'));
+        assert.strictEqual(summary.render.outputPath, path.join(runDir, 'output.mp4'));
+        assert(summary.render.bytes > 0);
+        assert.strictEqual(summary.render.duration, 10);
+        assert.deepStrictEqual(summary.render.dimensions, { width: 1280, height: 720 });
+        assert.strictEqual(summary.render.sourceFrameCount, 3);
+        assert.match(summary.render.ffmpegCommand, /^ffmpeg /);
+        assert.strictEqual(summary.cleanup.success, true);
+        assert.strictEqual(summary.cleanup.removed, 3);
+      }, 'success');
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
   test('render failure preserves frames', async () => {
     const runDir = await createRunDir(tempDir);
     const framesDir = await createTestFrames(runDir, 3);
@@ -63,6 +92,8 @@ describe('render with fake ffmpeg', () => {
 
         const files = await fs.readdir(framesDir);
         assert.strictEqual(files.length, 3, 'frames should be preserved after render failure');
+        const summary = JSON.parse(await fs.readFile(path.join(runDir, 'run-summary.json'), 'utf8'));
+        assert.strictEqual(summary.cleanup.reason, 'render-or-validation-failed');
       }, 'fail');
     } finally {
       process.env.PATH = oldPath;
@@ -87,6 +118,8 @@ describe('render with fake ffmpeg', () => {
 
         const files = await fs.readdir(framesDir);
         assert.strictEqual(files.length, 3, 'frames should be preserved after invalid output');
+        const summary = JSON.parse(await fs.readFile(path.join(runDir, 'run-summary.json'), 'utf8'));
+        assert.match(summary.lastRenderAttempt.error, /not a valid MP4|MP4 validation failed/);
       }, 'invalid-output');
     } finally {
       process.env.PATH = oldPath;

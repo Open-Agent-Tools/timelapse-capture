@@ -18,9 +18,9 @@ function getFramesDir(runDir) {
 
 function getOutputPath(runDir, config) {
   if (config?.output?.path) {
-    return config.output.path;
+    return path.resolve(config.output.path);
   }
-  return path.join(runDir, 'output.mp4');
+  return path.resolve(runDir, 'output.mp4');
 }
 
 function getSummaryPath(runDir) {
@@ -49,6 +49,7 @@ function validateMP4(outputPath) {
     exists: false,
     bytes: 0,
     duration: null,
+    dimensions: null,
     hasVideoStream: false,
     error: null,
   };
@@ -67,37 +68,38 @@ function validateMP4(outputPath) {
       return result;
     }
 
+    let probeJson;
     try {
-      const output = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1:csv=type=s "${outputPath}"`, {
+      probeJson = execSync(`ffprobe -v error -print_format json -show_format -show_streams "${outputPath}"`, {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore'],
-      }).trim();
-
-      const duration = parseFloat(output);
-      if (!isNaN(duration) && duration > 0) {
-        result.duration = duration;
-      } else {
-        result.error = 'Could not determine video duration or duration is zero';
-        return result;
-      }
+      });
     } catch (e) {
       result.error = `ffprobe failed: ${e.message}`;
       return result;
     }
 
     try {
-      const output = execSync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of default=noprint_wrappers=1:nokey=1 "${outputPath}"`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore'],
-      }).trim();
+      const metadata = JSON.parse(probeJson);
+      const duration = parseFloat(metadata?.format?.duration);
+      if (Number.isNaN(duration) || duration <= 0) {
+        result.error = 'Could not determine video duration or duration is zero';
+        return result;
+      }
+      result.duration = duration;
 
-      result.hasVideoStream = output === 'video';
-      if (!result.hasVideoStream) {
+      const videoStream = metadata?.streams?.find((stream) => stream.codec_type === 'video');
+      if (!videoStream) {
         result.error = 'Output file does not have a readable video stream';
         return result;
       }
+      result.hasVideoStream = true;
+      result.dimensions = {
+        width: Number.isFinite(Number(videoStream.width)) ? Number(videoStream.width) : null,
+        height: Number.isFinite(Number(videoStream.height)) ? Number(videoStream.height) : null,
+      };
     } catch (e) {
-      result.error = `ffprobe stream check failed: ${e.message}`;
+      result.error = `ffprobe returned unreadable metadata: ${e.message}`;
       return result;
     }
 
@@ -176,6 +178,7 @@ function renderFrames(runDir, options = {}) {
       throw new RenderError(result.error, 'ENOENT');
     }
 
+    const expectedOutputPath = path.resolve(runDir, 'output.mp4');
     const framesDir = getFramesDir(runDir);
     const frameCount = countFrames(framesDir);
     if (frameCount === 0) {
@@ -184,6 +187,10 @@ function renderFrames(runDir, options = {}) {
     }
 
     const outputPath = getOutputPath(runDir, options.config);
+    if (outputPath !== expectedOutputPath) {
+      result.error = `Output path does not match expected path: ${expectedOutputPath}`;
+      throw new RenderError(result.error, 'OUTPUT_PATH_MISMATCH');
+    }
     const outputDir = path.dirname(outputPath);
 
     if (!fs.existsSync(outputDir)) {
@@ -230,7 +237,9 @@ function renderFrames(runDir, options = {}) {
         outputPath,
         bytes: validation.bytes,
         duration: validation.duration,
+        dimensions: validation.dimensions,
         frameCount,
+        sourceFrameCount: frameCount,
         ffmpegCommand: ffmpegCmd.join(' '),
         timestamp: new Date().toISOString(),
       },
@@ -277,7 +286,14 @@ function renderFrames(runDir, options = {}) {
       ...summary,
       lastRenderAttempt: {
         error: result.error,
+        outputPath: getOutputPath(runDir, options.config),
+        frameCount: countFrames(getFramesDir(runDir)),
         timestamp: new Date().toISOString(),
+      },
+      cleanup: {
+        success: false,
+        reason: 'render-or-validation-failed',
+        removed: 0,
       },
     };
 
