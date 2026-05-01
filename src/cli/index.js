@@ -209,6 +209,156 @@ async function commandPeek({ runDir, options }) {
   return { path: selected, pathCount: names.length };
 }
 
+async function isValidMP4(filePath) {
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.size === 0) {
+      return false;
+    }
+
+    const header = Buffer.alloc(12);
+    const fd = await fs.open(filePath, 'r');
+    try {
+      await fd.read(header, 0, 12, 0);
+    } finally {
+      await fd.close();
+    }
+
+    const isFtyp = header.includes(Buffer.from('ftyp'));
+    const size = header.readUInt32BE(0);
+    return isFtyp && size > 0 && stat.size >= size;
+  } catch {
+    return false;
+  }
+}
+
+async function commandRender({ runDir, options }) {
+  const { execFile } = require('node:child_process');
+  const { promisify } = require('node:util');
+  const execFileAsync = promisify(execFile);
+
+  const framesDir = path.join(runDir, 'frames');
+  const outputPath = path.join(runDir, 'output.mp4');
+
+  try {
+    await fs.access(framesDir);
+  } catch {
+    throw new Error('No frames directory found');
+  }
+
+  const frameFiles = await listFrameFiles(runDir);
+  if (frameFiles.length === 0) {
+    throw new Error('No frames available to render');
+  }
+
+  const inputPattern = path.join(framesDir, 'frame-%04d.png');
+
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y',
+      '-framerate', '24',
+      '-i', inputPattern,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      outputPath,
+    ]);
+  } catch (error) {
+    throw new Error(`ffmpeg render failed: ${error.message}`);
+  }
+
+  const isValid = await isValidMP4(outputPath);
+  if (!isValid) {
+    await fs.rm(outputPath, { force: true });
+    throw new Error('Rendered output is not a valid MP4');
+  }
+
+  return {
+    path: outputPath,
+    frameCount: frameFiles.length,
+    message: 'Render successful',
+  };
+}
+
+async function commandCleanup({ runDir, options }) {
+  const framesDir = path.join(runDir, 'frames');
+  const stat = await fs.stat(runDir).catch(() => null);
+  if (!stat) {
+    throw new Error('Run directory not found');
+  }
+
+  const frameFiles = await listFrameFiles(runDir).catch(() => []);
+
+  if (options['keep-frames']) {
+    return {
+      message: 'Frames preserved (--keep-frames)',
+      frameCount: frameFiles.length,
+    };
+  }
+
+  if (options['keep-samples']) {
+    if (frameFiles.length === 0) {
+      return { message: 'No frames to sample', frameCount: 0 };
+    }
+
+    const toDelete = [];
+    const firstFrame = frameFiles[0];
+    const lastFrame = frameFiles[frameFiles.length - 1];
+
+    for (const file of frameFiles) {
+      if (file !== firstFrame && file !== lastFrame) {
+        toDelete.push(path.join(framesDir, file));
+      }
+    }
+
+    await Promise.all(toDelete.map((p) => fs.rm(p, { force: true })));
+
+    return {
+      message: 'Frames cleaned up (kept first and last)',
+      removed: toDelete.length,
+      retained: 2,
+    };
+  }
+
+  if (options['keep-latest']) {
+    if (frameFiles.length === 0) {
+      return { message: 'No frames to cleanup', frameCount: 0 };
+    }
+
+    const latestFrame = frameFiles[frameFiles.length - 1];
+    const toDelete = [];
+
+    for (const file of frameFiles) {
+      if (file !== latestFrame) {
+        toDelete.push(path.join(framesDir, file));
+      }
+    }
+
+    await Promise.all(toDelete.map((p) => fs.rm(p, { force: true })));
+
+    return {
+      message: 'Frames cleaned up (kept latest)',
+      removed: toDelete.length,
+      retained: 1,
+    };
+  }
+
+  if (frameFiles.length > 0) {
+    const toDelete = frameFiles.map((f) => path.join(framesDir, f));
+    await Promise.all(toDelete.map((p) => fs.rm(p, { force: true })));
+  }
+
+  try {
+    await fs.rmdir(framesDir);
+  } catch {
+    // Directory might not be empty or not exist
+  }
+
+  return {
+    message: 'Cleanup complete',
+    removed: frameFiles.length,
+  };
+}
+
 async function commandDoctor() {
   return {
     node: true,
@@ -251,9 +401,9 @@ async function execute(parsed) {
   } else if (parsed.command === 'peek') {
     output = await commandPeek(parsed);
   } else if (parsed.command === 'render') {
-    output = { message: 'not implemented yet' };
+    output = await commandRender(parsed);
   } else if (parsed.command === 'cleanup') {
-    output = { message: 'not implemented yet' };
+    output = await commandCleanup(parsed);
   } else if (parsed.command === 'doctor') {
     output = await commandDoctor();
   }
@@ -301,4 +451,6 @@ module.exports = {
   commandStart,
   commandStatus,
   commandPeek,
+  commandRender,
+  commandCleanup,
 };

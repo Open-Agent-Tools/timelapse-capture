@@ -13,7 +13,7 @@ const COMMANDS = {
   status: { positional: ['runDir'], valueFlags: [], boolFlags: ['json', 'help'] },
   render: { positional: ['runDir'], valueFlags: [], boolFlags: ['force', 'help'] },
   peek: { positional: ['runDir'], valueFlags: ['index', 'near'], boolFlags: ['json', 'help', 'latest'] },
-  cleanup: { positional: ['runDir'], valueFlags: [], boolFlags: ['frames', 'all', 'force', 'help'] },
+  cleanup: { positional: ['runDir'], valueFlags: [], boolFlags: ['frames', 'all', 'force', 'help', 'keep-frames', 'keep-samples', 'keep-latest'] },
   doctor: { positional: [], valueFlags: [], boolFlags: ['json', 'help'] },
 };
 
@@ -175,7 +175,7 @@ function parseArgs(argv = process.argv.slice(2)) {
 
       if (isBool) {
         const { key, value } = normalizeBoolFlag(token);
-        if (!(config.boolFlags.includes(key) || key === 'help' || ['json', 'force', 'frames', 'all', 'latest'].includes(key))) {
+        if (!(config.boolFlags.includes(key) || key === 'help' || ['json', 'force', 'frames', 'all', 'latest', 'keep-frames', 'keep-samples', 'keep-latest'].includes(key))) {
           throw new ParseError('E_UNKNOWN_FLAG', `Unknown flag for ${command}: ${token}`);
         }
         options[key] = value;
