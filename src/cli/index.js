@@ -46,6 +46,13 @@ function sortFrames(fileNames) {
   return fileNames.slice().sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+function normalizeCaptureState(state) {
+  if (state === 'completed') return 'done';
+  if (state === 'idle') return 'starting';
+  if (['starting', 'running', 'done', 'failed'].includes(state)) return state;
+  return state || 'starting';
+}
+
 function inferStateFromStatus(status) {
   if (status.failedFrameCount > 0 && status.frameCount === 0) {
     return 'failed';
@@ -74,12 +81,35 @@ function buildStatusPayload(status) {
     state: status.state,
     frameCount: status.frameCount,
     failedFrameCount: status.failedFrameCount,
+    targetFrames: status.targetFrames,
     latestFrame: status.latestFrame,
     elapsedMs,
     etaMs,
     startedAt: status.startedAt,
     lastUpdatedAt: status.lastUpdatedAt,
+    intervalMs: status.intervalMs,
   };
+}
+
+async function computeDiskUsage(dir) {
+  async function dirBytes(d) {
+    let total = 0;
+    const entries = await fs.readdir(d, { withFileTypes: true }).catch(() => []);
+    await Promise.all(entries.map(async (entry) => {
+      const p = path.join(d, entry.name);
+      if (entry.isFile()) {
+        const stat = await fs.stat(p).catch(() => null);
+        if (stat) total += stat.size;
+      } else if (entry.isDirectory()) {
+        total += await dirBytes(p);
+      }
+    }));
+    return total;
+  }
+
+  const framesDir = path.join(dir, 'frames');
+  const [totalBytes, frameBytes] = await Promise.all([dirBytes(dir), dirBytes(framesDir)]);
+  return { totalBytes, frameBytes };
 }
 
 async function writeArtifacts(runDir, statusState) {
@@ -179,11 +209,40 @@ async function commandStart({ target, options }) {
 }
 
 async function commandStatus({ runDir }) {
+  const runDirStat = await fs.stat(runDir).catch(() => null);
+  if (!runDirStat) {
+    throw new Error(`Run directory not found: ${runDir}`);
+  }
+
   const statusPath = path.join(runDir, 'status.json');
+  const statusStat = await fs.stat(statusPath).catch(() => null);
+  if (!statusStat) {
+    throw new Error(`Run not initialized — status.json missing in: ${runDir}`);
+  }
+
   const payload = await readJson(statusPath);
+  const state = normalizeCaptureState(payload.state || inferStateFromStatus(payload));
+
+  const [diskUsage, summary] = await Promise.all([
+    computeDiskUsage(runDir),
+    readJson(path.join(runDir, 'run-summary.json')).catch(() => null),
+  ]);
+
+  let staleWarning = null;
+  if (payload.latestFrame && payload.intervalMs && payload.lastUpdatedAt) {
+    const ageMs = Date.now() - new Date(payload.lastUpdatedAt).getTime();
+    if (ageMs > payload.intervalMs * 3) {
+      staleWarning = `Latest frame is ${Math.round(ageMs / 1000)}s old (interval: ${payload.intervalMs}ms)`;
+    }
+  }
+
   return {
     ...payload,
-    state: payload.state || inferStateFromStatus(payload),
+    state,
+    diskUsage: { totalBytes: diskUsage.totalBytes, frameBytes: diskUsage.frameBytes },
+    renderedOutput: summary?.render?.outputPath ?? null,
+    cleanupSummary: summary?.cleanup ?? null,
+    staleWarning,
   };
 }
 
@@ -337,10 +396,52 @@ async function commandDoctor() {
   };
 }
 
+function formatDuration(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.round((ms % 60000) / 1000);
+  return `${mins}m ${secs}s`;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function printHumanStatus(status) {
+  const lines = [];
+  lines.push(`state:         ${status.state}`);
+  const frameTotal = status.targetFrames ? `, ${status.targetFrames} expected` : '';
+  lines.push(`frames:        ${status.frameCount} captured, ${status.failedFrameCount} failed${frameTotal}`);
+  lines.push(`elapsed:       ${formatDuration(status.elapsedMs)}`);
+  if (status.etaMs > 0) {
+    lines.push(`eta:           ${formatDuration(status.etaMs)}`);
+  }
+  if (status.latestFrame) {
+    lines.push(`latest-frame:  ${status.latestFrame}`);
+  }
+  if (status.staleWarning) {
+    lines.push(`WARNING:       ${status.staleWarning}`);
+  }
+  if (status.diskUsage) {
+    lines.push(`disk:          ${formatBytes(status.diskUsage.totalBytes)} total, ${formatBytes(status.diskUsage.frameBytes)} frames`);
+  }
+  if (status.renderedOutput) {
+    lines.push(`rendered:      ${status.renderedOutput}`);
+  }
+  if (status.cleanupSummary && status.cleanupSummary.removed !== undefined) {
+    lines.push(`cleanup:       ${status.cleanupSummary.removed} frames removed`);
+  }
+  lines.push(`run-dir:       ${status.runDir}`);
+  console.log(lines.join('\n'));
+}
+
 async function main(argv) {
   try {
     const parsed = parseArgs(argv);
-    return execute(parsed);
+    return await execute(parsed);
   } catch (error) {
     if (error instanceof ParseError) {
       console.error(`error: ${error.message}`);
@@ -381,6 +482,11 @@ async function execute(parsed) {
 
   if (parsed.options.json) {
     console.log(JSON.stringify(output, null, 2));
+    return;
+  }
+
+  if (parsed.command === 'status') {
+    printHumanStatus(output);
     return;
   }
 
