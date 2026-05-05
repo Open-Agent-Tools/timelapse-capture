@@ -46,17 +46,27 @@ function sortFrames(fileNames) {
   return fileNames.slice().sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+const CANONICAL_STATES = [
+  'starting',
+  'running',
+  'completed',
+  'failed',
+  'rendering',
+  'rendered',
+  'render_failed',
+];
+
 function normalizeCaptureState(state) {
-  if (state === 'completed') {
-    return 'done';
+  if (state === 'done') {
+    return 'completed';
   }
-  if (state === 'idle') {
+  if (state === 'idle' || state === undefined || state === null || state === '') {
     return 'starting';
   }
-  if (['starting', 'running', 'done', 'failed'].includes(state)) {
+  if (CANONICAL_STATES.includes(state)) {
     return state;
   }
-  return state || 'starting';
+  return state;
 }
 
 function inferStateFromStatus(status) {
@@ -66,7 +76,7 @@ function inferStateFromStatus(status) {
   if (status.lastUpdatedAt) {
     return 'completed';
   }
-  return 'idle';
+  return 'starting';
 }
 
 async function safeWriteJson(filePath, value) {
@@ -261,7 +271,7 @@ async function commandStart({ target, options }) {
     await writeStatus(runDir, state);
   }
 
-  state.state = state.frameCount > 0 ? 'done' : 'failed';
+  state.state = state.frameCount > 0 ? 'completed' : 'failed';
   await writeStatus(runDir, state);
 
   const status = buildStatusPayload(state);
@@ -343,15 +353,38 @@ async function isValidMP4(filePath) {
   }
 }
 
+async function updateRenderState(runDir, state, extra = {}) {
+  const statusPath = path.join(runDir, 'status.json');
+  const existing = await readJsonIfExists(statusPath);
+  const next = {
+    ...(existing || { runDir }),
+    ...extra,
+    state,
+    lastUpdatedAt: nowIso(),
+  };
+  await safeWriteJson(statusPath, next);
+}
+
 async function commandRender({ runDir, options }) {
-  const result = renderFrames(runDir, options);
+  await updateRenderState(runDir, 'rendering');
+
+  let result;
+  try {
+    result = renderFrames(runDir, options);
+  } catch (error) {
+    await updateRenderState(runDir, 'render_failed', { renderError: error.message });
+    throw error;
+  }
 
   if (!result.success) {
+    await updateRenderState(runDir, 'render_failed', { renderError: result.error });
     if (result.error && result.error.includes('validation')) {
       throw new Error(`Rendered output is not a valid MP4: ${result.error}`);
     }
     throw new Error(`ffmpeg render failed: ${result.error}`);
   }
+
+  await updateRenderState(runDir, 'rendered', { renderedAt: nowIso() });
 
   return {
     path: result.outputPath,
