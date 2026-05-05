@@ -6,7 +6,7 @@ const { spawnSync } = require('node:child_process');
 const http = require('node:http');
 const test = require('node:test');
 
-const CLI_PATH = path.join(__dirname, '..', 'src', 'cli', 'index.js');
+const CLI_PATH = path.join(__dirname, '..', 'src', 'timelapse-capture.mjs');
 
 function runCli({ cwd, args, env = {} }) {
   const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
@@ -83,7 +83,7 @@ test('CLI smoke flow creates run artifacts and supports status/peek', async () =
 
     const startOutput = runCli({
       cwd: workdir,
-      args: ['start', url, '--json', '--interval', '100ms', '--duration', '1s'],
+      args: ['start', url, '--json', '--interval', '250ms', '--duration', '1s'],
       env: {
         TIMELAPSE_SIMULATE_FRAMES: '3',
       },
@@ -112,8 +112,8 @@ test('CLI smoke flow creates run artifacts and supports status/peek', async () =
     assert.ok(peekIndex.path.endsWith('.png'));
     assert.ok(peekNear.path.endsWith('.png'));
     assert.equal(peekLatest.path, statusData.latestFrame);
-    assert.equal(peekIndex.path, path.join(runDir, 'frames', 'frame-0001.png'));
-    assert.equal(peekNear.path, path.join(runDir, 'frames', 'frame-0002.png'));
+    assert.equal(peekIndex.path, path.join(runDir, 'frames', 'frame-000001.png'));
+    assert.equal(peekNear.path, path.join(runDir, 'frames', 'frame-000002.png'));
 
     const contents = await Promise.all([
       fs.readFile(peekLatest.path),
@@ -134,7 +134,7 @@ test('failed frame attempts preserve previous successful frame', async () => {
 
     const startOutput = runCli({
       cwd: workdir,
-      args: ['start', url, '--json', '--interval', '100ms'],
+      args: ['start', url, '--json', '--interval', '250ms', '--duration', '1s'],
       env: {
         TIMELAPSE_SIMULATE_FRAMES: '2',
         TIMELAPSE_SIMULATE_FRAME_FAILURE: '1',
@@ -147,7 +147,7 @@ test('failed frame attempts preserve previous successful frame', async () => {
     const status = JSON.parse(runCli({ cwd: workdir, args: ['status', runDir, '--json'] }).stdout);
     assert.equal(status.frameCount, 1);
     assert.equal(status.failedFrameCount, 1);
-    assert.equal(status.latestFrame, path.join(runDir, 'frames', 'frame-0001.png'));
+    assert.equal(status.latestFrame, path.join(runDir, 'frames', 'frame-000001.png'));
 
     const secondStatus = JSON.parse(runCli({ cwd: workdir, args: ['status', runDir, '--json'] }).stdout);
     assert.equal(secondStatus.latestFrame, status.latestFrame);

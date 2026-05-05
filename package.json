@@ -3,11 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "timelapse-capture": "src/cli/index.js"
+    "timelapse-capture": "src/timelapse-capture.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1"
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/cli/*.js && node --check test/**/*.js",
+    "check": "node --check src/cli/*.js && node --check src/timelapse-capture.mjs && node --check test/**/*.js",
     "ci": "npm run check && npm test"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
