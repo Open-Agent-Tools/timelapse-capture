@@ -7,7 +7,6 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/cli/*.js && node --check test/**/*.js",
-    "ci": "npm run check && npm test"
+    "check": "node --check src/cli/*.js && node --check test/**/*.js"
   }
 }
