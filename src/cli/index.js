@@ -46,6 +46,19 @@ function sortFrames(fileNames) {
   return fileNames.slice().sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+function normalizeCaptureState(state) {
+  if (state === 'completed') {
+    return 'done';
+  }
+  if (state === 'idle') {
+    return 'starting';
+  }
+  if (['starting', 'running', 'done', 'failed'].includes(state)) {
+    return state;
+  }
+  return state || 'starting';
+}
+
 function inferStateFromStatus(status) {
   if (status.failedFrameCount > 0 && status.frameCount === 0) {
     return 'failed';
@@ -65,20 +78,77 @@ async function readJson(filePath) {
   return JSON.parse(text);
 }
 
+async function readJsonIfExists(filePath) {
+  try {
+    return await readJson(filePath);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function pathExists(filePath) {
+  return Boolean(await fs.stat(filePath).catch(() => null));
+}
+
+async function dirSize(dir) {
+  let total = 0;
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        total += await dirSize(fullPath);
+      } else if (entry.isFile()) {
+        const s = await fs.stat(fullPath).catch(() => null);
+        if (s) total += s.size;
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+  return total;
+}
+
 function buildStatusPayload(status) {
+  const state = normalizeCaptureState(status.state);
   const elapsedMs = Math.max(0, Date.now() - new Date(status.startedAt).getTime());
-  const etaMs = Math.max(0, (status.targetFrames - status.frameCount) * status.intervalMs);
+  const totalExpected = Number.isFinite(status.targetFrames) ? status.targetFrames : status.frameCount;
+  const completedAttempts = (status.frameCount || 0) + (status.failedFrameCount || 0);
+  const etaMs = state === 'running' ? Math.max(0, (totalExpected - completedAttempts) * (status.intervalMs || 0)) : 0;
+  const latestFrameTimestamp = status.latestFrameTimestamp || status.latestFrameAt || null;
+  let staleWarning = { isStale: false, intervalMs: status.intervalMs || null, ageMs: null };
+  if (state === 'running' && latestFrameTimestamp && status.intervalMs) {
+    const ageMs = Math.max(0, Date.now() - new Date(latestFrameTimestamp).getTime());
+    staleWarning = {
+      isStale: ageMs > status.intervalMs,
+      intervalMs: status.intervalMs,
+      ageMs,
+    };
+  }
 
   return {
     runDir: status.runDir,
-    state: status.state,
+    state,
     frameCount: status.frameCount,
     failedFrameCount: status.failedFrameCount,
+    frames: {
+      captured: status.frameCount,
+      failed: status.failedFrameCount,
+      totalExpected,
+    },
     latestFrame: status.latestFrame,
+    latestFrameTimestamp,
+    latestFrameAt: latestFrameTimestamp,
     elapsedMs,
     etaMs,
+    staleWarning,
     startedAt: status.startedAt,
     lastUpdatedAt: status.lastUpdatedAt,
+    targetFrames: totalExpected,
+    intervalMs: status.intervalMs,
   };
 }
 
@@ -134,6 +204,19 @@ async function runFrameAttempt(runDir, frameIndex, shouldFail) {
 }
 
 async function commandStart({ target, options }) {
+  try {
+    const targetUrl = new URL(target);
+    if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+      throw new Error('unsupported protocol');
+    }
+  } catch {
+    throw new Error(`navigation failed: invalid URL: ${target}`);
+  }
+
+  if (process.env.TIMELAPSE_SIMULATE_NAVIGATION_FAILURE === '1') {
+    throw new Error(`navigation failed: page could not be loaded: ${target}`);
+  }
+
   const startedAt = nowIso();
   const targetFrames = Math.max(1, Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAMES || '3', 10));
   const intervalMs = Number.isFinite(options.interval) ? options.interval : 200;
@@ -145,12 +228,13 @@ async function commandStart({ target, options }) {
   const state = {
     runDir,
     target,
-    state: 'completed',
+    state: 'starting',
     startedAt,
     targetFrames,
     frameCount: 0,
     failedFrameCount: 0,
     latestFrame: null,
+    latestFrameAt: null,
     intervalMs,
     viewport,
     durationMs,
@@ -160,19 +244,25 @@ async function commandStart({ target, options }) {
   await writeArtifacts(runDir, state);
 
   for (let frameIndex = 1; frameIndex <= targetFrames; frameIndex += 1) {
+    state.state = 'running';
     const shouldFail = process.env.TIMELAPSE_SIMULATE_FRAME_FAILURE === '1' && frameIndex === 2;
     const attempt = await runFrameAttempt(runDir, frameIndex, shouldFail);
     state.lastUpdatedAt = nowIso();
     if (attempt.success) {
       state.frameCount += 1;
       state.latestFrame = attempt.path;
+      state.latestFrameAt = state.lastUpdatedAt;
+      state.latestFrameTimestamp = state.lastUpdatedAt;
     } else {
       state.failedFrameCount += 1;
     }
 
-    state.state = state.frameCount > 0 ? 'completed' : 'failed';
+    state.state = state.frameCount > 0 ? 'running' : 'failed';
     await writeStatus(runDir, state);
   }
+
+  state.state = state.frameCount > 0 ? 'done' : 'failed';
+  await writeStatus(runDir, state);
 
   const status = buildStatusPayload(state);
   return { runDir, status };
@@ -180,10 +270,30 @@ async function commandStart({ target, options }) {
 
 async function commandStatus({ runDir }) {
   const statusPath = path.join(runDir, 'status.json');
-  const payload = await readJson(statusPath);
-  return {
+  const payload = await readJsonIfExists(statusPath);
+  if (!payload) {
+    const reason = await pathExists(runDir) ? 'missing run status file' : 'missing run directory';
+    throw new Error(`${reason}: ${statusPath}`);
+  }
+
+  const totalBytes = await dirSize(runDir);
+  const frameBytes = await dirSize(path.join(runDir, 'frames'));
+  const summary = await readJsonIfExists(path.join(runDir, 'run-summary.json'));
+  const status = buildStatusPayload({
     ...payload,
     state: payload.state || inferStateFromStatus(payload),
+  });
+
+  return {
+    ...status,
+    diskUsage: {
+      runDirBytes: totalBytes,
+      framesBytes: frameBytes,
+    },
+    outputPath: summary?.render?.outputPath || null,
+    renderedOutput: summary?.render?.outputPath || null,
+    cleanup: summary?.cleanup || null,
+    cleanupSummary: summary?.cleanup || null,
   };
 }
 
@@ -260,15 +370,19 @@ async function commandCleanup({ runDir, options }) {
   const frameFiles = await listFrameFiles(runDir).catch(() => []);
 
   if (options['keep-frames']) {
-    return {
+    const result = {
       message: 'Frames preserved (--keep-frames)',
       frameCount: frameFiles.length,
     };
+    await writeCleanupSummary(runDir, { success: true, removed: 0, retained: frameFiles.length, reason: 'keep-frames' });
+    return result;
   }
 
   if (options['keep-samples']) {
     if (frameFiles.length === 0) {
-      return { message: 'No frames to sample', frameCount: 0 };
+      const result = { message: 'No frames to sample', frameCount: 0 };
+      await writeCleanupSummary(runDir, { success: true, removed: 0, retained: 0 });
+      return result;
     }
 
     const toDelete = [];
@@ -283,16 +397,20 @@ async function commandCleanup({ runDir, options }) {
 
     await Promise.all(toDelete.map((p) => fs.rm(p, { force: true })));
 
-    return {
+    const result = {
       message: 'Frames cleaned up (kept first and last)',
       removed: toDelete.length,
       retained: 2,
     };
+    await writeCleanupSummary(runDir, { success: true, removed: toDelete.length, retained: 2 });
+    return result;
   }
 
   if (options['keep-latest']) {
     if (frameFiles.length === 0) {
-      return { message: 'No frames to cleanup', frameCount: 0 };
+      const result = { message: 'No frames to cleanup', frameCount: 0 };
+      await writeCleanupSummary(runDir, { success: true, removed: 0, retained: 0 });
+      return result;
     }
 
     const latestFrame = frameFiles[frameFiles.length - 1];
@@ -306,11 +424,13 @@ async function commandCleanup({ runDir, options }) {
 
     await Promise.all(toDelete.map((p) => fs.rm(p, { force: true })));
 
-    return {
+    const result = {
       message: 'Frames cleaned up (kept latest)',
       removed: toDelete.length,
       retained: 1,
     };
+    await writeCleanupSummary(runDir, { success: true, removed: toDelete.length, retained: 1 });
+    return result;
   }
 
   if (frameFiles.length > 0) {
@@ -324,10 +444,24 @@ async function commandCleanup({ runDir, options }) {
     // Directory might not be empty or not exist
   }
 
-  return {
+  const result = {
     message: 'Cleanup complete',
     removed: frameFiles.length,
   };
+  await writeCleanupSummary(runDir, { success: true, removed: frameFiles.length, retained: 0 });
+  return result;
+}
+
+async function writeCleanupSummary(runDir, cleanup) {
+  const summaryPath = path.join(runDir, 'run-summary.json');
+  const existing = await readJsonIfExists(summaryPath);
+  await safeWriteJson(summaryPath, {
+    ...existing,
+    cleanup: {
+      ...cleanup,
+      timestamp: nowIso(),
+    },
+  });
 }
 
 async function commandDoctor() {
@@ -337,10 +471,39 @@ async function commandDoctor() {
   };
 }
 
+function formatDuration(ms) {
+  const seconds = Math.max(0, Math.round((ms || 0) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function printHumanStatus(status) {
+  const lines = [];
+  lines.push(`run-dir: ${status.runDir}`);
+  lines.push(`state: ${status.state}`);
+  lines.push(`elapsed: ${formatDuration(status.elapsedMs)}`);
+  if (status.state === 'running') lines.push(`eta: ${formatDuration(status.etaMs)}`);
+  lines.push(`frames: ${status.frames.captured} captured, ${status.frames.failed} failed, ${status.frames.totalExpected} expected`);
+  if (status.latestFrame) lines.push(`latest successful frame: ${status.latestFrame}`);
+  if (status.latestFrameTimestamp) lines.push(`latest successful frame at: ${status.latestFrameTimestamp}`);
+  if (status.staleWarning?.isStale) lines.push(`warning: latest successful frame is stale (${formatDuration(status.staleWarning.ageMs)} old)`);
+  if (status.diskUsage) lines.push(`disk usage: run-dir ${formatBytes(status.diskUsage.runDirBytes)}, frames ${formatBytes(status.diskUsage.framesBytes)}`);
+  if (status.outputPath) lines.push(`output: ${status.outputPath}`);
+  if (status.cleanup) lines.push(`cleanup: removed ${status.cleanup.removed ?? 0}, retained ${status.cleanup.retained ?? 0}`);
+  console.log(lines.join('\n'));
+}
+
 async function main(argv) {
   try {
     const parsed = parseArgs(argv);
-    return execute(parsed);
+    return await execute(parsed);
   } catch (error) {
     if (error instanceof ParseError) {
       console.error(`error: ${error.message}`);
@@ -349,7 +512,8 @@ async function main(argv) {
       return;
     }
 
-    throw error;
+    console.error(`error: ${error.message}`);
+    process.exitCode = 1;
   }
 }
 
@@ -381,6 +545,11 @@ async function execute(parsed) {
 
   if (parsed.options.json) {
     console.log(JSON.stringify(output, null, 2));
+    return;
+  }
+
+  if (parsed.command === 'status' && typeof output === 'object') {
+    printHumanStatus(output);
     return;
   }
 
