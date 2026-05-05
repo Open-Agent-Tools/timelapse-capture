@@ -74,6 +74,33 @@ describe('render with fake ffmpeg', () => {
     }
   });
 
+  test('runDir paths with spaces and shell metacharacters render safely', async () => {
+    // Regression: ffmpeg/ffprobe were previously invoked via execSync with the
+    // path interpolated into a shell-string, so a runDir containing spaces or
+    // characters like `;` and `$(...)` either broke the invocation or invited
+    // shell injection. The argv form must pass these paths through verbatim.
+    const runDir = path.join(tempDir, `run dir; with $(spaces) & 'quotes'`);
+    await fs.mkdir(runDir, { recursive: true });
+    const framesDir = await createTestFrames(runDir, 3);
+
+    const oldPath = process.env.PATH;
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        process.env.PATH = manager.getPATHEnv();
+
+        const result = await commandRender({ runDir, options: {} });
+        assert.strictEqual(result.path, path.join(runDir, 'output.mp4'));
+
+        const stat = await fs.stat(result.path);
+        assert(stat.size > 0, 'output.mp4 must be written at the literal path');
+
+        await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+      }, 'success');
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
   test('render failure preserves frames', async () => {
     const runDir = await createRunDir(tempDir);
     const framesDir = await createTestFrames(runDir, 3);
