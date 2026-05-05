@@ -18,7 +18,9 @@ function getFramesDir(runDir) {
 
 function getOutputPath(runDir, config) {
   if (config?.output?.path) {
-    return path.resolve(config.output.path);
+    return path.isAbsolute(config.output.path)
+      ? path.resolve(config.output.path)
+      : path.resolve(runDir, config.output.path);
   }
   return path.resolve(runDir, 'output.mp4');
 }
@@ -178,7 +180,6 @@ function renderFrames(runDir, options = {}) {
       throw new RenderError(result.error, 'ENOENT');
     }
 
-    const expectedOutputPath = path.resolve(runDir, 'output.mp4');
     const framesDir = getFramesDir(runDir);
     const frameCount = countFrames(framesDir);
     if (frameCount === 0) {
@@ -187,10 +188,6 @@ function renderFrames(runDir, options = {}) {
     }
 
     const outputPath = getOutputPath(runDir, options.config);
-    if (outputPath !== expectedOutputPath) {
-      result.error = `Output path does not match expected path: ${expectedOutputPath}`;
-      throw new RenderError(result.error, 'OUTPUT_PATH_MISMATCH');
-    }
     const outputDir = path.dirname(outputPath);
 
     if (!fs.existsSync(outputDir)) {
@@ -258,7 +255,7 @@ function renderFrames(runDir, options = {}) {
     } else {
       summary.cleanup = {
         success: false,
-        reason: 'Frames preserved by option',
+        reason: options.skipCleanupReason || 'Frames preserved by option',
         removed: 0,
       };
     }

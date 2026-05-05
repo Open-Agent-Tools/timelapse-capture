@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const { parseArgs, ParseError } = require('./parser');
-const { renderFrames } = require('./render');
+const { renderFrames, getOutputPath } = require('./render');
 
 function usage() {
   return [
@@ -16,7 +16,7 @@ function usage() {
     '  status <run-dir>      Print capture status',
     '  render <run-dir>      Render an mp4 from captured frames',
     '  peek <run-dir>        Inspect captured frames',
-    '  cleanup <run-dir>     Cleanup artifacts',
+    '  cleanup <run-dir>     Cleanup artifacts (--all is destructive)',
     '  doctor                Check runtime dependencies',
   ].join('\n');
 }
@@ -47,13 +47,13 @@ function sortFrames(fileNames) {
 }
 
 function normalizeCaptureState(state) {
-  if (state === 'completed') {
-    return 'done';
+  if (state === 'done') {
+    return 'completed';
   }
   if (state === 'idle') {
     return 'starting';
   }
-  if (['starting', 'running', 'done', 'failed'].includes(state)) {
+  if (['starting', 'running', 'rendering', 'completed', 'failed'].includes(state)) {
     return state;
   }
   return state || 'starting';
@@ -67,6 +67,10 @@ function inferStateFromStatus(status) {
     return 'completed';
   }
   return 'idle';
+}
+
+function isActiveRunState(state) {
+  return ['starting', 'running', 'rendering'].includes(state);
 }
 
 async function safeWriteJson(filePath, value) {
@@ -91,6 +95,14 @@ async function readJsonIfExists(filePath) {
 
 async function pathExists(filePath) {
   return Boolean(await fs.stat(filePath).catch(() => null));
+}
+
+async function resolveOutputPath(runDir) {
+  const config = await readJsonIfExists(path.join(runDir, 'config.json'));
+  return {
+    config,
+    outputPath: getOutputPath(runDir, config),
+  };
 }
 
 async function dirSize(dir) {
@@ -261,7 +273,7 @@ async function commandStart({ target, options }) {
     await writeStatus(runDir, state);
   }
 
-  state.state = state.frameCount > 0 ? 'done' : 'failed';
+  state.state = state.frameCount > 0 ? 'completed' : 'failed';
   await writeStatus(runDir, state);
 
   const status = buildStatusPayload(state);
@@ -299,14 +311,29 @@ async function commandStatus({ runDir }) {
 
 async function listFrameFiles(runDir) {
   const framesDir = path.join(runDir, 'frames');
-  const entries = await fs.readdir(framesDir, { withFileTypes: true });
+  const entries = await fs.readdir(framesDir, { withFileTypes: true }).catch((error) => {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  });
   return sortFrames(entries.filter((entry) => entry.isFile() && entry.name.endsWith('.png')).map((entry) => entry.name));
 }
 
 async function commandPeek({ runDir, options }) {
   const names = await listFrameFiles(runDir);
   if (!names.length) {
-    throw new Error('No frames available');
+    const posterPath = path.join(runDir, 'poster.png');
+    if (await pathExists(posterPath)) {
+      return { path: posterPath, pathCount: 0 };
+    }
+
+    const retainedPath = path.join(runDir, 'latest-retained.png');
+    if (await pathExists(retainedPath)) {
+      return { path: retainedPath, pathCount: 0 };
+    }
+
+    throw new Error('No frames available. Raw frames were cleaned up. Use poster.png or latest-retained.png from the run directory.');
   }
 
   let index = names.length - 1;
@@ -344,7 +371,24 @@ async function isValidMP4(filePath) {
 }
 
 async function commandRender({ runDir, options }) {
-  const result = renderFrames(runDir, options);
+  const status = await readJsonIfExists(path.join(runDir, 'status.json'));
+  const state = status?.state || (status ? inferStateFromStatus(status) : null);
+  const active = isActiveRunState(state);
+  if (active && !options.force) {
+    throw new Error('Cannot render while capture is active. Use --force to override.');
+  }
+
+  const { config } = await resolveOutputPath(runDir);
+  const renderOptions = {
+    ...options,
+    config,
+  };
+  if (active && options.force) {
+    renderOptions['keep-frames'] = true;
+    renderOptions.skipCleanupReason = 'active-run-force-render';
+  }
+
+  const result = renderFrames(runDir, renderOptions);
 
   if (!result.success) {
     if (result.error && result.error.includes('validation')) {
@@ -368,6 +412,53 @@ async function commandCleanup({ runDir, options }) {
   }
 
   const frameFiles = await listFrameFiles(runDir).catch(() => []);
+
+  if (options.all) {
+    if (frameFiles.length > 0 && !options.force) {
+      throw new Error('cleanup --all is destructive and raw frames remain. Use --force to delete the run directory.');
+    }
+
+    await fs.rm(runDir, { recursive: true, force: true });
+    return {
+      message: 'Destructive cleanup complete',
+      removedRunDir: true,
+    };
+  }
+
+  if (options.frames) {
+    const { outputPath } = await resolveOutputPath(runDir);
+    if (!options.force && !(await pathExists(outputPath))) {
+      throw new Error(`Rendered output not found: ${outputPath}`);
+    }
+
+    const toDelete = frameFiles.map((f) => path.join(framesDir, f));
+    const latestPath = path.join(runDir, 'latest.png');
+    if (await pathExists(latestPath)) {
+      toDelete.push(latestPath);
+    }
+
+    await Promise.all(toDelete.map((p) => fs.rm(p, { force: true })));
+    try {
+      await fs.rmdir(framesDir);
+    } catch {
+      // Directory might not be empty or not exist
+    }
+
+    const result = {
+      message: 'Frame cleanup complete',
+      removed: toDelete.length,
+      retained: 0,
+      outputPath,
+    };
+    await writeCleanupSummary(runDir, {
+      success: true,
+      removed: toDelete.length,
+      retained: 0,
+      outputPath,
+      reason: 'frames',
+    });
+    return result;
+  }
 
   if (options['keep-frames']) {
     const result = {
