@@ -112,11 +112,10 @@ function parseValueFlag(flag, value) {
   }
 
   if (flag === 'index' || flag === 'near') {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    if (!/^\d+$/.test(value)) {
       throw new ParseError('E_BAD_INDEX', `Invalid numeric value for --${flag}: ${value}`);
     }
-    return parsed;
+    return Number(value);
   }
 
   return value;
@@ -175,7 +174,7 @@ function parseArgs(argv = process.argv.slice(2)) {
 
       if (isBool) {
         const { key, value } = normalizeBoolFlag(token);
-        if (!(config.boolFlags.includes(key) || key === 'help' || ['json', 'force', 'frames', 'all', 'latest', 'keep-frames', 'keep-samples', 'keep-latest'].includes(key))) {
+        if (!config.boolFlags.includes(key)) {
           throw new ParseError('E_UNKNOWN_FLAG', `Unknown flag for ${command}: ${token}`);
         }
         options[key] = value;

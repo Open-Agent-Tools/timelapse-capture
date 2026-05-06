@@ -8,7 +8,9 @@
   },
   "scripts": {
     "start": "node ./src/timelapse-capture.mjs",
-    "check": "node --check ./src/timelapse-capture.mjs"
+    "check": "node --check src/cli/index.js src/cli/parser.js src/cli/render.js test/parser.test.js test/check-script.test.js",
+    "test": "node --test test/parser.test.js test/check-script.test.js",
+    "ci": "npm run check && npm test"
   },
   "dependencies": {
     "playwright": "^1.59.1"

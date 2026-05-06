@@ -1,11 +1,8 @@
-const assert = require('node:assert');
-const test = require('node:test');
+import { strict as assert } from 'node:assert';
+import test from 'node:test';
+import parserModule from '../src/cli/parser.js';
 
-const {
-  parseArgs,
-  parseDuration,
-  parseViewport,
-} = require('../src/cli/parser.js');
+const { parseArgs, parseDuration, parseViewport } = parserModule;
 
 test('parses durations from simple units', () => {
   assert.deepEqual(parseDuration('10s'), { input: '10s', ms: 10_000 });
@@ -78,4 +75,27 @@ test('parses index and near flags', () => {
   const parsed = parseArgs(['peek', 'runs/issue-8', '--index', '2', '--near', '4']);
   assert.equal(parsed.options.index, 2);
   assert.equal(parsed.options.near, 4);
+});
+
+test('rejects malformed numeric index values', () => {
+  assert.throws(() => parseArgs(['peek', 'runs/issue-8', '--index', '2abc']), {
+    name: 'ParseError',
+    code: 'E_BAD_INDEX',
+  });
+  assert.throws(() => parseArgs(['peek', 'runs/issue-8', '--near', '4ms']), {
+    name: 'ParseError',
+    code: 'E_BAD_INDEX',
+  });
+});
+
+test('rejects unsupported negated flag for command', () => {
+  assert.throws(() => parseArgs(['doctor', '--no-force']), {
+    name: 'ParseError',
+    code: 'E_UNKNOWN_FLAG',
+  });
+});
+
+test('accepts valid negated boolean flag for command', () => {
+  const parsed = parseArgs(['status', 'runs/issue-8', '--no-json']);
+  assert.equal(parsed.options.json, false);
 });
