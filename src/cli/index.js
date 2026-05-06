@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const { parseArgs, ParseError } = require('./parser');
+const { commandDoctor, formatDoctorHuman } = require('./doctor');
 const { renderFrames } = require('./render');
 
 function usage() {
@@ -464,13 +465,6 @@ async function writeCleanupSummary(runDir, cleanup) {
   });
 }
 
-async function commandDoctor() {
-  return {
-    node: true,
-    command: 'timelapse-capture',
-  };
-}
-
 function formatDuration(ms) {
   const seconds = Math.max(0, Math.round((ms || 0) / 1000));
   const minutes = Math.floor(seconds / 60);
@@ -545,6 +539,17 @@ async function execute(parsed) {
 
   if (parsed.options.json) {
     console.log(JSON.stringify(output, null, 2));
+    if (parsed.command === 'doctor' && output.exitCode) {
+      process.exitCode = output.exitCode;
+    }
+    return;
+  }
+
+  if (parsed.command === 'doctor' && typeof output === 'object') {
+    console.log(formatDoctorHuman(output));
+    if (output.exitCode) {
+      process.exitCode = output.exitCode;
+    }
     return;
   }
 
@@ -593,4 +598,5 @@ module.exports = {
   commandPeek,
   commandRender,
   commandCleanup,
+  commandDoctor,
 };
