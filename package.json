@@ -2,13 +2,14 @@
   "name": "timelapse-capture",
   "version": "0.1.0",
   "description": "Fire-and-forget visual timelapse capture for long-running app review.",
-  "type": "module",
   "bin": {
-    "timelapse-capture": "./src/timelapse-capture.mjs"
+    "timelapse-capture": "./src/cli/index.js"
   },
   "scripts": {
-    "start": "node ./src/timelapse-capture.mjs",
-    "check": "node --check ./src/timelapse-capture.mjs"
+    "start": "node ./src/cli/index.js",
+    "check": "node --check ./src/cli/index.js && node --check ./src/cli/parser.js && node --check ./src/cli/render.js && node --check ./test/parser.test.js && node --check ./test/smoke.test.js && node --check ./test/render.test.js && node --check ./test/render-cleanup.test.js && node --check ./test/check-script.test.js",
+    "test": "node --test",
+    "ci": "npm run check && npm test"
   },
   "dependencies": {
     "playwright": "^1.59.1"
