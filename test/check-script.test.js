@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 test('package.json has ci script that chains check and test', () => {
   const pkgPath = resolve(import.meta.dirname, '../package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  assert.strictEqual(pkg.scripts.test, 'node --test test/check-script.test.js test/canonical-cli.test.mjs');
   assert.strictEqual(
     pkg.scripts.ci,
     'npm run check && npm test',

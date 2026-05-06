@@ -8,7 +8,9 @@
   },
   "scripts": {
     "start": "node ./src/timelapse-capture.mjs",
-    "check": "node --check ./src/timelapse-capture.mjs"
+    "check": "node --check ./src/timelapse-capture.mjs",
+    "test": "node --test test/check-script.test.js test/canonical-cli.test.mjs",
+    "ci": "npm run check && npm test"
   },
   "dependencies": {
     "playwright": "^1.59.1"
