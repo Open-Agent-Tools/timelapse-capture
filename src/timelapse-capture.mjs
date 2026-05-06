@@ -31,6 +31,8 @@ async function main() {
       return renderCommand(parseArgs(rest), rest);
     case "cleanup":
       return cleanupCommand(parseArgs(rest), rest);
+    case "doctor":
+      return doctorCommand(parseArgs(rest));
     case "help":
     case "--help":
     case "-h":
@@ -480,10 +482,44 @@ async function cleanupCommand(args, rawArgs) {
   console.log(`Cleaned frames: ${summary.filesDeleted} files, ${formatBytes(summary.bytesFreed)} freed`);
 }
 
+async function doctorCommand(args) {
+  const checks = {
+    node: {
+      ok: Number(process.versions.node.split(".")[0]) >= 20,
+      version: process.version
+    },
+    chromium: await checkChromium(),
+    ffmpeg: checkCommand("ffmpeg", ["-version"]),
+    ffprobe: checkCommand("ffprobe", ["-version"])
+  };
+
+  const result = {
+    ok: Object.values(checks).every((check) => check.ok),
+    checks
+  };
+
+  if (!result.ok) {
+    process.exitCode = 1;
+  }
+
+  if (args.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`timelapse-capture doctor`);
+  console.log(`ok: ${result.ok}`);
+  console.log(`node: ${formatCheck(checks.node)}`);
+  console.log(`playwright chromium: ${formatCheck(checks.chromium)}`);
+  console.log(`ffmpeg: ${formatCheck(checks.ffmpeg)}`);
+  console.log(`ffprobe: ${formatCheck(checks.ffprobe)}`);
+}
+
 function printHelp() {
   console.log(`timelapse-capture ${VERSION}
 
 Usage:
+  timelapse-capture doctor [--json]
   timelapse-capture start --url <url> --duration <2h> (--interval <5s> | --video-length <1m>) [--out <dir>]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
@@ -491,6 +527,7 @@ Usage:
   timelapse-capture cleanup <run-dir> [--force]
 
 Examples:
+  timelapse-capture doctor
   timelapse-capture start --url http://localhost:3000 --duration 2h --video-length 1m --fps 24
   timelapse-capture peek ./timelapse-runs/localhost-20260430-101500 --latest
 `);
@@ -677,6 +714,41 @@ function formatBytes(bytes) {
     unitIndex += 1;
   }
   return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function checkCommand(command, args) {
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  if (result.error) {
+    return { ok: false, error: result.error.message };
+  }
+  const output = `${result.stdout || ""}${result.stderr || ""}`.split("\n")[0].trim();
+  return {
+    ok: result.status === 0,
+    version: output || null,
+    error: result.status === 0 ? null : `exited with status ${result.status}`
+  };
+}
+
+async function checkChromium() {
+  let browser;
+  try {
+    const { chromium } = await import("playwright");
+    browser = await chromium.launch({ headless: true });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  } finally {
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+  }
+}
+
+function formatCheck(check) {
+  if (!check.ok) {
+    return `failed${check.error ? ` (${check.error})` : ""}`;
+  }
+  return `ok${check.version ? ` ${check.version}` : ""}`;
 }
 
 async function linkOrCopy(source, target) {
