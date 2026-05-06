@@ -1,13 +1,10 @@
-'use strict';
+import { test, describe, before, after } from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { commandRender, commandCleanup, commandPeek } from '../src/cli/index.js';
+import { withFakeFFmpeg, hasRealFFmpeg } from './helpers/fake-ffmpeg.js';
 
-const { test, describe, before, after } = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { commandRender, commandCleanup, commandPeek } = require('../src/cli/index');
-const { withFakeFFmpeg, hasRealFFmpeg } = require('./helpers/fake-ffmpeg');
-
-// Helper to create test frames
 async function createTestFrames(runDir, count = 3) {
   const framesDir = path.join(runDir, 'frames');
   await fs.mkdir(framesDir, { recursive: true });
@@ -25,7 +22,6 @@ async function createTestFrames(runDir, count = 3) {
   return framesDir;
 }
 
-// Helper to create a run directory structure
 async function createRunDir(tempDir) {
   const runDir = path.join(tempDir, `run-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await fs.mkdir(runDir, { recursive: true });

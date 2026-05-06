@@ -1,11 +1,11 @@
-const assert = require('node:assert');
-const test = require('node:test');
+import assert from 'node:assert';
+import { test } from 'node:test';
 
-const {
+import {
   parseArgs,
   parseDuration,
   parseViewport,
-} = require('../src/cli/parser.js');
+} from '../src/cli/parser.js';
 
 test('parses durations from simple units', () => {
   assert.deepEqual(parseDuration('10s'), { input: '10s', ms: 10_000 });

@@ -1,10 +1,8 @@
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const { renderFrames, validateMP4, cleanupFrames } = require('../src/cli/render');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { renderFrames, validateMP4, cleanupFrames } from '../src/cli/render.js';
 
 function createTempDir() {
   const dir = path.join('/tmp', `test-render-${Date.now()}-${Math.random().toString(36).slice(2)}`);

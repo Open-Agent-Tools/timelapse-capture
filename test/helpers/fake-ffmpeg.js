@@ -1,8 +1,6 @@
-'use strict';
-
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { execSync } = require('node:child_process');
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 class FakeBinaryManager {
   constructor(tempDir) {
@@ -18,7 +16,6 @@ class FakeBinaryManager {
 
   async createFakeFFmpeg(mode = 'success') {
     const ffmpegPath = path.join(this.binDir, 'ffmpeg');
-    const outputPath = path.join(this.outputDir, 'output.mp4');
 
     let script;
     if (mode === 'success') {
@@ -30,7 +27,6 @@ class FakeBinaryManager {
       script = '#!/bin/sh\nexit 1';
     } else if (mode === 'invalid-output') {
       script = '#!/bin/sh\n' +
-        '# Create a file that\'s not a valid MP4\n' +
         'for arg do out_file="$arg"; done\n' +
         'echo "not a video file" > "$out_file"\n' +
         'exit 0';
@@ -98,16 +94,12 @@ async function withFakeFFmpeg(testFn, mode = 'success') {
 }
 
 function hasRealFFmpeg() {
-  try {
-    execSync('which ffmpeg > /dev/null 2>&1');
-    execSync('which ffprobe > /dev/null 2>&1');
-    return true;
-  } catch {
-    return false;
-  }
+  const ffmpeg = spawnSync('which', ['ffmpeg'], { encoding: 'utf8' });
+  const ffprobe = spawnSync('which', ['ffprobe'], { encoding: 'utf8' });
+  return ffmpeg.status === 0 && ffprobe.status === 0;
 }
 
-module.exports = {
+export {
   FakeBinaryManager,
   withFakeFFmpeg,
   hasRealFFmpeg,

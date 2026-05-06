@@ -1,5 +1,3 @@
-'use strict';
-
 class ParseError extends Error {
   constructor(code, message) {
     super(message);
@@ -228,7 +226,7 @@ function parseArgs(argv = process.argv.slice(2)) {
   return result;
 }
 
-module.exports = {
+export {
   ParseError,
   parseDuration,
   parseViewport,

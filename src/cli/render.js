@@ -1,8 +1,6 @@
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 class RenderError extends Error {
   constructor(message, code) {
@@ -70,7 +68,13 @@ function validateMP4(outputPath) {
 
     let probeJson;
     try {
-      probeJson = execSync(`ffprobe -v error -print_format json -show_format -show_streams "${outputPath}"`, {
+      probeJson = execFileSync('ffprobe', [
+        '-v', 'error',
+        '-print_format', 'json',
+        '-show_format',
+        '-show_streams',
+        outputPath,
+      ], {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore'],
       });
@@ -197,10 +201,10 @@ function renderFrames(runDir, options = {}) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // Build ffmpeg command
+    // Build ffmpeg argv
+    const ffmpegBin = options.ffmpegPath || 'ffmpeg';
     const framePattern = path.join(framesDir, '%05d.png');
-    const ffmpegCmd = [
-      'ffmpeg',
+    const ffmpegArgs = [
       '-framerate', (options.framerate || 10).toString(),
       '-i', framePattern,
       '-c:v', 'libx264',
@@ -209,12 +213,8 @@ function renderFrames(runDir, options = {}) {
       outputPath,
     ];
 
-    if (options.ffmpegPath) {
-      ffmpegCmd[0] = options.ffmpegPath;
-    }
-
     try {
-      execSync(ffmpegCmd.join(' '), {
+      execFileSync(ffmpegBin, ffmpegArgs, {
         stdio: 'pipe',
         encoding: 'utf8',
       });
@@ -231,6 +231,7 @@ function renderFrames(runDir, options = {}) {
 
     // Render successful - prepare metadata
     const existingSummary = readExistingSummary(runDir);
+    const ffmpegCommand = [ffmpegBin, ...ffmpegArgs].join(' ');
     const summary = {
       ...existingSummary,
       render: {
@@ -240,7 +241,7 @@ function renderFrames(runDir, options = {}) {
         dimensions: validation.dimensions,
         frameCount,
         sourceFrameCount: frameCount,
-        ffmpegCommand: ffmpegCmd.join(' '),
+        ffmpegCommand,
         timestamp: new Date().toISOString(),
       },
       cleanup: null,
@@ -307,7 +308,7 @@ function renderFrames(runDir, options = {}) {
   }
 }
 
-module.exports = {
+export {
   renderFrames,
   RenderError,
   validateMP4,

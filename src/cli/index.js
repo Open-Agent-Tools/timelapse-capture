@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-'use strict';
 
-const fs = require('node:fs/promises');
-const path = require('node:path');
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const { parseArgs, ParseError } = require('./parser');
-const { renderFrames } = require('./render');
+import { parseArgs, ParseError } from './parser.js';
+import { renderFrames } from './render.js';
 
 function usage() {
   return [
@@ -320,29 +320,6 @@ async function commandPeek({ runDir, options }) {
   return { path: selected, pathCount: names.length };
 }
 
-async function isValidMP4(filePath) {
-  try {
-    const stat = await fs.stat(filePath);
-    if (stat.size === 0) {
-      return false;
-    }
-
-    const header = Buffer.alloc(12);
-    const fd = await fs.open(filePath, 'r');
-    try {
-      await fd.read(header, 0, 12, 0);
-    } finally {
-      await fd.close();
-    }
-
-    const isFtyp = header.includes(Buffer.from('ftyp'));
-    const size = header.readUInt32BE(0);
-    return isFtyp && size > 0 && stat.size >= size;
-  } catch {
-    return false;
-  }
-}
-
 async function commandRender({ runDir, options }) {
   const result = renderFrames(runDir, options);
 
@@ -582,11 +559,12 @@ async function execute(parsed) {
   }
 }
 
-if (require.main === module) {
+const __filename = fileURLToPath(import.meta.url);
+if (process.argv[1] === __filename) {
   main(process.argv.slice(2));
 }
 
-module.exports = {
+export {
   main,
   commandStart,
   commandStatus,
