@@ -20,6 +20,54 @@ function cleanupTempDir(dir) {
   }
 }
 
+function writeExecutable(filePath, content) {
+  fs.writeFileSync(filePath, content, { mode: 0o755 });
+}
+
+function prependFakeBinaries(binDir) {
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${binDir}:${oldPath || ''}`;
+  return () => {
+    process.env.PATH = oldPath;
+  };
+}
+
+function writeSuccessfulFakeFFprobe(binDir) {
+  writeExecutable(path.join(binDir, 'ffprobe'), `#!/bin/sh
+cat <<'EOF'
+{
+  "streams": [
+    {
+      "codec_type": "video",
+      "width": 1280,
+      "height": 720
+    }
+  ],
+  "format": {
+    "duration": "10.0"
+  }
+}
+EOF
+exit 0
+`);
+}
+
+function writeSuccessfulFakeFFmpeg(binDir) {
+  writeExecutable(path.join(binDir, 'ffmpeg'), `#!/bin/sh
+for arg do out_file="$arg"; done
+printf "fake mp4 bytes" > "$out_file"
+exit 0
+`);
+}
+
+function writeSuccessfulFakeFFmpegAt(filePath) {
+  writeExecutable(filePath, `#!/bin/sh
+for arg do out_file="$arg"; done
+printf "fake mp4 bytes" > "$out_file"
+exit 0
+`);
+}
+
 test('renderFrames: fails with missing run directory', () => {
   const result = renderFrames('/nonexistent/run/dir');
   assert.strictEqual(result.success, false);
@@ -58,6 +106,82 @@ test('validateMP4: detects empty file', () => {
     assert.match(result.error, /empty/i);
   } finally {
     cleanupTempDir(runDir);
+  }
+});
+
+test('validateMP4: treats shell metacharacters in output path as literal argv', () => {
+  const runDir = createTempDir();
+  const binDir = path.join(runDir, 'bin');
+  const markerPath = path.join(runDir, 'ffprobe-marker');
+  const injectedDir = path.join(runDir, `safe " ; touch ${markerPath} ; echo "`);
+  const mp4Path = path.join(injectedDir, 'output.mp4');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(injectedDir, { recursive: true });
+  fs.writeFileSync(mp4Path, 'fake mp4 bytes');
+  writeSuccessfulFakeFFprobe(binDir);
+
+  const restorePath = prependFakeBinaries(binDir);
+  try {
+    const result = validateMP4(mp4Path);
+
+    assert.strictEqual(result.error, null);
+    assert.strictEqual(result.hasVideoStream, true);
+    assert.deepStrictEqual(result.dimensions, { width: 1280, height: 720 });
+    assert.strictEqual(fs.existsSync(markerPath), false);
+  } finally {
+    restorePath();
+    cleanupTempDir(runDir);
+  }
+});
+
+test('renderFrames: treats shell metacharacters in run directory as literal argv', () => {
+  const tempDir = createTempDir();
+  const binDir = path.join(tempDir, 'bin');
+  const markerPath = path.join(tempDir, 'ffmpeg-marker');
+  const runDir = path.join(tempDir, `run " ; touch ${markerPath} ; echo "`);
+  const framesDir = path.join(runDir, 'frames');
+  const framePath = path.join(framesDir, '00001.png');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(framesDir, { recursive: true });
+  fs.writeFileSync(framePath, 'fake png');
+  writeSuccessfulFakeFFmpeg(binDir);
+  writeSuccessfulFakeFFprobe(binDir);
+
+  const restorePath = prependFakeBinaries(binDir);
+  try {
+    const result = renderFrames(runDir, { 'keep-frames': true });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.outputPath, path.join(runDir, 'output.mp4'));
+    assert.strictEqual(fs.existsSync(markerPath), false);
+    assert.strictEqual(fs.existsSync(framePath), true);
+  } finally {
+    restorePath();
+    cleanupTempDir(tempDir);
+  }
+});
+
+test('renderFrames: preserves explicit ffmpegPath override', () => {
+  const tempDir = createTempDir();
+  const binDir = path.join(tempDir, 'bin');
+  const runDir = path.join(tempDir, 'run');
+  const framesDir = path.join(runDir, 'frames');
+  const customFFmpegPath = path.join(binDir, 'custom-ffmpeg');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(framesDir, { recursive: true });
+  fs.writeFileSync(path.join(framesDir, '00001.png'), 'fake png');
+  writeSuccessfulFakeFFmpegAt(customFFmpegPath);
+  writeSuccessfulFakeFFprobe(binDir);
+
+  const restorePath = prependFakeBinaries(binDir);
+  try {
+    const result = renderFrames(runDir, { 'keep-frames': true, ffmpegPath: customFFmpegPath });
+
+    assert.strictEqual(result.success, true);
+    assert.match(result.metadata.ffmpegCommand, new RegExp(`^${customFFmpegPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} `));
+  } finally {
+    restorePath();
+    cleanupTempDir(tempDir);
   }
 });
 

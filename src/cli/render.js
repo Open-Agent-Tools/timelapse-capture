@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 class RenderError extends Error {
   constructor(message, code) {
@@ -70,7 +70,15 @@ function validateMP4(outputPath) {
 
     let probeJson;
     try {
-      probeJson = execSync(`ffprobe -v error -print_format json -show_format -show_streams "${outputPath}"`, {
+      probeJson = execFileSync('ffprobe', [
+        '-v',
+        'error',
+        '-print_format',
+        'json',
+        '-show_format',
+        '-show_streams',
+        outputPath,
+      ], {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore'],
       });
@@ -199,8 +207,8 @@ function renderFrames(runDir, options = {}) {
 
     // Build ffmpeg command
     const framePattern = path.join(framesDir, '%05d.png');
-    const ffmpegCmd = [
-      'ffmpeg',
+    const ffmpegExecutable = options.ffmpegPath || 'ffmpeg';
+    const ffmpegArgs = [
       '-framerate', (options.framerate || 10).toString(),
       '-i', framePattern,
       '-c:v', 'libx264',
@@ -208,13 +216,10 @@ function renderFrames(runDir, options = {}) {
       '-crf', '23',
       outputPath,
     ];
-
-    if (options.ffmpegPath) {
-      ffmpegCmd[0] = options.ffmpegPath;
-    }
+    const ffmpegCmd = [ffmpegExecutable, ...ffmpegArgs];
 
     try {
-      execSync(ffmpegCmd.join(' '), {
+      execFileSync(ffmpegExecutable, ffmpegArgs, {
         stdio: 'pipe',
         encoding: 'utf8',
       });
