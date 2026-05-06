@@ -47,13 +47,10 @@ function sortFrames(fileNames) {
 }
 
 function normalizeCaptureState(state) {
-  if (state === 'completed') {
-    return 'done';
-  }
   if (state === 'idle') {
     return 'starting';
   }
-  if (['starting', 'running', 'done', 'failed'].includes(state)) {
+  if (['starting', 'running', 'completed', 'failed', 'rendering', 'rendered', 'render_failed'].includes(state)) {
     return state;
   }
   return state || 'starting';
@@ -261,7 +258,7 @@ async function commandStart({ target, options }) {
     await writeStatus(runDir, state);
   }
 
-  state.state = state.frameCount > 0 ? 'done' : 'failed';
+  state.state = state.frameCount > 0 ? 'completed' : 'failed';
   await writeStatus(runDir, state);
 
   const status = buildStatusPayload(state);
@@ -344,13 +341,26 @@ async function isValidMP4(filePath) {
 }
 
 async function commandRender({ runDir, options }) {
+  const statusPath = path.join(runDir, 'status.json');
+  const existingStatus = await readJsonIfExists(statusPath);
+  if (existingStatus) {
+    await safeWriteJson(statusPath, { ...existingStatus, state: 'rendering', updatedAt: nowIso() });
+  }
+
   const result = renderFrames(runDir, options);
 
   if (!result.success) {
+    if (existingStatus) {
+      await safeWriteJson(statusPath, { ...existingStatus, state: 'render_failed', updatedAt: nowIso() });
+    }
     if (result.error && result.error.includes('validation')) {
       throw new Error(`Rendered output is not a valid MP4: ${result.error}`);
     }
     throw new Error(`ffmpeg render failed: ${result.error}`);
+  }
+
+  if (existingStatus) {
+    await safeWriteJson(statusPath, { ...existingStatus, state: 'rendered', updatedAt: nowIso() });
   }
 
   return {
