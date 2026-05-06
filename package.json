@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node ./src/timelapse-capture.mjs",
-    "check": "node --check src/cli/index.js src/cli/parser.js src/cli/render.js test/parser.test.js test/check-script.test.js",
+    "check": "node --check src/cli/index.js && node --check src/cli/parser.js && node --check src/cli/render.js && node --check test/parser.test.js && node --check test/check-script.test.js",
     "test": "node --test test/parser.test.js test/check-script.test.js",
     "ci": "npm run check && npm test"
   },
