@@ -5,73 +5,158 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const VERSION = "0.1.0";
 
-main().catch((error) => {
-  console.error(error?.message || String(error));
-  process.exitCode = 1;
-});
-
-async function main() {
-  const [command, ...rest] = process.argv.slice(2);
-
-  switch (command) {
-    case "start":
-      return startCommand(parseArgs(rest));
-    case "capture":
-      return captureCommand(parseArgs(rest));
-    case "status":
-      return statusCommand(parseArgs(rest), rest);
-    case "peek":
-      return peekCommand(parseArgs(rest), rest);
-    case "render":
-      return renderCommand(parseArgs(rest), rest);
-    case "cleanup":
-      return cleanupCommand(parseArgs(rest), rest);
-    case "help":
-    case "--help":
-    case "-h":
-    case undefined:
-      return printHelp();
-    default:
-      throw new Error(`Unknown command: ${command}\nRun "timelapse-capture help".`);
+class ParseError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "ParseError";
+    this.code = code;
   }
 }
 
-async function startCommand(args) {
-  if (!args.url) {
-    throw new Error("Missing --url. MVP supports URL capture with the playwright-url backend.");
+const COMMAND_SCHEMAS = {
+  start: {
+    positionals: ["url"],
+    valueFlags: [
+      "url",
+      "duration",
+      "interval",
+      "video-length",
+      "fps",
+      "viewport",
+      "out",
+      "cleanup",
+      "keep-samples",
+      "wait-until",
+      "backend"
+    ],
+    boolFlags: ["headed", "json", "keep-frames", "keep-latest", "help"]
+  },
+  capture: {
+    positionals: [],
+    valueFlags: ["run"],
+    boolFlags: ["help"]
+  },
+  status: {
+    positionals: ["runDir"],
+    valueFlags: [],
+    boolFlags: ["json", "help"]
+  },
+  peek: {
+    positionals: ["runDir"],
+    valueFlags: ["index", "near"],
+    boolFlags: ["latest", "json", "help"]
+  },
+  render: {
+    positionals: ["runDir"],
+    valueFlags: ["output"],
+    boolFlags: ["json", "force", "help"]
+  },
+  cleanup: {
+    positionals: ["runDir"],
+    valueFlags: [],
+    boolFlags: ["force", "frames", "all", "help"]
+  },
+  doctor: {
+    positionals: [],
+    valueFlags: [],
+    boolFlags: ["json", "help"]
+  }
+};
+
+const isMainModule = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (isMainModule) {
+  main().catch((error) => {
+    if (error instanceof ParseError) {
+      console.error(`error: ${error.message}`);
+      console.error(`code: ${error.code}`);
+      process.exitCode = 2;
+      return;
+    }
+    console.error(error?.message || String(error));
+    process.exitCode = 1;
+  });
+}
+
+async function main() {
+  const argv = process.argv.slice(2);
+  const [rawCommand] = argv;
+
+  if (!rawCommand || rawCommand === "help" || rawCommand === "--help" || rawCommand === "-h") {
+    return printHelp();
   }
 
-  const durationSeconds = parseDuration(required(args.duration, "--duration"));
+  const parsed = parseArgs(argv);
+  if (parsed.options.help) {
+    return printHelp();
+  }
+
+  switch (parsed.command) {
+    case "start":
+      return startCommand(parsed);
+    case "capture":
+      return captureCommand(parsed);
+    case "status":
+      return statusCommand(parsed);
+    case "peek":
+      return peekCommand(parsed);
+    case "render":
+      return renderCommand(parsed);
+    case "cleanup":
+      return cleanupCommand(parsed);
+    case "doctor":
+      return doctorCommand(parsed);
+    default:
+      throw new ParseError("E_UNKNOWN_COMMAND", `Unknown command: ${parsed.command}`);
+  }
+}
+
+async function startCommand(parsed) {
+  const args = parsed.options;
+  const url = parsed.positionals[0] ?? args.url;
+  if (!url) {
+    throw new ParseError("E_MISSING_ARGUMENT", "Missing <url>. Usage: timelapse-capture start <url> --duration <d> (--interval <i> | --video-length <l>)");
+  }
+
+  const durationValue = args.duration;
+  if (!durationValue) {
+    throw new ParseError("E_MISSING_VALUE", "Missing --duration.");
+  }
+  const durationSeconds = typeof durationValue === "object" && durationValue !== null
+    ? durationValue.ms / 1000
+    : parseDurationSeconds(durationValue);
   const fps = Number(args.fps ?? 24);
   if (!Number.isFinite(fps) || fps <= 0) {
-    throw new Error("--fps must be a positive number.");
+    throw new ParseError("E_BAD_VALUE", "--fps must be a positive number.");
   }
 
   let intervalSeconds;
-  if (args.interval) {
-    intervalSeconds = parseDuration(args.interval);
+  if (args.interval !== undefined) {
+    intervalSeconds = typeof args.interval === "number" ? args.interval / 1000 : parseDurationSeconds(args.interval);
   } else if (args["video-length"]) {
-    const videoLengthSeconds = parseDuration(args["video-length"]);
+    const videoLengthSeconds = parseDurationSeconds(args["video-length"]);
     const targetFrames = Math.max(1, Math.round(videoLengthSeconds * fps));
     intervalSeconds = durationSeconds / targetFrames;
   } else {
-    throw new Error("Provide --interval or --video-length.");
+    throw new ParseError("E_MISSING_VALUE", "Provide --interval or --video-length.");
   }
 
   if (intervalSeconds < 0.25) {
-    throw new Error("Computed interval is below 250ms. Use a longer interval or shorter final video.");
+    throw new ParseError("E_BAD_INTERVAL", "Computed interval is below 250ms. Use a longer interval or shorter final video.");
   }
 
-  const viewport = parseViewport(args.viewport ?? "1440x900");
-  const outDir = path.resolve(args.out ?? defaultRunDir(args.url));
+  const viewport = typeof args.viewport === "object" && args.viewport !== null
+    ? { width: args.viewport.width, height: args.viewport.height }
+    : parseViewport(args.viewport ?? "1440x900");
+  const outDir = path.resolve(args.out ?? defaultRunDir(url));
   const cleanup = args["keep-frames"] ? "never" : (args.cleanup ?? "after-render");
   if (!["after-render", "never"].includes(cleanup)) {
-    throw new Error('--cleanup must be "after-render" or "never".');
+    throw new ParseError("E_BAD_VALUE", '--cleanup must be "after-render" or "never".');
   }
 
   await ensureDir(outDir);
@@ -80,9 +165,10 @@ async function startCommand(args) {
   const config = {
     version: VERSION,
     backend: args.backend ?? "playwright-url",
-    url: args.url,
+    url,
     durationSeconds,
     intervalSeconds,
+    intervalMs: Math.round(intervalSeconds * 1000),
     expectedFrames: Math.ceil(durationSeconds / intervalSeconds),
     fps,
     viewport,
@@ -131,13 +217,27 @@ async function startCommand(args) {
   }
   await writeJsonAtomic(statusPath, status);
 
+  if (args.json) {
+    const payload = {
+      runDir: outDir,
+      pid: child.pid,
+      url,
+      startedAt: status.startedAt,
+      statusCommand: ["timelapse-capture", "status", outDir],
+      peekCommand: ["timelapse-capture", "peek", outDir, "--latest"]
+    };
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
   console.log(`Started timelapse capture: ${outDir}`);
   console.log(`PID: ${child.pid}`);
   console.log(`Status: timelapse-capture status ${shellQuote(outDir)}`);
   console.log(`Peek:   timelapse-capture peek ${shellQuote(outDir)} --latest`);
 }
 
-async function captureCommand(args) {
+async function captureCommand(parsed) {
+  const args = parsed.options;
   const runDir = path.resolve(required(args.run, "--run"));
   const config = await readJson(path.join(runDir, "config.json"));
   const framesDir = path.join(runDir, "frames");
@@ -272,55 +372,55 @@ async function captureCommand(args) {
   }
 }
 
-async function statusCommand(args, rawArgs) {
-  const runDir = path.resolve(positionalRunDir(args, rawArgs));
+async function statusCommand(parsed) {
+  const args = parsed.options;
+  const runDir = path.resolve(parsed.positionals[0] ?? args.run ?? required(undefined, "<run-dir>"));
   const status = await readJson(path.join(runDir, "status.json"));
   const config = await readJson(path.join(runDir, "config.json"));
   const latest = await readJsonOptional(path.join(runDir, "latest-frame.json"));
+  const summary = await readJsonOptional(path.join(runDir, "run-summary.json"));
   const framesDir = path.join(runDir, "frames");
-  const diskUsage = await directorySize(framesDir).catch(() => 0);
+  const framesBytes = await directorySize(framesDir).catch(() => 0);
+  const runDirBytes = await directorySize(runDir).catch(() => 0);
 
-  const payload = {
+  const payload = buildStatusPayload({
     runDir,
     config,
     status,
-    latestFrame: latest,
-    framesDiskUsageBytes: diskUsage
-  };
+    latest,
+    summary,
+    framesBytes,
+    runDirBytes
+  });
 
   if (args.json) {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
 
-  console.log(`Run: ${runDir}`);
-  console.log(`State: ${status.state}`);
-  console.log(`Frames: ${status.framesCaptured ?? 0} captured / ${status.framesAttempted ?? 0} attempted / ${status.framesFailed ?? 0} failed`);
-  console.log(`Expected: ${config.expectedFrames}`);
-  console.log(`Updated: ${status.updatedAt ?? "unknown"}`);
-  console.log(`Latest: ${latest?.path ? path.join(runDir, latest.path) : "none"}`);
-  console.log(`Frame disk use: ${formatBytes(diskUsage)}`);
-  if (status.error) {
-    console.log(`Error: ${status.error}`);
-  }
+  printHumanStatus(payload);
 }
 
-async function peekCommand(args, rawArgs) {
-  const runDir = path.resolve(positionalRunDir(args, rawArgs));
+async function peekCommand(parsed) {
+  const args = parsed.options;
+  const runDir = path.resolve(parsed.positionals[0] ?? required(undefined, "<run-dir>"));
   let record;
 
-  if (args.latest || (!args.index && !args.near)) {
+  const indexValue = args.index;
+  const nearValue = args.near;
+
+  if (args.latest || (indexValue === undefined && nearValue === undefined)) {
     record = await readJsonOptional(path.join(runDir, "latest-frame.json"));
   } else {
     const records = await readManifest(path.join(runDir, "manifest.jsonl"));
     const captured = records.filter((item) => item.status === "captured" && item.path);
-    if (args.index) {
-      const index = Number(args.index);
+    if (indexValue !== undefined) {
+      const index = Number(indexValue);
       record = captured.find((item) => item.index === index);
-    } else if (args.near) {
-      const target = Date.parse(args.near);
+    } else if (nearValue !== undefined) {
+      const target = Date.parse(nearValue);
       if (Number.isNaN(target)) {
-        throw new Error(`Invalid --near timestamp: ${args.near}`);
+        throw new ParseError("E_BAD_VALUE", `Invalid --near timestamp: ${nearValue}`);
       }
       record = captured.toSorted((a, b) => {
         return Math.abs(Date.parse(a.capturedAt) - target) - Math.abs(Date.parse(b.capturedAt) - target);
@@ -334,7 +434,13 @@ async function peekCommand(args, rawArgs) {
 
   const absolutePath = path.join(runDir, record.path);
   const exists = fs.existsSync(absolutePath);
-  const payload = { runDir, framePath: absolutePath, exists, frame: record };
+  const payload = {
+    runDir,
+    framePath: absolutePath,
+    path: absolutePath,
+    exists,
+    frame: record
+  };
 
   if (args.json) {
     console.log(JSON.stringify(payload, null, 2));
@@ -347,8 +453,9 @@ async function peekCommand(args, rawArgs) {
   console.log(`Exists: ${exists ? "yes" : "no"}`);
 }
 
-async function renderCommand(args, rawArgs) {
-  const runDir = path.resolve(positionalRunDir(args, rawArgs));
+async function renderCommand(parsed) {
+  const args = parsed.options;
+  const runDir = path.resolve(parsed.positionals[0] ?? required(undefined, "<run-dir>"));
   const config = await readJson(path.join(runDir, "config.json"));
   const manifest = await readManifest(path.join(runDir, "manifest.jsonl"));
   const captured = manifest.filter((record) => record.status === "captured" && record.path);
@@ -464,8 +571,9 @@ async function renderCommand(args, rawArgs) {
   }
 }
 
-async function cleanupCommand(args, rawArgs) {
-  const runDir = path.resolve(positionalRunDir(args, rawArgs));
+async function cleanupCommand(parsed) {
+  const args = parsed.options;
+  const runDir = path.resolve(parsed.positionals[0] ?? required(undefined, "<run-dir>"));
   const outputPath = path.join(runDir, "output.mp4");
   if (!args.force && !fs.existsSync(outputPath)) {
     throw new Error("Refusing to delete frames before output.mp4 exists. Pass --force to override.");
@@ -496,72 +604,202 @@ Examples:
 `);
 }
 
-function parseArgs(tokens) {
-  const args = { _: [] };
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (!token.startsWith("--")) {
-      args._.push(token);
-      continue;
-    }
-
-    const [rawKey, inlineValue] = token.slice(2).split("=", 2);
-    const key = rawKey.trim();
-    if (inlineValue !== undefined) {
-      args[key] = inlineValue;
-      continue;
-    }
-
-    const next = tokens[index + 1];
-    if (next && !next.startsWith("--")) {
-      args[key] = next;
-      index += 1;
-    } else {
-      args[key] = true;
-    }
+function parseArgs(argv = process.argv.slice(2)) {
+  const tokens = Array.isArray(argv) ? [...argv] : [];
+  if (tokens.length === 0) {
+    return { command: "help", options: {}, positionals: [] };
   }
-  return args;
+
+  const command = tokens[0];
+  if (command === "help" || command === "--help" || command === "-h") {
+    return { command: "help", options: {}, positionals: [] };
+  }
+
+  const schema = COMMAND_SCHEMAS[command];
+  if (!schema) {
+    throw new ParseError("E_UNKNOWN_COMMAND", `Unknown command: ${command}`);
+  }
+
+  const options = {};
+  const positionals = [];
+  const rest = tokens.slice(1);
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const token = rest[index];
+
+    if (token === "--") {
+      positionals.push(...rest.slice(index + 1));
+      break;
+    }
+
+    if (!token.startsWith("-")) {
+      positionals.push(token);
+      continue;
+    }
+
+    if (token.startsWith("--no-")) {
+      const key = token.slice(5);
+      if (!schema.boolFlags.includes(key)) {
+        throw new ParseError("E_UNKNOWN_FLAG", `Unknown flag for ${command}: ${token}`);
+      }
+      options[key] = false;
+      continue;
+    }
+
+    let key;
+    let inlineValue;
+    if (token.startsWith("--")) {
+      const eqIndex = token.indexOf("=");
+      if (eqIndex >= 0) {
+        key = token.slice(2, eqIndex);
+        inlineValue = token.slice(eqIndex + 1);
+      } else {
+        key = token.slice(2);
+      }
+    } else {
+      throw new ParseError("E_UNKNOWN_FLAG", `Unknown flag format: ${token}`);
+    }
+
+    if (schema.boolFlags.includes(key)) {
+      if (inlineValue !== undefined) {
+        throw new ParseError("E_BAD_VALUE", `Boolean flag --${key} does not accept a value`);
+      }
+      options[key] = true;
+      continue;
+    }
+
+    if (!schema.valueFlags.includes(key)) {
+      throw new ParseError("E_UNKNOWN_FLAG", `Unknown flag for ${command}: --${key}`);
+    }
+
+    let value = inlineValue;
+    if (value === undefined) {
+      const next = rest[index + 1];
+      if (next === undefined || next.startsWith("-")) {
+        throw new ParseError("E_MISSING_VALUE", `Missing value for --${key}`);
+      }
+      value = next;
+      index += 1;
+    }
+
+    options[key] = parseValueFlag(key, value);
+  }
+
+  if (positionals.length > schema.positionals.length) {
+    throw new ParseError("E_EXTRA_ARGUMENT", `Too many positional arguments for ${command}`);
+  }
+
+  const result = { command, options, positionals };
+  if (schema.positionals[0] === "url" && positionals[0]) {
+    result.target = positionals[0];
+  }
+  if (schema.positionals[0] === "runDir" && positionals[0]) {
+    result.runDir = positionals[0];
+  }
+  return result;
 }
 
-function positionalRunDir(args, rawArgs) {
-  if (args.run) {
-    return args.run;
+function parseValueFlag(flag, value) {
+  if (value === undefined || value === "") {
+    throw new ParseError("E_MISSING_VALUE", `Missing value for --${flag}`);
   }
-  const positional = args._?.[0] ?? rawArgs.find((token) => !token.startsWith("--"));
-  return required(positional, "<run-dir>");
+
+  if (flag === "duration" || flag === "video-length") {
+    return parseDuration(value);
+  }
+
+  if (flag === "interval") {
+    const parsed = parseDuration(value);
+    if (parsed.ms === 0) {
+      throw new ParseError("E_BAD_INTERVAL", `Invalid interval: ${value}`);
+    }
+    return parsed.ms;
+  }
+
+  if (flag === "viewport") {
+    return parseViewport(value);
+  }
+
+  if (flag === "fps" || flag === "keep-samples") {
+    if (!/^\d+$/.test(value)) {
+      throw new ParseError("E_BAD_VALUE", `Invalid numeric value for --${flag}: ${value}`);
+    }
+    return Number.parseInt(value, 10);
+  }
+
+  if (flag === "index") {
+    if (!/^\d+$/.test(value)) {
+      throw new ParseError("E_BAD_INDEX", `Invalid numeric value for --${flag}: ${value}`);
+    }
+    return Number.parseInt(value, 10);
+  }
+
+  return value;
 }
 
 function required(value, name) {
   if (value === undefined || value === null || value === "") {
-    throw new Error(`Missing ${name}.`);
+    throw new ParseError("E_MISSING_ARGUMENT", `Missing ${name}.`);
   }
   return value;
 }
 
+function parseDurationSeconds(input) {
+  const parsed = parseDuration(input);
+  if (typeof parsed === "object" && parsed !== null && typeof parsed.ms === "number") {
+    return parsed.ms / 1000;
+  }
+  return parsed;
+}
+
 function parseDuration(input) {
   if (typeof input === "number") {
-    return input;
+    return { input: String(input), ms: Math.round(input * 1000) };
+  }
+  if (input === null || input === undefined) {
+    throw new ParseError("E_BAD_DURATION", `Invalid duration: ${input}`);
   }
   const value = String(input).trim();
-  const match = value.match(/^(\d+(?:\.\d+)?)(ms|s|m|h|d)?$/i);
-  if (!match) {
-    throw new Error(`Invalid duration: ${input}`);
+  if (value === "") {
+    throw new ParseError("E_BAD_DURATION", `Invalid duration: ${input}`);
   }
-  const amount = Number(match[1]);
-  const unit = (match[2] ?? "s").toLowerCase();
-  const multipliers = { ms: 0.001, s: 1, m: 60, h: 3600, d: 86400 };
-  return amount * multipliers[unit];
+  const compoundMatch = value.toLowerCase().match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?(?:(\d+)ms)?$/);
+  const decimalMatch = value.match(/^(\d+(?:\.\d+)?)(ms|s|m|h|d)$/i);
+
+  if (compoundMatch && compoundMatch.slice(1).some((part) => part !== undefined)) {
+    const hours = Number.parseInt(compoundMatch[1] || "0", 10);
+    const minutes = Number.parseInt(compoundMatch[2] || "0", 10);
+    const seconds = Number.parseInt(compoundMatch[3] || "0", 10);
+    const ms = Number.parseInt(compoundMatch[4] || "0", 10);
+    const total = (hours * 3_600_000) + (minutes * 60_000) + (seconds * 1000) + ms;
+    return { input: value, ms: total };
+  }
+
+  if (decimalMatch) {
+    const amount = Number(decimalMatch[1]);
+    const unit = decimalMatch[2].toLowerCase();
+    const multipliers = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+    return { input: value, ms: Math.round(amount * multipliers[unit]) };
+  }
+
+  throw new ParseError("E_BAD_DURATION", `Invalid duration: ${input}`);
 }
 
 function parseViewport(input) {
-  const match = String(input).match(/^(\d+)x(\d+)$/i);
-  if (!match) {
-    throw new Error(`Invalid viewport "${input}". Use WIDTHxHEIGHT, such as 1440x900.`);
+  if (input === null || input === undefined) {
+    throw new ParseError("E_BAD_VIEWPORT", `Invalid viewport: ${input}`);
   }
-  return {
-    width: Number(match[1]),
-    height: Number(match[2])
-  };
+  const value = String(input);
+  const match = value.match(/^(\d+)x(\d+)$/i);
+  if (!match) {
+    throw new ParseError("E_BAD_VIEWPORT", `Invalid viewport: ${input}`);
+  }
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (width <= 0 || height <= 0) {
+    throw new ParseError("E_BAD_VIEWPORT", `Invalid viewport: ${input}`);
+  }
+  return { input: value, width, height };
 }
 
 function defaultRunDir(url) {
@@ -745,3 +983,188 @@ function shellQuote(value) {
   }
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
+
+function buildStatusPayload({ runDir, config, status, latest, summary, framesBytes, runDirBytes }) {
+  const state = status.state ?? "starting";
+  const startedAtMs = status.startedAt ? new Date(status.startedAt).getTime() : Date.now();
+  const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  const intervalMs = config.intervalMs ?? Math.round((config.intervalSeconds ?? 0) * 1000);
+  const totalExpected = Number.isFinite(config.expectedFrames) ? config.expectedFrames : (status.framesAttempted ?? 0);
+  const captured = status.framesCaptured ?? 0;
+  const failed = status.framesFailed ?? 0;
+  const completedAttempts = captured + failed;
+
+  let etaMs = 0;
+  if (state === "running" && intervalMs > 0) {
+    etaMs = Math.max(0, (totalExpected - completedAttempts) * intervalMs);
+  }
+
+  const latestFramePath = latest?.path ? path.join(runDir, latest.path) : null;
+  const latestFrameTimestamp = latest?.capturedAt ?? null;
+
+  let staleWarning = { isStale: false, intervalMs: intervalMs || null, ageMs: null };
+  if (state === "running" && latestFrameTimestamp && intervalMs > 0) {
+    const ageMs = Math.max(0, Date.now() - new Date(latestFrameTimestamp).getTime());
+    staleWarning = {
+      isStale: ageMs > intervalMs,
+      intervalMs,
+      ageMs
+    };
+  }
+
+  return {
+    runDir,
+    state,
+    frameCount: captured,
+    failedFrameCount: failed,
+    frames: {
+      captured,
+      failed,
+      totalExpected
+    },
+    targetFrames: totalExpected,
+    intervalMs,
+    latestFrame: latestFramePath,
+    latestFrameTimestamp,
+    elapsedMs,
+    etaMs,
+    staleWarning,
+    diskUsage: {
+      runDirBytes,
+      framesBytes
+    },
+    startedAt: status.startedAt ?? null,
+    updatedAt: status.updatedAt ?? null,
+    outputPath: summary?.output ?? summary?.render?.outputPath ?? null,
+    cleanup: summary?.cleanup ?? null,
+    error: status.error ?? null
+  };
+}
+
+function formatDuration(ms) {
+  const seconds = Math.max(0, Math.round((ms || 0) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
+
+function printHumanStatus(payload) {
+  const lines = [];
+  lines.push(`run-dir: ${payload.runDir}`);
+  lines.push(`state: ${payload.state}`);
+  lines.push(`elapsed: ${formatDuration(payload.elapsedMs)}`);
+  if (payload.state === "running") {
+    lines.push(`eta: ${formatDuration(payload.etaMs)}`);
+  }
+  lines.push(`frames: ${payload.frames.captured} captured, ${payload.frames.failed} failed, ${payload.frames.totalExpected} expected`);
+  if (payload.latestFrame) {
+    lines.push(`latest successful frame: ${payload.latestFrame}`);
+  }
+  if (payload.latestFrameTimestamp) {
+    lines.push(`latest successful frame at: ${payload.latestFrameTimestamp}`);
+  }
+  if (payload.staleWarning?.isStale) {
+    lines.push(`warning: latest successful frame is stale (${formatDuration(payload.staleWarning.ageMs)} old)`);
+  }
+  lines.push(`disk usage: run-dir ${formatBytes(payload.diskUsage.runDirBytes)}, frames ${formatBytes(payload.diskUsage.framesBytes)}`);
+  if (payload.outputPath) {
+    lines.push(`output: ${payload.outputPath}`);
+  }
+  if (payload.cleanup) {
+    const removed = payload.cleanup.filesDeleted ?? payload.cleanup.removed ?? 0;
+    const retained = payload.cleanup.retained ?? 0;
+    lines.push(`cleanup: removed ${removed}, retained ${retained}`);
+  }
+  if (payload.error) {
+    lines.push(`error: ${payload.error}`);
+  }
+  console.log(lines.join("\n"));
+}
+
+async function doctorCommand(parsed) {
+  const args = parsed?.options ?? {};
+  const checks = [];
+
+  const nodeMajor = Number.parseInt((process.version ?? "v0").replace(/^v/, "").split(".")[0], 10);
+  checks.push({
+    name: "node",
+    ok: nodeMajor >= 20,
+    detail: process.version,
+    required: true
+  });
+
+  let playwrightOk = false;
+  let playwrightDetail = null;
+  try {
+    const mod = await import("playwright");
+    playwrightOk = Boolean(mod?.chromium);
+    playwrightDetail = playwrightOk ? "playwright module loaded" : "playwright module did not export chromium";
+  } catch (error) {
+    playwrightDetail = `playwright import failed: ${error?.message ?? String(error)}`;
+  }
+  checks.push({ name: "playwright", ok: playwrightOk, detail: playwrightDetail, required: true });
+
+  let chromiumOk = false;
+  let chromiumDetail = "skipped (playwright unavailable)";
+  if (playwrightOk) {
+    try {
+      const { chromium } = await import("playwright");
+      const browser = await chromium.launch({ headless: true });
+      chromiumOk = true;
+      chromiumDetail = "chromium launched";
+      await browser.close().catch(() => {});
+    } catch (error) {
+      chromiumDetail = `chromium launch failed: ${error?.message ?? String(error)}`;
+    }
+  }
+  checks.push({ name: "chromium", ok: chromiumOk, detail: chromiumDetail, required: true });
+
+  const ffmpegResult = spawnSync("ffmpeg", ["-version"], { stdio: ["ignore", "pipe", "pipe"] });
+  checks.push({
+    name: "ffmpeg",
+    ok: ffmpegResult.status === 0,
+    detail: ffmpegResult.error ? ffmpegResult.error.message : (ffmpegResult.status === 0 ? "ffmpeg available" : `ffmpeg exited ${ffmpegResult.status}`),
+    required: true
+  });
+
+  const ffprobeResult = spawnSync("ffprobe", ["-version"], { stdio: ["ignore", "pipe", "pipe"] });
+  checks.push({
+    name: "ffprobe",
+    ok: ffprobeResult.status === 0,
+    detail: ffprobeResult.error ? ffprobeResult.error.message : (ffprobeResult.status === 0 ? "ffprobe available" : `ffprobe exited ${ffprobeResult.status}`),
+    required: true
+  });
+
+  const allRequiredOk = checks.filter((check) => check.required).every((check) => check.ok);
+
+  if (args.json) {
+    console.log(JSON.stringify({ ok: allRequiredOk, checks }, null, 2));
+  } else {
+    for (const check of checks) {
+      const symbol = check.ok ? "ok" : "fail";
+      console.log(`[${symbol}] ${check.name}: ${check.detail}`);
+    }
+    console.log(`\n${allRequiredOk ? "All required checks passed." : "Some required checks failed."}`);
+  }
+
+  if (!allRequiredOk) {
+    process.exitCode = 1;
+  }
+  return { ok: allRequiredOk, checks };
+}
+
+export {
+  ParseError,
+  parseArgs,
+  parseDuration,
+  parseViewport,
+  buildStatusPayload,
+  startCommand,
+  captureCommand,
+  statusCommand,
+  peekCommand,
+  renderCommand,
+  cleanupCommand,
+  doctorCommand,
+  main
+};
