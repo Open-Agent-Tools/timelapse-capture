@@ -24,6 +24,7 @@ agents:
     cost_per_1k_cached_input: 0.0003
     cost_per_1k_cache_write_input: 0.00375
     cost_per_1k_output: 0.015
+    identity: jwesleye
   codex:
     enabled: true
     binary: codex
@@ -46,9 +47,10 @@ agents:
     cost_per_1k_input: 0.003
     cost_per_1k_cached_input: 0.0003
     cost_per_1k_output: 0.012
+    identity: unseriousAI
 budget:
   enabled: true
-  total: 200.00
+  total: 200.0
 rl:
   update_every: 16
 scope:
@@ -56,3 +58,12 @@ scope:
 feedback:
   cadence_plays: null
   cadence_minutes: null
+identities:
+  jwesleye:
+    git_user_name: jwesleye
+    git_user_email: jwesleye@users.noreply.github.com
+    gh_token_login: jwesleye
+  unseriousAI:
+    git_user_name: unseriousAI
+    git_user_email: unseriousAI@users.noreply.github.com
+    gh_token_keychain: foreman/unseriousAI
