@@ -1,9 +1,9 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
 
-const root = resolve(import.meta.dirname, '..');
+const root = resolve(__dirname, '..');
 const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
 const skill = readFileSync(resolve(root, 'skill/SKILL.md'), 'utf8');
 
