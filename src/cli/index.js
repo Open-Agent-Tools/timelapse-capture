@@ -300,14 +300,28 @@ async function commandStatus({ runDir }) {
 
 async function listFrameFiles(runDir) {
   const framesDir = path.join(runDir, 'frames');
-  const entries = await fs.readdir(framesDir, { withFileTypes: true });
+  const entries = await fs.readdir(framesDir, { withFileTypes: true }).catch(() => []);
   return sortFrames(entries.filter((entry) => entry.isFile() && entry.name.endsWith('.png')).map((entry) => entry.name));
 }
 
 async function commandPeek({ runDir, options }) {
   const names = await listFrameFiles(runDir);
+
   if (!names.length) {
-    throw new Error('No frames available');
+    const posterPath = path.join(runDir, 'poster.png');
+    const retainedPath = path.join(runDir, 'latest-retained.png');
+
+    const hasPoster = await fs.stat(posterPath).catch(() => null);
+    const hasRetained = await fs.stat(retainedPath).catch(() => null);
+
+    if (hasPoster) {
+      return { path: posterPath, pathCount: 1 };
+    }
+    if (hasRetained) {
+      return { path: retainedPath, pathCount: 1 };
+    }
+
+    throw new Error('No frames available. Raw frames were cleaned up. Use poster.png or latest-retained.png from the run directory.');
   }
 
   let index = names.length - 1;
@@ -345,7 +359,20 @@ async function isValidMP4(filePath) {
 }
 
 async function commandRender({ runDir, options }) {
-  const result = renderFrames(runDir, options);
+  const statusPath = path.join(runDir, 'status.json');
+  const status = await readJson(statusPath).catch(() => null);
+  const currentState = status?.state || inferStateFromStatus(status || {});
+
+  if (['starting', 'running', 'rendering'].includes(currentState) && !options.force) {
+    throw new Error('Cannot render while capture is active. Use --force to override.');
+  }
+
+  const renderOptions = { ...options };
+  if (options.force && ['starting', 'running', 'rendering'].includes(currentState)) {
+    renderOptions['keep-frames'] = true;
+  }
+
+  const result = renderFrames(runDir, renderOptions);
 
   if (!result.success) {
     if (result.error && result.error.includes('validation')) {
@@ -377,6 +404,43 @@ async function commandCleanup({ runDir, options }) {
     };
     await writeCleanupSummary(runDir, { success: true, removed: 0, retained: frameFiles.length, reason: 'keep-frames' });
     return result;
+  }
+
+  if (options.frames) {
+    const toDelete = [];
+    for (const file of frameFiles) {
+      toDelete.push(path.join(framesDir, file));
+    }
+    const latestPng = path.join(runDir, 'latest.png');
+    try {
+      await fs.stat(latestPng);
+      toDelete.push(latestPng);
+    } catch {
+      // latest.png doesn't exist
+    }
+
+    await Promise.all(toDelete.map((p) => fs.rm(p, { force: true })));
+
+    try {
+      await fs.rmdir(framesDir);
+    } catch {
+      // Directory might not be empty or not exist
+    }
+
+    return {
+      message: 'Raw frames and latest.png cleaned up',
+      removed: frameFiles.length,
+    };
+  }
+
+  if (options.all) {
+    if (frameFiles.length > 0 && !options.force) {
+      throw new Error('Raw frames still exist. Use --force to delete the entire run directory.');
+    }
+    await fs.rm(runDir, { recursive: true, force: true });
+    return {
+      message: 'Entire run directory deleted',
+    };
   }
 
   if (options['keep-samples']) {
