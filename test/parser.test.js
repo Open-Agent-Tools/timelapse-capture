@@ -88,6 +88,42 @@ test('rejects malformed numeric index values', () => {
   });
 });
 
+test('rejects numeric index values above MAX_SAFE_INTEGER', () => {
+  assert.throws(() => parseArgs(['peek', 'runs/issue-8', '--index', '9007199254740993']), {
+    name: 'ParseError',
+    code: 'E_BAD_INDEX',
+  });
+  assert.throws(() => parseArgs(['peek', 'runs/issue-8', '--near', '9007199254740993']), {
+    name: 'ParseError',
+    code: 'E_BAD_INDEX',
+  });
+});
+
+test('rejects overflowing digit string for index/near', () => {
+  const overflow = '1'.repeat(400);
+  assert.throws(() => parseArgs(['peek', 'runs/issue-8', '--index', overflow]), {
+    name: 'ParseError',
+    code: 'E_BAD_INDEX',
+  });
+  assert.throws(() => parseArgs(['peek', 'runs/issue-8', '--near', overflow]), {
+    name: 'ParseError',
+    code: 'E_BAD_INDEX',
+  });
+});
+
+test('accepts MAX_SAFE_INTEGER for index/near', () => {
+  const parsed = parseArgs([
+    'peek',
+    'runs/issue-8',
+    '--index',
+    String(Number.MAX_SAFE_INTEGER),
+    '--near',
+    String(Number.MAX_SAFE_INTEGER),
+  ]);
+  assert.equal(parsed.options.index, Number.MAX_SAFE_INTEGER);
+  assert.equal(parsed.options.near, Number.MAX_SAFE_INTEGER);
+});
+
 test('rejects unsupported negated flag for command', () => {
   assert.throws(() => parseArgs(['doctor', '--no-force']), {
     name: 'ParseError',

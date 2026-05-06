@@ -115,7 +115,11 @@ function parseValueFlag(flag, value) {
     if (!/^\d+$/.test(value)) {
       throw new ParseError('E_BAD_INDEX', `Invalid numeric value for --${flag}: ${value}`);
     }
-    return Number(value);
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed)) {
+      throw new ParseError('E_BAD_INDEX', `Invalid numeric value for --${flag}: ${value}`);
+    }
+    return parsed;
   }
 
   return value;
