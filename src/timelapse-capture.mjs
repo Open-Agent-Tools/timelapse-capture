@@ -579,6 +579,18 @@ async function writeJsonAtomic(file, data) {
   await fsp.rename(temp, file);
 }
 
+export function writeJsonAtomicSync(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    fs.renameSync(temp, file);
+  } catch (error) {
+    fs.rmSync(temp, { force: true });
+    throw error;
+  }
+}
+
 async function readJson(file) {
   return JSON.parse(await fsp.readFile(file, "utf8"));
 }
@@ -1279,7 +1291,7 @@ function readSummarySync(runDir) {
 }
 
 function writeSummarySync(runDir, summary) {
-  fs.writeFileSync(getSummaryPath(runDir), JSON.stringify(summary, null, 2), "utf8");
+  writeJsonAtomicSync(getSummaryPath(runDir), summary);
 }
 
 export function renderFrames(runDir, options = {}) {

@@ -6,7 +6,8 @@ import path from "node:path";
 import {
   renderFrames,
   validateMP4,
-  cleanupFrames
+  cleanupFrames,
+  writeJsonAtomicSync
 } from "../src/timelapse-capture.mjs";
 
 function createTempDir() {
@@ -189,6 +190,48 @@ test("renderFrames: fails without overwriting malformed summary JSON", () => {
     assert.strictEqual(
       fs.readFileSync(path.join(runDir, "run-summary.json"), "utf8"),
       malformedSummary
+    );
+  } finally {
+    cleanupTempDir(runDir);
+  }
+});
+
+test("writeJsonAtomicSync: replaces existing JSON and removes temporary file", () => {
+  const runDir = createTempDir();
+  try {
+    const filePath = path.join(runDir, "run-summary.json");
+    fs.writeFileSync(filePath, JSON.stringify({ status: "old" }, null, 2));
+
+    writeJsonAtomicSync(filePath, { status: "new", count: 2 });
+
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(filePath, "utf8")), {
+      status: "new",
+      count: 2
+    });
+    assert.strictEqual(
+      fs.readdirSync(runDir).some((file) => file.startsWith("run-summary.json.tmp-")),
+      false
+    );
+  } finally {
+    cleanupTempDir(runDir);
+  }
+});
+
+test("writeJsonAtomicSync: preserves existing JSON when serialization fails", () => {
+  const runDir = createTempDir();
+  try {
+    const filePath = path.join(runDir, "run-summary.json");
+    const original = `${JSON.stringify({ status: "old" }, null, 2)}\n`;
+    fs.writeFileSync(filePath, original);
+
+    assert.throws(() => {
+      writeJsonAtomicSync(filePath, { value: 1n });
+    }, /BigInt/);
+
+    assert.strictEqual(fs.readFileSync(filePath, "utf8"), original);
+    assert.strictEqual(
+      fs.readdirSync(runDir).some((file) => file.startsWith("run-summary.json.tmp-")),
+      false
     );
   } finally {
     cleanupTempDir(runDir);
