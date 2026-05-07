@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "description": "Fire-and-forget visual timelapse capture for long-running app review.",
   "bin": {
-    "timelapse-capture": "./src/cli/index.js"
+    "timelapse-capture": "./src/timelapse-capture.mjs"
   },
   "scripts": {
-    "start": "node ./src/cli/index.js",
-    "check": "node --check ./src/cli/index.js && node --check ./src/cli/parser.js && node --check ./src/cli/render.js && node --check ./src/cli/doctor.js",
-    "test": "node --test test/*.test.js",
+    "start": "node ./src/timelapse-capture.mjs",
+    "check": "node --check ./src/timelapse-capture.mjs && node --check ./src/doctor.mjs",
+    "test": "node --test test/*.test.js test/*.test.mjs",
     "ci": "npm run check && npm test"
   },
   "dependencies": {

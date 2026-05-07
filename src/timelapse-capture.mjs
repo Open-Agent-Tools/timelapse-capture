@@ -6,9 +6,29 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { commandDoctor, formatDoctorHuman } from "./doctor.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const VERSION = "0.1.0";
+
+export const CANONICAL_STATES = Object.freeze([
+  "starting",
+  "running",
+  "completed",
+  "failed",
+  "rendering",
+  "rendered",
+  "render_failed"
+]);
+
+const LEGACY_STATE_MIGRATIONS = Object.freeze({ done: "completed" });
+
+export function migrateLegacyState(state) {
+  if (state && Object.prototype.hasOwnProperty.call(LEGACY_STATE_MIGRATIONS, state)) {
+    return LEGACY_STATE_MIGRATIONS[state];
+  }
+  return state;
+}
 
 main().catch((error) => {
   console.error(error?.message || String(error));
@@ -31,6 +51,8 @@ async function main() {
       return renderCommand(parseArgs(rest), rest);
     case "cleanup":
       return cleanupCommand(parseArgs(rest), rest);
+    case "doctor":
+      return doctorCommand(parseArgs(rest));
     case "help":
     case "--help":
     case "-h":
@@ -42,9 +64,11 @@ async function main() {
 }
 
 async function startCommand(args) {
-  if (!args.url) {
-    throw new Error("Missing --url. MVP supports URL capture with the playwright-url backend.");
+  const url = args.url ?? args._?.[0];
+  if (!url) {
+    throw new Error("Missing URL. Pass it positionally (start <url>) or via --url.");
   }
+  args.url = url;
 
   const durationSeconds = parseDuration(required(args.duration, "--duration"));
   const fps = Number(args.fps ?? 24);
@@ -274,7 +298,8 @@ async function captureCommand(args) {
 
 async function statusCommand(args, rawArgs) {
   const runDir = path.resolve(positionalRunDir(args, rawArgs));
-  const status = await readJson(path.join(runDir, "status.json"));
+  const rawStatus = await readJson(path.join(runDir, "status.json"));
+  const status = { ...rawStatus, state: migrateLegacyState(rawStatus.state) };
   const config = await readJson(path.join(runDir, "config.json"));
   const latest = await readJsonOptional(path.join(runDir, "latest-frame.json"));
   const framesDir = path.join(runDir, "frames");
@@ -480,18 +505,33 @@ async function cleanupCommand(args, rawArgs) {
   console.log(`Cleaned frames: ${summary.filesDeleted} files, ${formatBytes(summary.bytesFreed)} freed`);
 }
 
+async function doctorCommand(args) {
+  const result = await commandDoctor();
+
+  if (args.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(formatDoctorHuman(result));
+  }
+
+  if (result.exitCode) {
+    process.exitCode = result.exitCode;
+  }
+}
+
 function printHelp() {
   console.log(`timelapse-capture ${VERSION}
 
 Usage:
-  timelapse-capture start --url <url> --duration <2h> (--interval <5s> | --video-length <1m>) [--out <dir>]
+  timelapse-capture start <url> --duration <2h> (--interval <5s> | --video-length <1m>) [--out <dir>]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
   timelapse-capture render <run-dir> [--output <file>] [--json]
   timelapse-capture cleanup <run-dir> [--force]
+  timelapse-capture doctor [--json]
 
 Examples:
-  timelapse-capture start --url http://localhost:3000 --duration 2h --video-length 1m --fps 24
+  timelapse-capture start http://localhost:3000 --duration 2h --video-length 1m --fps 24
   timelapse-capture peek ./timelapse-runs/localhost-20260430-101500 --latest
 `);
 }
