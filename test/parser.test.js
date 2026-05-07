@@ -79,3 +79,30 @@ test('parses index and near flags', () => {
   assert.equal(parsed.options.index, 2);
   assert.equal(parsed.options.near, 4);
 });
+
+test('rejects malformed numeric value flags', () => {
+  for (const [flag, value] of [
+    ['--index', '2abc'],
+    ['--near', '4ms'],
+    ['--index', '-1'],
+    ['--near', 'abc'],
+  ]) {
+    assert.throws(() => parseArgs(['peek', 'runs/issue-8', flag, value]), {
+      name: 'ParseError',
+      code: 'E_BAD_INDEX',
+    });
+  }
+});
+
+test('rejects unsupported boolean flags for the active command', () => {
+  for (const args of [
+    ['doctor', '--no-force'],
+    ['status', 'runs/issue-8', '--no-force'],
+    ['status', 'runs/issue-8', '-f'],
+  ]) {
+    assert.throws(() => parseArgs(args), {
+      name: 'ParseError',
+      code: 'E_UNKNOWN_FLAG',
+    });
+  }
+});
