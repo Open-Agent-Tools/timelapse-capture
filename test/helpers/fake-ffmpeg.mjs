@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 class FakeBinaryManager {
   constructor(tempDir) {
@@ -96,8 +96,8 @@ export async function withFakeFFmpeg(testFn, mode = "success") {
 
 export function hasRealFFmpeg() {
   try {
-    execSync("which ffmpeg > /dev/null 2>&1");
-    execSync("which ffprobe > /dev/null 2>&1");
+    execFileSync("which", ["ffmpeg"], { stdio: "ignore" });
+    execFileSync("which", ["ffprobe"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
