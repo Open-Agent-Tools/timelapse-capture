@@ -650,6 +650,14 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
+function estimateFrameBytes(viewport) {
+  return Math.ceil(((viewport?.width || 1280) * (viewport?.height || 720) * 3) / 4);
+}
+
+function estimateDiskBytes(viewport, targetFrames) {
+  return Math.max(1, targetFrames) * estimateFrameBytes(viewport) + 4096;
+}
+
 function formatDuration(ms) {
   const seconds = Math.max(0, Math.round((ms || 0) / 1000));
   const minutes = Math.floor(seconds / 60);
@@ -701,6 +709,7 @@ async function writeStartArtifacts(runDir, state) {
     expectedFrames: state.targetFrames,
     fps: state.fps,
     viewport: state.viewport,
+    estimatedDiskBytes: state.estimatedDiskBytes,
     outDir: runDir,
     cleanup: state.cleanup,
     keepSamples: state.keepSamples,
@@ -763,6 +772,7 @@ function buildStatusPayload(state) {
     lastUpdatedAt: state.lastUpdatedAt,
     targetFrames: totalExpected,
     intervalMs: state.intervalMs,
+    estimatedDiskBytes: state.estimatedDiskBytes ?? null,
     error: state.error || null
   };
 }
@@ -932,9 +942,18 @@ export async function commandStart({ target, options = {} } = {}) {
     }
     return 3;
   })();
+  const estimatedDiskBytes = estimateDiskBytes(viewport, targetFrames);
   const cleanup = options["keep-frames"] ? "never" : options.cleanup ?? "after-render";
   const runDir = path.resolve(options.out ?? defaultRunDir(target));
   const startedAt = nowIso();
+
+  if (!options.json) {
+    console.log(
+      `estimated disk: ${formatBytes(estimatedDiskBytes)} (${targetFrames} frames x ${formatBytes(
+        estimateFrameBytes(viewport)
+      )}/frame, approximate)`
+    );
+  }
 
   const state = {
     runDir,
@@ -952,6 +971,7 @@ export async function commandStart({ target, options = {} } = {}) {
     durationMs,
     fps,
     viewport,
+    estimatedDiskBytes,
     cleanup,
     keepSamples: Number(options["keep-samples"] ?? 0),
     keepLatest: Boolean(options["keep-latest"]),
@@ -988,6 +1008,7 @@ export async function commandStart({ target, options = {} } = {}) {
 
   return {
     runDir,
+    estimatedDiskBytes,
     status: buildStatusPayload({ ...state, runDir })
   };
 }
@@ -1030,10 +1051,12 @@ export async function commandStatus({ runDir }) {
   }
   const totalBytes = await directorySize(resolved);
   const frameBytes = await directorySize(path.join(resolved, "frames"));
+  const config = await readJsonOptional(path.join(resolved, "config.json"));
   const summary = await readJsonOptional(path.join(resolved, "run-summary.json"));
   const payload = buildStatusPayload({
     ...status,
     state: status.state || inferStateFromStatus(status),
+    estimatedDiskBytes: status.estimatedDiskBytes ?? config?.estimatedDiskBytes ?? null,
     runDir: resolved
   });
   return {
@@ -1063,6 +1086,8 @@ function printHumanStatus(status) {
     lines.push(
       `disk usage: run-dir ${formatBytes(status.diskUsage.runDirBytes)}, frames ${formatBytes(status.diskUsage.framesBytes)}`
     );
+  if (status.estimatedDiskBytes != null)
+    lines.push(`estimated disk: ${formatBytes(status.estimatedDiskBytes)} (approximate)`);
   if (status.outputPath) lines.push(`output: ${status.outputPath}`);
   if (status.cleanup)
     lines.push(`cleanup: removed ${status.cleanup.removed ?? 0}, retained ${status.cleanup.retained ?? 0}`);
