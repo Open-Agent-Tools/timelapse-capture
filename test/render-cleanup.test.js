@@ -65,7 +65,12 @@ describe('render with fake ffmpeg', () => {
         assert.strictEqual(summary.render.duration, 10);
         assert.deepStrictEqual(summary.render.dimensions, { width: 1280, height: 720 });
         assert.strictEqual(summary.render.sourceFrameCount, 3);
-        assert.match(summary.render.ffmpegCommand, /^ffmpeg /);
+        assert.ok(Array.isArray(summary.render.ffmpegCommand), 'render.ffmpegCommand should be an array');
+        assert.strictEqual(summary.render.ffmpegCommand[0], 'ffmpeg');
+        assert.strictEqual(summary.duration, 10);
+        assert.deepStrictEqual(summary.dimensions, { width: 1280, height: 720 });
+        assert.ok(Array.isArray(summary.ffmpegCommand), 'ffmpegCommand should be an array');
+        assert.strictEqual(summary.ffmpegCommand[0], 'ffmpeg');
         assert.strictEqual(summary.cleanup.success, true);
         assert.strictEqual(summary.cleanup.removed, 3);
       }, 'success');
@@ -434,6 +439,12 @@ if (hasRealFFmpeg()) {
 
       const stat = await fs.stat(result.path);
       assert(stat.size > 0);
+
+      const summary = JSON.parse(await fs.readFile(path.join(runDir, 'run-summary.json'), 'utf8'));
+      assert(typeof summary.duration === 'number' && summary.duration > 0, 'top-level duration should be a positive number');
+      assert(typeof summary.dimensions?.width === 'number' && summary.dimensions.width > 0, 'dimensions.width should be a positive number');
+      assert(typeof summary.dimensions?.height === 'number' && summary.dimensions.height > 0, 'dimensions.height should be a positive number');
+      assert(Array.isArray(summary.ffmpegCommand), 'top-level ffmpegCommand should be an array');
     });
 
     test('real ffmpeg with cleanup flow', async () => {

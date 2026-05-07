@@ -233,6 +233,9 @@ function renderFrames(runDir, options = {}) {
     const existingSummary = readExistingSummary(runDir);
     const summary = {
       ...existingSummary,
+      duration: validation.duration,
+      dimensions: validation.dimensions,
+      ffmpegCommand: ffmpegCmd,
       render: {
         outputPath,
         bytes: validation.bytes,
@@ -240,7 +243,7 @@ function renderFrames(runDir, options = {}) {
         dimensions: validation.dimensions,
         frameCount,
         sourceFrameCount: frameCount,
-        ffmpegCommand: ffmpegCmd.join(' '),
+        ffmpegCommand: ffmpegCmd,
         timestamp: new Date().toISOString(),
       },
       cleanup: null,
