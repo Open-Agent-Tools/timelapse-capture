@@ -289,15 +289,27 @@ function parseValueFlag(flag, value) {
     }
     return parsed.ms;
   }
-  if (flag === "index" || flag === "near") {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+  if (flag === "index") {
+    if (!/^\d+$/.test(value)) {
       throw new ParseError(
         "E_BAD_INDEX",
         `Invalid numeric value for --${flag}: ${value}`
       );
     }
-    return parsed;
+    return Number.parseInt(value, 10);
+  }
+  if (flag === "near") {
+    if (/^\d+$/.test(value)) {
+      return Number.parseInt(value, 10);
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new ParseError(
+        "E_BAD_NEAR",
+        `Invalid ISO timestamp or numeric index for --near: ${value}`
+      );
+    }
+    return value;
   }
   return value;
 }
@@ -1110,8 +1122,39 @@ export async function commandPeek({ runDir, options = {} }) {
   let index = names.length - 1;
   if (typeof options.index === "number") {
     index = Math.min(Math.max(options.index, 0), names.length - 1);
-  } else if (typeof options.near === "number") {
-    index = Math.min(Math.max(options.near, 0), names.length - 1);
+  } else if (options.near !== undefined) {
+    if (typeof options.near === "number") {
+      index = Math.min(Math.max(options.near, 0), names.length - 1);
+    } else {
+      const manifestPath = path.join(resolved, "manifest.jsonl");
+      if (fs.existsSync(manifestPath)) {
+        const content = await fsp.readFile(manifestPath, "utf8");
+        const lines = content.trim().split("\n");
+        const targetTime = new Date(options.near).getTime();
+        let bestIndexInNames = index;
+        let minDiff = Infinity;
+
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.status !== "captured" || !entry.path) continue;
+            const time = new Date(entry.capturedAt || entry.scheduledAt).getTime();
+            const diff = Math.abs(time - targetTime);
+            if (diff < minDiff) {
+              const frameName = path.basename(entry.path);
+              const foundIndex = names.indexOf(frameName);
+              if (foundIndex !== -1) {
+                minDiff = diff;
+                bestIndexInNames = foundIndex;
+              }
+            }
+          } catch {
+            continue;
+          }
+        }
+        index = bestIndexInNames;
+      }
+    }
   }
   return {
     path: path.join(resolved, "frames", names[index]),

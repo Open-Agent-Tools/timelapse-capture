@@ -104,6 +104,17 @@ test("parses index and near flags", () => {
   ]);
   assert.equal(parsed.options.index, 2);
   assert.equal(parsed.options.near, 4);
+
+  const iso = "2026-05-07T10:00:00Z";
+  const parsedIso = parseArgs(["peek", "runs/test", "--near", iso]);
+  assert.equal(parsedIso.options.near, iso);
+});
+
+test("index flag rejects non-numeric input", () => {
+  assert.throws(() => parseArgs(["peek", "runs/test", "--index", "2026-05-07T10:00:00Z"]), {
+    name: "ParseError",
+    code: "E_BAD_INDEX"
+  });
 });
 
 test("supports --no-<flag> for boolean flags", () => {
