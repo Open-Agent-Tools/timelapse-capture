@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_PATH = path.join(__dirname, "..", "src", "timelapse-capture.mjs");
+const CANONICAL_CLI_PATH = path.join(__dirname, "..", "src", "cli", "index.js");
 
 function runCli({ cwd, args, env = {} }) {
   const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
@@ -71,7 +72,7 @@ test("CLI smoke flow creates run artifacts and supports status/peek", async () =
     const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-work-"));
     const startOutput = runCli({
       cwd: workdir,
-      args: ["start", url, "--json", "--interval", "100ms", "--duration", "1s"],
+      args: ["start", url, "--json", "--interval", "250ms", "--duration", "1s"],
       env: { TIMELAPSE_SIMULATE_FRAMES: "3" }
     });
 
@@ -127,7 +128,7 @@ test("failed frame attempts preserve previous successful frame", async () => {
     const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-work-fail-"));
     const startOutput = runCli({
       cwd: workdir,
-      args: ["start", url, "--json", "--interval", "100ms"],
+      args: ["start", url, "--json", "--interval", "250ms"],
       env: {
         TIMELAPSE_SIMULATE_FRAMES: "2",
         TIMELAPSE_SIMULATE_FRAME_FAILURE: "1"
@@ -241,4 +242,121 @@ test("status reports missing run status file clearly", async () => {
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
+});
+
+function runCanonicalCli({ cwd, args, env = {} }) {
+  return spawnSync(process.execPath, [CANONICAL_CLI_PATH, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
+}
+
+test("canonical CLI: rejects --interval below 250ms without --force-interval", async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-interval-reject-"));
+    try {
+      const result = runCanonicalCli({
+        cwd: workdir,
+        args: ["start", url, "--duration", "1s", "--interval", "100ms"],
+        env: { TIMELAPSE_SIMULATE_FRAMES: "1" },
+      });
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /below playwright-url minimum 250ms/);
+      assert.match(result.stderr, /E_INTERVAL_TOO_SMALL/);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("canonical CLI: computed interval from --video-length and --fps succeeds above minimum", async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-computed-ok-"));
+    try {
+      const result = runCanonicalCli({
+        cwd: workdir,
+        args: ["start", url, "--duration", "2h", "--video-length", "1m", "--fps", "24", "--json"],
+        env: { TIMELAPSE_SIMULATE_FRAMES: "1" },
+      });
+      assert.equal(result.status, 0, `cli failed: ${result.stderr}`);
+      const output = JSON.parse(result.stdout);
+      const runDir = output.runDir;
+      const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+      assert.equal(config.forcedInterval, undefined);
+      assert.equal(config.belowMinimum, undefined);
+      assert.equal(result.stderr.trim(), "");
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("canonical CLI: --interval 250ms (at-minimum) succeeds with no warning", async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-at-min-"));
+    try {
+      const result = runCanonicalCli({
+        cwd: workdir,
+        args: ["start", url, "--duration", "1s", "--interval", "250ms", "--json"],
+        env: { TIMELAPSE_SIMULATE_FRAMES: "1" },
+      });
+      assert.equal(result.status, 0, `cli failed: ${result.stderr}`);
+      const output = JSON.parse(result.stdout);
+      assert.equal(output.forcedInterval, undefined);
+      assert.equal(output.belowMinimum, undefined);
+      assert.equal(result.stderr.trim(), "");
+      const config = JSON.parse(await fs.readFile(path.join(output.runDir, "config.json"), "utf8"));
+      assert.equal(config.forcedInterval, undefined);
+      assert.equal(config.belowMinimum, undefined);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("canonical CLI: --interval 100ms --force-interval proceeds with warning and persists forced fields", async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-forced-"));
+    try {
+      const result = runCanonicalCli({
+        cwd: workdir,
+        args: ["start", url, "--duration", "1s", "--interval", "100ms", "--force-interval", "--json"],
+        env: { TIMELAPSE_SIMULATE_FRAMES: "1" },
+      });
+      assert.equal(result.status, 0, `cli failed: ${result.stderr}`);
+      assert.match(result.stderr, /warning: interval 100ms is below playwright-url minimum 250ms \(forced\)/);
+      const output = JSON.parse(result.stdout);
+      assert.equal(output.forcedInterval, true);
+      assert.equal(output.belowMinimum, true);
+      assert.equal(output.minimumIntervalMs, 250);
+      const config = JSON.parse(await fs.readFile(path.join(output.runDir, "config.json"), "utf8"));
+      assert.equal(config.forcedInterval, true);
+      assert.equal(config.belowMinimum, true);
+      assert.equal(config.minimumIntervalMs, 250);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("canonical CLI: computed sub-minimum interval with --force-interval persists forcedInterval in config", async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-computed-forced-"));
+    try {
+      const result = runCanonicalCli({
+        cwd: workdir,
+        args: ["start", url, "--duration", "1m", "--video-length", "1m", "--fps", "24", "--force-interval", "--json"],
+        env: { TIMELAPSE_SIMULATE_FRAMES: "1" },
+      });
+      assert.equal(result.status, 0, `cli failed: ${result.stderr}`);
+      const output = JSON.parse(result.stdout);
+      assert.equal(output.forcedInterval, true);
+      assert.equal(output.belowMinimum, true);
+      const config = JSON.parse(await fs.readFile(path.join(output.runDir, "config.json"), "utf8"));
+      assert.equal(config.forcedInterval, true);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
 });

@@ -8,8 +8,27 @@ class ParseError extends Error {
   }
 }
 
+const BACKEND_MIN_INTERVAL_MS = { 'playwright-url': 250 };
+
+function validateBackendInterval({ backend, intervalMs, force }) {
+  const minimumMs = BACKEND_MIN_INTERVAL_MS[backend];
+  if (minimumMs === undefined) {
+    return { ok: true, forced: false, belowMinimum: false, intervalMs, minimumMs: null };
+  }
+  if (intervalMs >= minimumMs) {
+    return { ok: true, forced: false, belowMinimum: false, intervalMs, minimumMs };
+  }
+  if (!force) {
+    throw new ParseError(
+      'E_INTERVAL_TOO_SMALL',
+      `interval ${intervalMs}ms is below ${backend} minimum ${minimumMs}ms; pass --force-interval to override`,
+    );
+  }
+  return { ok: true, forced: true, belowMinimum: true, intervalMs, minimumMs };
+}
+
 const COMMANDS = {
-  start: { positional: ['target'], valueFlags: ['duration', 'viewport', 'interval'], boolFlags: ['json', 'force', 'help'] },
+  start: { positional: ['target'], valueFlags: ['duration', 'viewport', 'interval', 'video-length', 'fps'], boolFlags: ['json', 'force', 'help', 'force-interval'] },
   status: { positional: ['runDir'], valueFlags: [], boolFlags: ['json', 'help'] },
   render: { positional: ['runDir'], valueFlags: [], boolFlags: ['force', 'help'] },
   peek: { positional: ['runDir'], valueFlags: ['index', 'near'], boolFlags: ['json', 'help', 'latest'] },
@@ -109,6 +128,18 @@ function parseValueFlag(flag, value) {
       throw new ParseError('E_BAD_INTERVAL', `Invalid interval: ${value}`);
     }
     return ms;
+  }
+
+  if (flag === 'video-length') {
+    return parseDuration(value);
+  }
+
+  if (flag === 'fps') {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new ParseError('E_BAD_FPS', `Invalid fps: ${value}`);
+    }
+    return n;
   }
 
   if (flag === 'index' || flag === 'near') {
@@ -233,4 +264,6 @@ module.exports = {
   parseDuration,
   parseViewport,
   parseArgs,
+  BACKEND_MIN_INTERVAL_MS,
+  validateBackendInterval,
 };

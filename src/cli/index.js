@@ -4,7 +4,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-const { parseArgs, ParseError } = require('./parser');
+const { parseArgs, ParseError, validateBackendInterval } = require('./parser');
 const { commandDoctor, formatDoctorHuman } = require('./doctor');
 const { renderFrames } = require('./render');
 
@@ -170,6 +170,11 @@ async function writeArtifacts(runDir, statusState) {
     viewport: statusState.viewport,
     targetFrames: statusState.targetFrames,
     durationMs: statusState.durationMs,
+    ...(statusState.belowMinimum && {
+      forcedInterval: statusState.forcedInterval,
+      belowMinimum: statusState.belowMinimum,
+      minimumIntervalMs: statusState.minimumIntervalMs,
+    }),
   };
 
   const job = {
@@ -220,9 +225,32 @@ async function commandStart({ target, options }) {
 
   const startedAt = nowIso();
   const targetFrames = Math.max(1, Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAMES || '3', 10));
-  const intervalMs = Number.isFinite(options.interval) ? options.interval : 200;
   const durationMs = options.duration ? options.duration.ms : 0;
   const viewport = options.viewport || { width: 1280, height: 720 };
+
+  let intervalMs;
+  if (Number.isFinite(options.interval)) {
+    intervalMs = options.interval;
+  } else if (options['video-length'] && options.duration) {
+    const videoLengthSec = options['video-length'].ms / 1000;
+    const fps = options.fps ?? 24;
+    const frameCount = Math.max(1, Math.round(videoLengthSec * fps));
+    intervalMs = Math.round(options.duration.ms / frameCount);
+  } else {
+    intervalMs = 200;
+  }
+
+  const validation = validateBackendInterval({
+    backend: 'playwright-url',
+    intervalMs,
+    force: !!options['force-interval'],
+  });
+
+  if (validation.forced) {
+    process.stderr.write(
+      `warning: interval ${intervalMs}ms is below playwright-url minimum ${validation.minimumMs}ms (forced)\n`,
+    );
+  }
 
   const runDir = options.runDir || path.join(process.cwd(), 'runs', `${slugify(target)}-${Date.now()}`);
 
@@ -240,6 +268,11 @@ async function commandStart({ target, options }) {
     viewport,
     durationMs,
     lastUpdatedAt: startedAt,
+    ...(validation.belowMinimum && {
+      forcedInterval: true,
+      belowMinimum: true,
+      minimumIntervalMs: validation.minimumMs,
+    }),
   };
 
   await writeArtifacts(runDir, state);
@@ -266,7 +299,15 @@ async function commandStart({ target, options }) {
   await writeStatus(runDir, state);
 
   const status = buildStatusPayload(state);
-  return { runDir, status };
+  return {
+    runDir,
+    status,
+    ...(validation.belowMinimum && {
+      forcedInterval: true,
+      belowMinimum: true,
+      minimumIntervalMs: validation.minimumMs,
+    }),
+  };
 }
 
 async function commandStatus({ runDir }) {
