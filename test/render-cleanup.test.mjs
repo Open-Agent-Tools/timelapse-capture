@@ -6,7 +6,8 @@ import path from "node:path";
 import {
   commandRender,
   commandCleanup,
-  commandPeek
+  commandPeek,
+  selectSampleIndices
 } from "../src/timelapse-capture.mjs";
 import { withFakeFFmpeg, hasRealFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 
@@ -21,6 +22,16 @@ async function createTestFrames(runDir, count = 3) {
   for (let i = 1; i <= count; i += 1) {
     const name = `frame-${String(i).padStart(4, "0")}.png`;
     await fs.writeFile(path.join(framesDir, name), FRAME_PNG);
+  }
+  return framesDir;
+}
+
+async function createLabeledFrames(runDir, count = 3, prefix = "frame") {
+  const framesDir = path.join(runDir, "frames");
+  await fs.mkdir(framesDir, { recursive: true });
+  for (let i = 1; i <= count; i += 1) {
+    const name = `${prefix}-${String(i).padStart(4, "0")}.png`;
+    await fs.writeFile(path.join(framesDir, name), Buffer.from(`frame-${i}`));
   }
   return framesDir;
 }
@@ -43,6 +54,37 @@ async function createRunDir(tempDir) {
   await fs.mkdir(runDir, { recursive: true });
   return runDir;
 }
+
+async function readSampleNames(runDir) {
+  return (await fs.readdir(path.join(runDir, "samples"))).sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true })
+  );
+}
+
+async function assertSampleMatches(runDir, sampleName, sourceName) {
+  const [sample, source] = await Promise.all([
+    fs.readFile(path.join(runDir, "samples", sampleName)),
+    fs.readFile(path.join(runDir, "originals", sourceName))
+  ]);
+  assert.deepStrictEqual(sample, source);
+}
+
+async function preserveOriginals(runDir, framesDir) {
+  const originalsDir = path.join(runDir, "originals");
+  await fs.mkdir(originalsDir, { recursive: true });
+  const files = await fs.readdir(framesDir);
+  await Promise.all(
+    files.map((file) => fs.copyFile(path.join(framesDir, file), path.join(originalsDir, file)))
+  );
+}
+
+test("selectSampleIndices returns representative frame indices", () => {
+  assert.deepStrictEqual(selectSampleIndices(5, 1), [2]);
+  assert.deepStrictEqual(selectSampleIndices(5, 2), [0, 4]);
+  assert.deepStrictEqual(selectSampleIndices(5, 3), [0, 2, 4]);
+  assert.deepStrictEqual(selectSampleIndices(5, 10), [0, 1, 2, 3, 4]);
+  assert.deepStrictEqual(selectSampleIndices(0, 3), []);
+});
 
 describe("render with fake ffmpeg", () => {
   let tempDir;
@@ -151,6 +193,108 @@ describe("render with fake ffmpeg", () => {
       process.env.PATH = oldPath;
     }
   });
+
+  test("render --keep-samples 1 copies middle frame to samples and deletes frames", async () => {
+    const runDir = await createRunDir(tempDir);
+    const framesDir = await createLabeledFrames(runDir, 5, "00000");
+    await preserveOriginals(runDir, framesDir);
+
+    const oldPath = process.env.PATH;
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        process.env.PATH = manager.getPATHEnv();
+        await commandRender({ runDir, options: { "keep-samples": 1 } });
+
+        await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+        assert.deepStrictEqual(await readSampleNames(runDir), ["sample-0001.png"]);
+        await assertSampleMatches(runDir, "sample-0001.png", "00000-0003.png");
+        const summary = JSON.parse(
+          await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+        );
+        assert.strictEqual(summary.cleanup.reason, "keep-samples");
+        assert.deepStrictEqual(summary.cleanup.samples, {
+          count: 1,
+          paths: ["samples/sample-0001.png"]
+        });
+      }, "success");
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
+  test("render --keep-samples 3 copies evenly spaced frames", async () => {
+    const runDir = await createRunDir(tempDir);
+    const framesDir = await createLabeledFrames(runDir, 5, "00000");
+    await preserveOriginals(runDir, framesDir);
+
+    const oldPath = process.env.PATH;
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        process.env.PATH = manager.getPATHEnv();
+        await commandRender({ runDir, options: { "keep-samples": 3 } });
+
+        await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+        assert.deepStrictEqual(await readSampleNames(runDir), [
+          "sample-0001.png",
+          "sample-0002.png",
+          "sample-0003.png"
+        ]);
+        await assertSampleMatches(runDir, "sample-0001.png", "00000-0001.png");
+        await assertSampleMatches(runDir, "sample-0002.png", "00000-0003.png");
+        await assertSampleMatches(runDir, "sample-0003.png", "00000-0005.png");
+      }, "success");
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
+  test("render --keep-samples N greater than frame count copies all frames", async () => {
+    const runDir = await createRunDir(tempDir);
+    const framesDir = await createLabeledFrames(runDir, 5, "00000");
+
+    const oldPath = process.env.PATH;
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        process.env.PATH = manager.getPATHEnv();
+        await commandRender({ runDir, options: { "keep-samples": 10 } });
+
+        await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+        assert.deepStrictEqual(await readSampleNames(runDir), [
+          "sample-0001.png",
+          "sample-0002.png",
+          "sample-0003.png",
+          "sample-0004.png",
+          "sample-0005.png"
+        ]);
+      }, "success");
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
+  test("render bare --keep-samples copies first and last by default", async () => {
+    const runDir = await createRunDir(tempDir);
+    const framesDir = await createLabeledFrames(runDir, 5, "00000");
+    await preserveOriginals(runDir, framesDir);
+
+    const oldPath = process.env.PATH;
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        process.env.PATH = manager.getPATHEnv();
+        await commandRender({ runDir, options: { "keep-samples": true } });
+
+        await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+        assert.deepStrictEqual(await readSampleNames(runDir), [
+          "sample-0001.png",
+          "sample-0002.png"
+        ]);
+        await assertSampleMatches(runDir, "sample-0001.png", "00000-0001.png");
+        await assertSampleMatches(runDir, "sample-0002.png", "00000-0005.png");
+      }, "success");
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
 });
 
 describe("render state safety checks", () => {
@@ -235,17 +379,71 @@ describe("cleanup command", () => {
     assert.strictEqual(files.length, 3);
   });
 
-  test("--keep-samples keeps first and last", async () => {
+  test("cleanup --keep-samples 3 copies evenly spaced samples and deletes frames", async () => {
     const runDir = await createRunDir(tempDir);
-    const framesDir = await createTestFrames(runDir, 5);
+    const framesDir = await createLabeledFrames(runDir, 5);
+    await preserveOriginals(runDir, framesDir);
+    const result = await commandCleanup({ runDir, options: { "keep-samples": 3 } });
+    assert.match(result.message, /samples\/ retained/);
+    assert.strictEqual(result.removed, 5);
+    assert.strictEqual(result.retained, 3);
+    await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+    assert.deepStrictEqual(await readSampleNames(runDir), [
+      "sample-0001.png",
+      "sample-0002.png",
+      "sample-0003.png"
+    ]);
+    await assertSampleMatches(runDir, "sample-0001.png", "frame-0001.png");
+    await assertSampleMatches(runDir, "sample-0002.png", "frame-0003.png");
+    await assertSampleMatches(runDir, "sample-0003.png", "frame-0005.png");
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+    );
+    assert.strictEqual(summary.cleanup.reason, "keep-samples");
+    assert.deepStrictEqual(summary.cleanup.samples, {
+      count: 3,
+      paths: [
+        "samples/sample-0001.png",
+        "samples/sample-0002.png",
+        "samples/sample-0003.png"
+      ]
+    });
+  });
+
+  test("cleanup --keep-samples 1 copies middle frame", async () => {
+    const runDir = await createRunDir(tempDir);
+    const framesDir = await createLabeledFrames(runDir, 5);
+    await preserveOriginals(runDir, framesDir);
+    const result = await commandCleanup({ runDir, options: { "keep-samples": 1 } });
+    assert.strictEqual(result.removed, 5);
+    assert.strictEqual(result.retained, 1);
+    await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+    assert.deepStrictEqual(await readSampleNames(runDir), ["sample-0001.png"]);
+    await assertSampleMatches(runDir, "sample-0001.png", "frame-0003.png");
+  });
+
+  test("cleanup bare --keep-samples defaults to two samples", async () => {
+    const runDir = await createRunDir(tempDir);
+    const framesDir = await createLabeledFrames(runDir, 5);
     const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
-    assert.match(result.message, /kept first and last/);
-    assert.strictEqual(result.removed, 3);
+    assert.strictEqual(result.removed, 5);
     assert.strictEqual(result.retained, 2);
-    const files = await fs.readdir(framesDir);
-    assert.strictEqual(files.length, 2);
-    assert(files.includes("frame-0001.png"));
-    assert(files.includes("frame-0005.png"));
+    await assert.rejects(fs.readdir(framesDir), /ENOENT/);
+    assert.deepStrictEqual(await readSampleNames(runDir), [
+      "sample-0001.png",
+      "sample-0002.png"
+    ]);
+  });
+
+  test("cleanup --keep-samples with empty frames returns success without samples", async () => {
+    const runDir = await createRunDir(tempDir);
+    await fs.mkdir(path.join(runDir, "frames"), { recursive: true });
+    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+    assert.match(result.message, /No frames to sample/);
+    assert.strictEqual(result.removed, 0);
+    assert.strictEqual(result.retained, 0);
+    const samplesStat = await fs.stat(path.join(runDir, "samples")).catch(() => null);
+    assert.strictEqual(samplesStat, null);
   });
 
   test("--keep-latest keeps only last frame", async () => {
@@ -388,13 +586,14 @@ describe("peek after cleanup", () => {
     }
   });
 
-  test("peek --latest works with kept samples", async () => {
+  test("peek --latest reports cleaned frames after samples are retained", async () => {
     const runDir = await createRunDir(tempDir);
     await createTestFrames(runDir, 5);
     await commandCleanup({ runDir, options: { "keep-samples": true } });
-    const result = await commandPeek({ runDir, options: { latest: true } });
-    assert(result.path.includes("frame-0005.png"));
-    assert.strictEqual(result.pathCount, 2);
+    await assert.rejects(
+      commandPeek({ runDir, options: { latest: true } }),
+      /Raw frames were cleaned up/
+    );
   });
 });
 

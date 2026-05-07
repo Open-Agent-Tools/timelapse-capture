@@ -48,3 +48,19 @@ test('skill requires doctor before capture and describes the agent workflow', as
   assert.match(skill, /start .*status .*peek .*render .*report artifact paths/is);
   assert.match(skill, /README\.md/);
 });
+
+test('help documents keep-samples count and bare default', async () => {
+  const { main } = await import('../src/timelapse-capture.mjs');
+  const originalLog = console.log;
+  const lines = [];
+  console.log = (message = '') => lines.push(String(message));
+  try {
+    await main(['--help']);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const output = lines.join('\n');
+  assert.match(output, /--keep-samples\[=<N>\]/);
+  assert.match(output, /default 2/i);
+});

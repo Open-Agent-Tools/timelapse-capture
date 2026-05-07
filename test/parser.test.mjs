@@ -111,6 +111,34 @@ test("supports --no-<flag> for boolean flags", () => {
   assert.equal(parsed.options.headed, false);
 });
 
+test("parses --keep-samples value forms", () => {
+  assert.equal(
+    parseArgs(["render", "runs/x", "--keep-samples", "3"]).options["keep-samples"],
+    3
+  );
+  assert.equal(
+    parseArgs(["render", "runs/x", "--keep-samples"]).options["keep-samples"],
+    true
+  );
+  assert.equal(
+    parseArgs(["cleanup", "runs/x", "--keep-samples", "5"]).options["keep-samples"],
+    5
+  );
+
+  assert.throws(
+    () => parseArgs(["render", "runs/x", "--keep-samples", "0"]),
+    { name: "ParseError", code: "E_KEEP_SAMPLES_ZERO" }
+  );
+  assert.throws(
+    () => parseArgs(["render", "runs/x", "--keep-samples", "-1"]),
+    { name: "ParseError", code: "E_KEEP_SAMPLES_INVALID" }
+  );
+  assert.throws(
+    () => parseArgs(["render", "runs/x", "--keep-samples", "abc"]),
+    { name: "ParseError", code: "E_KEEP_SAMPLES_INVALID" }
+  );
+});
+
 test("ParseError carries structured code", () => {
   const err = new ParseError("E_TEST", "msg");
   assert.equal(err.name, "ParseError");

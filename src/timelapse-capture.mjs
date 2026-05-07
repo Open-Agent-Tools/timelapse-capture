@@ -55,7 +55,7 @@ const COMMAND_SCHEMAS = {
   },
   render: {
     positional: ["runDir"],
-    valueFlags: ["output"],
+    valueFlags: ["output", "keep-samples"],
     boolFlags: ["json", "force", "help", "keep-frames", "keep-all"]
   },
   peek: {
@@ -65,16 +65,8 @@ const COMMAND_SCHEMAS = {
   },
   cleanup: {
     positional: ["runDir"],
-    valueFlags: [],
-    boolFlags: [
-      "frames",
-      "all",
-      "force",
-      "help",
-      "keep-frames",
-      "keep-samples",
-      "keep-latest"
-    ]
+    valueFlags: ["keep-samples"],
+    boolFlags: ["frames", "all", "force", "help", "keep-frames", "keep-latest"]
   },
   doctor: {
     positional: [],
@@ -84,6 +76,7 @@ const COMMAND_SCHEMAS = {
 };
 
 const SHORT_FLAGS = { j: "json", f: "force", h: "help" };
+const DEFAULT_KEEP_SAMPLES_COUNT = 2;
 
 const isMain =
   process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
@@ -205,7 +198,14 @@ export function parseArgs(argv) {
         let value = inlineValue;
         if (value === undefined) {
           const next = tokens[i + 1];
-          if (next === undefined || (next.startsWith("-") && next !== "-")) {
+          if (key === "keep-samples" && (next === undefined || next.startsWith("--"))) {
+            options[key] = true;
+            continue;
+          }
+          if (
+            next === undefined ||
+            (key !== "keep-samples" && next.startsWith("-") && next !== "-")
+          ) {
             throw new ParseError("E_MISSING_VALUE", `Missing value for --${key}`);
           }
           value = next;
@@ -276,6 +276,22 @@ function assertBoolFlag(command, schema, key, token) {
 }
 
 function parseValueFlag(flag, value) {
+  if (flag === "keep-samples") {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+      throw new ParseError(
+        "E_KEEP_SAMPLES_INVALID",
+        `Invalid sample count for --keep-samples: ${value}`
+      );
+    }
+    if (parsed === 0) {
+      throw new ParseError(
+        "E_KEEP_SAMPLES_ZERO",
+        "--keep-samples requires a count of at least 1"
+      );
+    }
+    return parsed;
+  }
   if (flag === "duration") {
     return parseDuration(value);
   }
@@ -946,6 +962,7 @@ export async function commandStart({ target, options = {} } = {}) {
   const cleanup = options["keep-frames"] ? "never" : options.cleanup ?? "after-render";
   const runDir = path.resolve(options.out ?? defaultRunDir(target));
   const startedAt = nowIso();
+  const keepSamples = normalizeKeepSamples(options["keep-samples"]);
 
   if (!options.json) {
     console.log(
@@ -973,7 +990,7 @@ export async function commandStart({ target, options = {} } = {}) {
     viewport,
     estimatedDiskBytes,
     cleanup,
-    keepSamples: Number(options["keep-samples"] ?? 0),
+    keepSamples: keepSamples.count,
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
     headed: Boolean(options.headed),
@@ -1186,6 +1203,77 @@ function countFrameFiles(framesDir) {
   return files.filter((file) => /\.(png|jpg|jpeg)$/i.test(file)).length;
 }
 
+function listFrameFilesSync(framesDir) {
+  if (!fs.existsSync(framesDir)) return [];
+  return fs
+    .readdirSync(framesDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.(png|jpg|jpeg)$/i.test(entry.name))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+function normalizeKeepSamples(value) {
+  if (!value) return { enabled: false, count: 0 };
+  if (value === true) {
+    return { enabled: true, count: DEFAULT_KEEP_SAMPLES_COUNT };
+  }
+  const count = Number(value);
+  if (!Number.isFinite(count) || !Number.isInteger(count) || count < 1) {
+    throw new Error("--keep-samples requires an integer count of at least 1");
+  }
+  return { enabled: true, count };
+}
+
+export function selectSampleIndices(frameCount, n) {
+  if (frameCount <= 0 || n <= 0) return [];
+  const count = Math.min(frameCount, n);
+  if (count === 1) {
+    return [Math.floor((frameCount - 1) / 2)];
+  }
+  const indices = new Set();
+  for (let i = 0; i < count; i += 1) {
+    indices.add(Math.floor((i * (frameCount - 1)) / (count - 1)));
+  }
+  return [...indices].sort((a, b) => a - b);
+}
+
+function copySamplesAndRemoveFrames(framesDir, frameFiles, count) {
+  if (frameFiles.length === 0) {
+    return {
+      success: true,
+      removed: 0,
+      retained: 0,
+      reason: "keep-samples",
+      samples: { count: 0, paths: [] }
+    };
+  }
+
+  const runDir = path.dirname(framesDir);
+  const samplesDir = path.join(runDir, "samples");
+  fs.rmSync(samplesDir, { recursive: true, force: true });
+  fs.mkdirSync(samplesDir, { recursive: true });
+
+  const samplePaths = [];
+  const indices = selectSampleIndices(frameFiles.length, count);
+  indices.forEach((frameIndex, sampleIndex) => {
+    const sampleName = `sample-${String(sampleIndex + 1).padStart(4, "0")}.png`;
+    fs.copyFileSync(
+      path.join(framesDir, frameFiles[frameIndex]),
+      path.join(samplesDir, sampleName)
+    );
+    samplePaths.push(`samples/${sampleName}`);
+  });
+
+  fs.rmSync(framesDir, { recursive: true, force: true });
+  return {
+    success: true,
+    removed: frameFiles.length,
+    retained: indices.length,
+    reason: "keep-samples",
+    samples: { count: indices.length, paths: samplePaths }
+  };
+}
+
 function fileSize(filePath) {
   try {
     return fs.statSync(filePath).size;
@@ -1363,12 +1451,17 @@ export function renderFrames(runDir, options = {}) {
     };
 
     if (!options["keep-frames"] && !options["keep-all"]) {
-      const cleanup = cleanupFrames(framesDir);
-      summary.cleanup = {
-        success: cleanup.success,
-        removed: cleanup.removed,
-        error: cleanup.error || null
-      };
+      const keepSamples = normalizeKeepSamples(options["keep-samples"]);
+      const cleanup = keepSamples.enabled
+        ? copySamplesAndRemoveFrames(framesDir, listFrameFilesSync(framesDir), keepSamples.count)
+        : cleanupFrames(framesDir);
+      summary.cleanup = keepSamples.enabled
+        ? { ...cleanup, error: cleanup.error || null }
+        : {
+            success: cleanup.success,
+            removed: cleanup.removed,
+            error: cleanup.error || null
+          };
       result.cleanupResult = cleanup;
     } else {
       summary.cleanup = {
@@ -1502,21 +1595,27 @@ export async function commandCleanup({ runDir, options = {} }) {
   }
 
   if (options["keep-samples"]) {
+    const keepSamples = normalizeKeepSamples(options["keep-samples"]);
     if (frameFiles.length === 0) {
-      const result = { message: "No frames to sample", frameCount: 0 };
-      await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0 });
+      const cleanup = {
+        success: true,
+        removed: 0,
+        retained: 0,
+        reason: "keep-samples",
+        samples: { count: 0, paths: [] }
+      };
+      const result = { message: "No frames to sample", removed: 0, retained: 0 };
+      await writeCleanupSummary(resolved, cleanup);
       return result;
     }
-    const first = frameFiles[0];
-    const last = frameFiles[frameFiles.length - 1];
-    const toDelete = frameFiles.filter((f) => f !== first && f !== last);
-    await Promise.all(toDelete.map((p) => fsp.rm(path.join(framesDir, p), { force: true })));
+    const cleanup = copySamplesAndRemoveFrames(framesDir, frameFiles, keepSamples.count);
     const result = {
-      message: "Frames cleaned up (kept first and last)",
-      removed: toDelete.length,
-      retained: 2
+      message: `${cleanup.retained} samples/ retained; frames cleaned up`,
+      removed: cleanup.removed,
+      retained: cleanup.retained,
+      samples: cleanup.samples
     };
-    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained: 2 });
+    await writeCleanupSummary(resolved, cleanup);
     return result;
   }
 
@@ -1568,9 +1667,12 @@ Usage:
   timelapse-capture start <url> [--duration <2h>] [--interval <5s>] [--out <dir>]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
-  timelapse-capture render <run-dir> [--output <file>] [--json]
-  timelapse-capture cleanup <run-dir> [--force]
+  timelapse-capture render <run-dir> [--output <file>] [--keep-samples[=<N>]] [--json]
+  timelapse-capture cleanup <run-dir> [--keep-samples[=<N>]] [--force]
   timelapse-capture doctor [--json]
+
+Options:
+  --keep-samples[=N]: copy N evenly-spaced frames to samples/ then delete frames/. Default 2 when bare.
 `);
 }
 
