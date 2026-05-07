@@ -2,61 +2,317 @@
 
 Fire-and-forget visual timelapse capture for long-running app review.
 
-The MVP captures a browser URL at a fixed interval, lets agents or humans peek at individual frames while capture is running, renders a compact MP4 with `ffmpeg`, and deletes raw frames after a successful render by default.
+`timelapse-capture` captures a browser URL as a sequence of screenshots, lets a person or agent inspect individual frames with `peek`, renders the frames into `output.mp4`, and removes raw frames after a successful render by default.
 
-## Install
+## Installation
+
+Requirements:
+
+- Node.js 20 or newer
+- npm
+- Playwright Chromium
+- `ffmpeg` and `ffprobe` available on `PATH`
+
+Install project dependencies from the repository root:
 
 ```bash
 npm install
-npm link
 ```
 
-Install Playwright browsers if needed:
+Install the Chromium browser used by Playwright:
 
 ```bash
 npx playwright install chromium
 ```
 
-`ffmpeg` must be available on `PATH` for rendering.
-
-## Example
-
-Capture a two-hour run and render it as a one-minute video at 24 FPS:
+Install FFmpeg with your system package manager if `ffmpeg` or `ffprobe` is missing.
 
 ```bash
-timelapse-capture start \
-  --url http://localhost:3000 \
-  --duration 2h \
-  --video-length 1m \
-  --fps 24 \
-  --viewport 1440x900 \
-  --out ./timelapse-runs/app-review
+# macOS with Homebrew
+brew install ffmpeg
+
+# Debian or Ubuntu
+sudo apt-get update
+sudo apt-get install ffmpeg
 ```
 
-Check progress:
+For local command-line use from this checkout, either run through npm:
 
 ```bash
-timelapse-capture status ./timelapse-runs/app-review
+npm start -- doctor
 ```
 
-Peek at the latest completed frame:
+Or link the binary once:
 
 ```bash
-timelapse-capture peek ./timelapse-runs/app-review --latest
+npm link
+timelapse-capture doctor
 ```
 
-Render the video:
+## Doctor
+
+Run `doctor` before any capture work:
 
 ```bash
-timelapse-capture render ./timelapse-runs/app-review
+timelapse-capture doctor
 ```
 
-By default, `render` deletes `frames/` only after `output.mp4` has been written successfully. Use `--keep-frames` on `start` to retain all screenshots.
+The command checks:
+
+- `node`: the current Node.js executable satisfies Node.js 20 or newer.
+- `playwright`: the Playwright package can be imported from this checkout.
+- `chromium`: Playwright can launch Chromium in headless mode.
+- `ffmpeg`: the renderer can find and run `ffmpeg`.
+- `ffprobe`: MP4 validation can find and run `ffprobe`.
+
+Successful output looks like this:
+
+```text
+[PASS] node: Node.js 20.11.1 satisfies >= 20.0.0
+[PASS] playwright: Playwright package can be imported
+[PASS] chromium: Chromium can be launched by Playwright
+[PASS] ffmpeg: ffmpeg 7.1 is available
+[PASS] ffprobe: ffprobe 7.1 is available
+summary: 5 passed, 0 failed, 5 total
+```
+
+If a check fails, read the `fix:` line, apply it, and run `timelapse-capture doctor` again before starting a capture.
+
+Use JSON output when another tool needs to parse the result:
+
+```bash
+timelapse-capture doctor --json
+```
+
+## Dogfood Walkthrough
+
+This walkthrough starts from a local web app at `http://localhost:3000` and ends with a rendered MP4.
+
+1. Confirm dependencies:
+
+```bash
+timelapse-capture doctor
+```
+
+2. Start a capture:
+
+```bash
+timelapse-capture start http://localhost:3000 \
+  --duration 30s \
+  --interval 5s \
+  --viewport 1440x900
+```
+
+The command prints a `run-dir`. Save that path for the next commands. The default location is under `./runs/`.
+
+3. Check capture progress:
+
+```bash
+timelapse-capture status ./runs/localhost-3000-1760000000000
+```
+
+Use JSON if you need structured fields:
+
+```bash
+timelapse-capture status ./runs/localhost-3000-1760000000000 --json
+```
+
+4. Peek at one frame for inspection:
+
+```bash
+timelapse-capture peek ./runs/localhost-3000-1760000000000 --latest
+```
+
+`peek` returns a single image path. Open or inspect that one image; do not load the whole `frames/` directory into an agent context.
+
+5. Render the MP4:
+
+```bash
+timelapse-capture render ./runs/localhost-3000-1760000000000
+```
+
+6. Inspect the video:
+
+```bash
+open ./runs/localhost-3000-1760000000000/output.mp4
+```
+
+On Linux, use your desktop file opener or video player instead of `open`.
+
+## Commands
+
+```bash
+timelapse-capture doctor [--json]
+```
+
+Checks runtime dependencies. Run this first.
+
+```bash
+timelapse-capture start <url> [--duration <duration>] [--interval <duration>] [--viewport <width>x<height>] [--json]
+```
+
+Captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
+
+```bash
+timelapse-capture status <run-dir> [--json]
+```
+
+Reports run state, captured and failed frame counts, latest successful frame, elapsed time, estimated remaining time, output path, cleanup summary, and disk usage.
+
+```bash
+timelapse-capture peek <run-dir> [--latest | --index <n> | --near <n>] [--json]
+```
+
+Returns one frame path. `--latest` selects the newest frame, `--index` selects a zero-based frame index, and `--near` currently selects by numeric frame position.
+
+```bash
+timelapse-capture render <run-dir> [--force]
+```
+
+Renders `output.mp4` from captured frames. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata. `--force` is only for rendering while a capture is still active.
+
+```bash
+timelapse-capture cleanup <run-dir> [--frames | --all | --keep-frames | --keep-samples | --keep-latest] [--force]
+```
+
+Performs explicit cleanup or records a retention choice.
+
+## Troubleshooting
+
+### `doctor` reports Node.js is too old
+
+Install Node.js 20 or newer, open a new shell, and run:
+
+```bash
+node --version
+timelapse-capture doctor
+```
+
+### Playwright package cannot be imported
+
+Install dependencies from the repository root:
+
+```bash
+npm install
+timelapse-capture doctor
+```
+
+### Chromium cannot be launched
+
+Install Chromium for Playwright:
+
+```bash
+npx playwright install chromium
+timelapse-capture doctor
+```
+
+On Linux CI hosts, Playwright may also need OS libraries. Run the command suggested by Playwright if it prints one.
+
+### `ffmpeg` or `ffprobe` is missing
+
+Install FFmpeg and confirm both binaries are visible:
+
+```bash
+ffmpeg -version
+ffprobe -version
+timelapse-capture doctor
+```
+
+### Start fails with `navigation failed`
+
+Check that the URL is complete and reachable from the machine running the command. Use `http://` or `https://`, not a bare host name.
+
+```bash
+timelapse-capture start http://localhost:3000 --duration 30s
+```
+
+### Render fails or no MP4 appears
+
+Run `status` first and confirm at least one frame was captured. Then check that `ffmpeg` and `ffprobe` pass `doctor`.
+
+```bash
+timelapse-capture status <run-dir>
+timelapse-capture doctor
+```
+
+Render failures preserve raw frames so you can retry after fixing the dependency or input problem.
+
+### `peek` says no frames are available
+
+If render already succeeded, raw frames may have been cleaned up. Inspect `poster.png`, `latest-retained.png`, or `output.mp4` in the run directory if present.
+
+## Retention Examples
+
+Successful `render` removes raw frame PNGs by default and keeps `output.mp4` plus metadata. Use explicit cleanup commands when you need to keep or reduce frame artifacts before a final cleanup step.
+
+Record that all raw frames should be preserved:
+
+```bash
+timelapse-capture cleanup <run-dir> --keep-frames
+```
+
+Keep representative sample frames:
+
+```bash
+timelapse-capture cleanup <run-dir> --keep-samples
+```
+
+Keep only the latest frame:
+
+```bash
+timelapse-capture cleanup <run-dir> --keep-latest
+```
+
+Delete raw frames manually:
+
+```bash
+timelapse-capture cleanup <run-dir> --frames
+```
+
+Delete the entire run directory after frames are gone:
+
+```bash
+timelapse-capture cleanup <run-dir> --all
+```
+
+If raw frames still exist and you intentionally want to delete everything:
+
+```bash
+timelapse-capture cleanup <run-dir> --all --force
+```
+
+## Artifacts
+
+A run directory contains files like:
+
+```text
+runs/<slug>-<timestamp>/
+  config.json
+  job.json
+  manifest.json
+  status.json
+  frames/
+    frame-0001.png
+    frame-0002.png
+  output.mp4
+  run-summary.json
+```
+
+Important paths:
+
+- `frames/`: raw screenshots captured before render cleanup.
+- `status.json`: current or final run status.
+- `output.mp4`: rendered video.
+- `run-summary.json`: render and cleanup metadata.
+- `poster.png` or `latest-retained.png`: retained single-frame artifacts when available.
 
 ## Project Layout
 
 ```text
-src/timelapse-capture.mjs  CLI implementation
-skill/SKILL.md             Draft Codex/Claude-style skill instructions
-docs/PRD.md                Product requirements
+src/cli/index.js    CLI entrypoint
+src/cli/doctor.js   dependency checks
+src/cli/render.js   MP4 rendering and cleanup helpers
+skill/SKILL.md      Codex/Claude-style skill instructions
+docs/PRD.md         product requirements
+test/*.test.js      Node test suite
 ```
