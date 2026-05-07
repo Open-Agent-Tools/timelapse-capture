@@ -80,7 +80,15 @@ describe("render with fake ffmpeg", () => {
         assert.strictEqual(summary.render.duration, 10);
         assert.deepStrictEqual(summary.render.dimensions, { width: 1280, height: 720 });
         assert.strictEqual(summary.render.sourceFrameCount, 3);
-        assert.match(summary.render.ffmpegCommand, /^ffmpeg /);
+        assert.ok(Array.isArray(summary.render.ffmpegCommand), "render.ffmpegCommand should be an array");
+        assert.strictEqual(summary.render.ffmpegCommand[0], "ffmpeg");
+        assert.strictEqual(summary.duration, 10);
+        assert.deepStrictEqual(summary.dimensions, { width: 1280, height: 720 });
+        assert.ok(Array.isArray(summary.ffmpegCommand), "ffmpegCommand should be an array");
+        assert.strictEqual(summary.ffmpegCommand[0], "ffmpeg");
+        assert.ok(summary.ffmpegCommand.includes("-framerate"));
+        assert.ok(summary.ffmpegCommand.includes("libx264"));
+        assert.ok(summary.ffmpegCommand.includes(path.join(runDir, "output.mp4")));
         assert.strictEqual(summary.cleanup.success, true);
         assert.strictEqual(summary.cleanup.removed, 3);
       }, "success");
@@ -414,6 +422,13 @@ if (hasRealFFmpeg()) {
       assert.strictEqual(result.frameCount, 3);
       const stat = await fs.stat(result.path);
       assert(stat.size > 0);
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+      );
+      assert.ok(typeof summary.duration === "number" && summary.duration > 0);
+      assert.ok(summary.dimensions && summary.dimensions.width > 0 && summary.dimensions.height > 0);
+      assert.ok(Array.isArray(summary.ffmpegCommand));
+      assert.strictEqual(summary.ffmpegCommand[0], "ffmpeg");
     });
 
     test("real ffmpeg with cleanup flow", async () => {
