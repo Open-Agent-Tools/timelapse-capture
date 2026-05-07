@@ -77,13 +77,17 @@ async function assertRunArtifacts(runDir) {
   assert.ok(pngs.length > 0);
 }
 
+async function readConfig(runDir) {
+  return JSON.parse(await fs.readFile(path.join(runDir, 'config.json'), 'utf8'));
+}
+
 test('CLI smoke flow creates run artifacts and supports status/peek', async () => {
   await withServer(async (url) => {
     const workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-work-'));
 
     const startOutput = runCli({
       cwd: workdir,
-      args: ['start', url, '--json', '--interval', '100ms', '--duration', '1s'],
+      args: ['start', url, '--json', '--interval', '250ms', '--duration', '1s'],
       env: {
         TIMELAPSE_SIMULATE_FRAMES: '3',
       },
@@ -136,7 +140,7 @@ test('failed frame attempts preserve previous successful frame', async () => {
 
     const startOutput = runCli({
       cwd: workdir,
-      args: ['start', url, '--json', '--interval', '100ms'],
+      args: ['start', url, '--json', '--interval', '250ms'],
       env: {
         TIMELAPSE_SIMULATE_FRAMES: '2',
         TIMELAPSE_SIMULATE_FRAME_FAILURE: '1',
@@ -155,6 +159,155 @@ test('failed frame attempts preserve previous successful frame', async () => {
     assert.equal(secondStatus.latestFrame, status.latestFrame);
 
     await fs.rm(workdir, { recursive: true, force: true });
+  });
+});
+
+test('start rejects direct intervals below the playwright-url minimum', async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-work-interval-reject-'));
+
+    try {
+      const result = runCliRaw({
+        cwd: workdir,
+        args: ['start', url, '--duration', '1s', '--interval', '100ms'],
+      });
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /below playwright-url minimum 250ms/);
+      assert.match(result.stderr, /pass --force-interval to override/);
+      assert.match(result.stderr, /code: E_INTERVAL_TOO_SMALL/);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test('start rejects computed intervals below the playwright-url minimum', async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-work-computed-reject-'));
+
+    try {
+      const result = runCliRaw({
+        cwd: workdir,
+        args: ['start', url, '--duration', '1m', '--video-length', '1m', '--fps', '24'],
+      });
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /interval 42ms is below playwright-url minimum 250ms/);
+      assert.match(result.stderr, /code: E_INTERVAL_TOO_SMALL/);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test('start accepts computed intervals above the playwright-url minimum without warning', async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-work-computed-accept-'));
+
+    try {
+      const startOutput = runCli({
+        cwd: workdir,
+        args: ['start', url, '--json', '--duration', '2h', '--video-length', '1m', '--fps', '24'],
+        env: {
+          TIMELAPSE_SIMULATE_FRAMES: '1',
+        },
+      });
+      const startData = JSON.parse(startOutput.stdout);
+      const config = await readConfig(startData.runDir);
+
+      assert.equal(startOutput.stderr, '');
+      assert.equal(config.intervalMs, 5000);
+      assert.equal(config.forcedInterval, undefined);
+      assert.equal(config.belowMinimum, undefined);
+      assert.equal(startData.forcedInterval, undefined);
+      assert.equal(startData.belowMinimum, undefined);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test('start accepts at-minimum intervals without warning', async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-work-interval-boundary-'));
+
+    try {
+      const startOutput = runCli({
+        cwd: workdir,
+        args: ['start', url, '--json', '--duration', '1s', '--interval', '250ms'],
+        env: {
+          TIMELAPSE_SIMULATE_FRAMES: '1',
+        },
+      });
+      const startData = JSON.parse(startOutput.stdout);
+      const config = await readConfig(startData.runDir);
+
+      assert.equal(startOutput.stderr, '');
+      assert.equal(config.intervalMs, 250);
+      assert.equal(config.forcedInterval, undefined);
+      assert.equal(config.belowMinimum, undefined);
+      assert.equal(startData.forcedInterval, undefined);
+      assert.equal(startData.belowMinimum, undefined);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test('start force-interval accepts below-minimum direct intervals with warning and metadata', async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-work-interval-force-'));
+
+    try {
+      const startOutput = runCli({
+        cwd: workdir,
+        args: ['start', url, '--json', '--duration', '1s', '--interval', '100ms', '--force-interval'],
+        env: {
+          TIMELAPSE_SIMULATE_FRAMES: '1',
+        },
+      });
+      const startData = JSON.parse(startOutput.stdout);
+      const config = await readConfig(startData.runDir);
+
+      assert.match(startOutput.stderr, /warning: interval 100ms is below playwright-url minimum 250ms \(forced\)/);
+      assert.equal(startData.forcedInterval, true);
+      assert.equal(startData.belowMinimum, true);
+      assert.equal(startData.minimumIntervalMs, 250);
+      assert.equal(config.intervalMs, 100);
+      assert.equal(config.forcedInterval, true);
+      assert.equal(config.belowMinimum, true);
+      assert.equal(config.minimumIntervalMs, 250);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+test('start force-interval accepts below-minimum computed intervals with metadata', async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), 'timelapse-work-computed-force-'));
+
+    try {
+      const startOutput = runCli({
+        cwd: workdir,
+        args: ['start', url, '--json', '--duration', '1m', '--video-length', '1m', '--fps', '24', '--force-interval'],
+        env: {
+          TIMELAPSE_SIMULATE_FRAMES: '1',
+        },
+      });
+      const startData = JSON.parse(startOutput.stdout);
+      const config = await readConfig(startData.runDir);
+
+      assert.match(startOutput.stderr, /warning: interval 42ms is below playwright-url minimum 250ms \(forced\)/);
+      assert.equal(config.intervalMs, 42);
+      assert.equal(config.forcedInterval, true);
+      assert.equal(config.belowMinimum, true);
+      assert.equal(config.minimumIntervalMs, 250);
+      assert.equal(startData.forcedInterval, true);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
   });
 });
 

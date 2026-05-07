@@ -4,7 +4,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-const { parseArgs, ParseError } = require('./parser');
+const { BACKEND_MIN_INTERVAL_MS, parseArgs, ParseError, validateBackendInterval } = require('./parser');
 const { commandDoctor, formatDoctorHuman } = require('./doctor');
 const { renderFrames } = require('./render');
 
@@ -14,6 +14,7 @@ function usage() {
     '',
     'Commands:',
     '  start <url>           Start capture in run directory',
+    '                        Options: --duration <duration>, --interval <duration>, --video-length <duration>, --fps <number>, --force-interval',
     '  status <run-dir>      Print capture status',
     '  render <run-dir>      Render an mp4 from captured frames',
     '  peek <run-dir>        Inspect captured frames',
@@ -171,6 +172,11 @@ async function writeArtifacts(runDir, statusState) {
     targetFrames: statusState.targetFrames,
     durationMs: statusState.durationMs,
   };
+  if (statusState.forcedInterval) {
+    config.forcedInterval = true;
+    config.belowMinimum = true;
+    config.minimumIntervalMs = statusState.minimumIntervalMs;
+  }
 
   const job = {
     runDir,
@@ -204,6 +210,21 @@ async function runFrameAttempt(runDir, frameIndex, shouldFail) {
   return { success: true, path: filename };
 }
 
+function resolveStartInterval(options) {
+  if (Number.isFinite(options.interval)) {
+    return options.interval;
+  }
+
+  if (options['video-length'] && options.duration) {
+    const videoLengthSec = options['video-length'].ms / 1000;
+    const fps = options.fps ?? 24;
+    const targetFrames = Math.max(1, Math.round(videoLengthSec * fps));
+    return Math.round(options.duration.ms / targetFrames);
+  }
+
+  return BACKEND_MIN_INTERVAL_MS['playwright-url'];
+}
+
 async function commandStart({ target, options }) {
   try {
     const targetUrl = new URL(target);
@@ -220,7 +241,15 @@ async function commandStart({ target, options }) {
 
   const startedAt = nowIso();
   const targetFrames = Math.max(1, Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAMES || '3', 10));
-  const intervalMs = Number.isFinite(options.interval) ? options.interval : 200;
+  const intervalValidation = validateBackendInterval({
+    backend: 'playwright-url',
+    intervalMs: resolveStartInterval(options),
+    force: Boolean(options['force-interval']),
+  });
+  const intervalMs = intervalValidation.intervalMs;
+  if (intervalValidation.forced) {
+    process.stderr.write(`warning: interval ${intervalMs}ms is below playwright-url minimum ${intervalValidation.minimumMs}ms (forced)\n`);
+  }
   const durationMs = options.duration ? options.duration.ms : 0;
   const viewport = options.viewport || { width: 1280, height: 720 };
 
@@ -241,6 +270,11 @@ async function commandStart({ target, options }) {
     durationMs,
     lastUpdatedAt: startedAt,
   };
+  if (intervalValidation.forced) {
+    state.forcedInterval = true;
+    state.belowMinimum = true;
+    state.minimumIntervalMs = intervalValidation.minimumMs;
+  }
 
   await writeArtifacts(runDir, state);
 
@@ -266,7 +300,13 @@ async function commandStart({ target, options }) {
   await writeStatus(runDir, state);
 
   const status = buildStatusPayload(state);
-  return { runDir, status };
+  const result = { runDir, status };
+  if (intervalValidation.forced) {
+    result.forcedInterval = true;
+    result.belowMinimum = true;
+    result.minimumIntervalMs = intervalValidation.minimumMs;
+  }
+  return result;
 }
 
 async function commandStatus({ runDir }) {

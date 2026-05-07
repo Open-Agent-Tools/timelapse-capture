@@ -9,12 +9,20 @@ class ParseError extends Error {
 }
 
 const COMMANDS = {
-  start: { positional: ['target'], valueFlags: ['duration', 'viewport', 'interval'], boolFlags: ['json', 'force', 'help'] },
+  start: {
+    positional: ['target'],
+    valueFlags: ['duration', 'viewport', 'interval', 'video-length', 'fps'],
+    boolFlags: ['json', 'force', 'force-interval', 'help'],
+  },
   status: { positional: ['runDir'], valueFlags: [], boolFlags: ['json', 'help'] },
   render: { positional: ['runDir'], valueFlags: [], boolFlags: ['force', 'help'] },
   peek: { positional: ['runDir'], valueFlags: ['index', 'near'], boolFlags: ['json', 'help', 'latest'] },
   cleanup: { positional: ['runDir'], valueFlags: [], boolFlags: ['frames', 'all', 'force', 'help', 'keep-frames', 'keep-samples', 'keep-latest'] },
   doctor: { positional: [], valueFlags: [], boolFlags: ['json', 'help'] },
+};
+
+const BACKEND_MIN_INTERVAL_MS = {
+  'playwright-url': 250,
 };
 
 function stripDash(name) {
@@ -99,6 +107,18 @@ function parseValueFlag(flag, value) {
     return parseDuration(value);
   }
 
+  if (flag === 'video-length') {
+    return parseDuration(value);
+  }
+
+  if (flag === 'fps') {
+    const fps = Number(value);
+    if (!Number.isFinite(fps) || fps <= 0) {
+      throw new ParseError('E_BAD_FPS', `Invalid fps: ${value}`);
+    }
+    return fps;
+  }
+
   if (flag === 'viewport') {
     return parseViewport(value);
   }
@@ -120,6 +140,40 @@ function parseValueFlag(flag, value) {
   }
 
   return value;
+}
+
+function validateBackendInterval({ backend, intervalMs, force = false }) {
+  const minimumMs = BACKEND_MIN_INTERVAL_MS[backend];
+  const roundedIntervalMs = Math.round(intervalMs);
+
+  if (!Number.isFinite(roundedIntervalMs) || roundedIntervalMs <= 0) {
+    throw new ParseError('E_BAD_INTERVAL', `Invalid interval: ${intervalMs}`);
+  }
+
+  if (!minimumMs || roundedIntervalMs >= minimumMs) {
+    return {
+      ok: true,
+      intervalMs: roundedIntervalMs,
+      minimumMs: minimumMs || null,
+      forced: false,
+      belowMinimum: false,
+    };
+  }
+
+  if (!force) {
+    throw new ParseError(
+      'E_INTERVAL_TOO_SMALL',
+      `interval ${roundedIntervalMs}ms is below ${backend} minimum ${minimumMs}ms; pass --force-interval to override`,
+    );
+  }
+
+  return {
+    ok: true,
+    intervalMs: roundedIntervalMs,
+    minimumMs,
+    forced: true,
+    belowMinimum: true,
+  };
 }
 
 function parseCommandAndPositionals(args) {
@@ -229,8 +283,10 @@ function parseArgs(argv = process.argv.slice(2)) {
 }
 
 module.exports = {
+  BACKEND_MIN_INTERVAL_MS,
   ParseError,
   parseDuration,
   parseViewport,
   parseArgs,
+  validateBackendInterval,
 };

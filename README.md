@@ -24,14 +24,14 @@ npx playwright install chromium
 Capture a two-hour run and render it as a one-minute video at 24 FPS:
 
 ```bash
-timelapse-capture start \
-  --url http://localhost:3000 \
+timelapse-capture start http://localhost:3000 \
   --duration 2h \
   --video-length 1m \
   --fps 24 \
-  --viewport 1440x900 \
-  --out ./timelapse-runs/app-review
+  --viewport 1440x900
 ```
+
+Intervals below the backend minimum are rejected unless `--force-interval` is supplied.
 
 Check progress:
 

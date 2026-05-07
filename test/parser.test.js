@@ -2,9 +2,12 @@ const assert = require('node:assert');
 const test = require('node:test');
 
 const {
+  BACKEND_MIN_INTERVAL_MS,
+  ParseError,
   parseArgs,
   parseDuration,
   parseViewport,
+  validateBackendInterval,
 } = require('../src/cli/parser.js');
 
 test('parses durations from simple units', () => {
@@ -35,6 +38,57 @@ test('parses value flags for start', () => {
   assert.equal(parsed.target, 'https://example.com');
   assert.equal(parsed.options.duration.ms, 10_000);
   assert.equal(parsed.options.viewport.width, 1280);
+});
+
+test('parses computed interval and force flags for start', () => {
+  const parsed = parseArgs([
+    'start',
+    'https://example.com',
+    '--video-length',
+    '1m',
+    '--fps',
+    '24',
+    '--duration',
+    '2h',
+    '--force-interval',
+  ]);
+
+  assert.equal(parsed.options['video-length'].ms, 60_000);
+  assert.equal(parsed.options.fps, 24);
+  assert.equal(parsed.options['force-interval'], true);
+});
+
+test('rejects malformed fps inputs', () => {
+  for (const value of ['0', '-1', 'nan', 'Infinity']) {
+    assert.throws(() => parseArgs(['start', 'https://example.com', '--fps', value]), {
+      name: 'ParseError',
+      code: 'E_BAD_FPS',
+    });
+  }
+});
+
+test('validates backend interval minimums', () => {
+  assert.equal(BACKEND_MIN_INTERVAL_MS['playwright-url'], 250);
+
+  assert.throws(
+    () => validateBackendInterval({ backend: 'playwright-url', intervalMs: 100, force: false }),
+    (error) => error instanceof ParseError
+      && error.code === 'E_INTERVAL_TOO_SMALL'
+      && error.message.includes('below playwright-url minimum 250ms'),
+  );
+
+  assert.deepEqual(
+    validateBackendInterval({ backend: 'playwright-url', intervalMs: 100, force: true }),
+    { ok: true, intervalMs: 100, minimumMs: 250, forced: true, belowMinimum: true },
+  );
+  assert.deepEqual(
+    validateBackendInterval({ backend: 'playwright-url', intervalMs: 250, force: false }),
+    { ok: true, intervalMs: 250, minimumMs: 250, forced: false, belowMinimum: false },
+  );
+  assert.deepEqual(
+    validateBackendInterval({ backend: 'playwright-url', intervalMs: 500, force: false }),
+    { ok: true, intervalMs: 500, minimumMs: 250, forced: false, belowMinimum: false },
+  );
 });
 
 test('rejects malformed duration inputs', () => {
