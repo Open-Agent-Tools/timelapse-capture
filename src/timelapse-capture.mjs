@@ -1327,6 +1327,7 @@ export function renderFrames(runDir, options = {}) {
       "23",
       outputPath
     ];
+    const ffmpegCommand = [ffmpegPath, ...ffmpegArgs];
 
     try {
       execFileSync(ffmpegPath, ffmpegArgs, { stdio: "pipe", encoding: "utf8" });
@@ -1342,6 +1343,9 @@ export function renderFrames(runDir, options = {}) {
     const existing = readSummarySync(runDir);
     const summary = {
       ...existing,
+      duration: validation.duration,
+      dimensions: validation.dimensions,
+      ffmpegCommand,
       render: {
         outputPath,
         bytes: validation.bytes,
@@ -1349,7 +1353,7 @@ export function renderFrames(runDir, options = {}) {
         dimensions: validation.dimensions,
         frameCount,
         sourceFrameCount: frameCount,
-        ffmpegCommand: [ffmpegPath, ...ffmpegArgs].join(" "),
+        ffmpegCommand,
         timestamp: nowIso()
       },
       cleanup: null
