@@ -21,6 +21,7 @@ test('package.json scripts target the canonical entry and run Node\'s test runne
   const pkg = readJson('package.json');
   assert.strictEqual(pkg.scripts.start, `node ${CANONICAL_BIN}`);
   assert.match(pkg.scripts.check, /node --check \.\/src\/timelapse-capture\.mjs/);
+  assert.match(pkg.scripts.check, /node --check \.\/src\/doctor\.mjs/);
   assert.match(pkg.scripts.test, /^node --test\b/);
   assert.strictEqual(pkg.scripts.ci, 'npm run check && npm test');
 });
@@ -44,7 +45,27 @@ test('canonical entry uses real Playwright (not the scaffold 1x1 PNG fixture)', 
   assert.match(cli, /chromium\.launch/);
   assert.match(cli, /page\.screenshot/);
   assert.ok(
-    !cli.includes('89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de'),
+    !cli.toLowerCase().includes('89504e470d0a1a0a0000000d4948445200000001000000010802'),
     'canonical CLI must not embed the 1x1 PNG scaffold fixture'
   );
+});
+
+test('canonical CLI entrypoint decision is documented and wired', () => {
+  const decisionPath = resolve(REPO_ROOT, 'docs/decisions/001-canonical-cli-entrypoint.md');
+  const decision = readFileSync(decisionPath, 'utf8');
+  const requiredTerms = [
+    'src/timelapse-capture.mjs',
+    'src/cli/index.js',
+    'src/cli/parser.js',
+    'src/cli/render.js',
+    'doctor',
+    'stale-frame',
+    'ETA',
+    'ParseError',
+    'frame-name padding',
+  ];
+
+  for (const term of requiredTerms) {
+    assert.match(decision, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `ADR must mention ${term}`);
+  }
 });
