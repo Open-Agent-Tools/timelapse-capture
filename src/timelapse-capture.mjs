@@ -1310,7 +1310,7 @@ export function renderFrames(runDir, options = {}) {
     }
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
-    const framePattern = path.join(framesDir, "%05d.png");
+    const framePattern = path.join(framesDir, "frame-%04d.png");
     const ffmpegPath = options.ffmpegPath || "ffmpeg";
     const ffmpegArgs = [
       "-framerate",
