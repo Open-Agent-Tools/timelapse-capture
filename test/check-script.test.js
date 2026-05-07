@@ -32,6 +32,31 @@ test('package.json bin points at canonical CLI entrypoint', () => {
   );
 });
 
+test('package.json check script validates only the canonical entrypoint', () => {
+  const pkgPath = resolve(__dirname, '../package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  assert.strictEqual(
+    pkg.scripts.check,
+    `node --check ${CANONICAL_BIN}`,
+    `scripts.check must be "node --check ${CANONICAL_BIN}" so CI does not validate demoted scaffold files`
+  );
+});
+
+test('package.json test script runs node --test against test/*.test.{js,mjs}', () => {
+  const pkgPath = resolve(__dirname, '../package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  assert.match(
+    pkg.scripts.test,
+    /^node --test\b/,
+    'scripts.test must invoke node --test'
+  );
+  assert.match(
+    pkg.scripts.test,
+    /test\/\*\*\/\*\.test\.mjs/,
+    'scripts.test must include the .mjs canonical test glob'
+  );
+});
+
 test('package-lock.json bin metadata matches canonical entrypoint', () => {
   const lockPath = resolve(__dirname, '../package-lock.json');
   const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
