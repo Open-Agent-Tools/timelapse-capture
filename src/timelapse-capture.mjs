@@ -1246,13 +1246,11 @@ export function cleanupFrames(framesDir) {
 function readSummarySync(runDir) {
   const summaryPath = getSummaryPath(runDir);
   try {
-    if (fs.existsSync(summaryPath)) {
-      return JSON.parse(fs.readFileSync(summaryPath, "utf8"));
-    }
-  } catch {
-    /* ignore */
+    return JSON.parse(fs.readFileSync(summaryPath, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
   }
-  return null;
 }
 
 function writeSummarySync(runDir, summary) {
@@ -1353,7 +1351,13 @@ export function renderFrames(runDir, options = {}) {
     return result;
   } catch (error) {
     result.error = error.message;
-    const summary = readSummarySync(runDir) || {};
+    let summary;
+    try {
+      summary = readSummarySync(runDir) || {};
+    } catch (summaryError) {
+      result.error = `${result.error}; failed to update summary: ${summaryError.message}`;
+      return result;
+    }
     const updated = {
       ...summary,
       lastRenderAttempt: {

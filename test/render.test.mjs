@@ -165,6 +165,36 @@ test("renderFrames: treats shell metacharacters in run directory as literal argv
   }
 });
 
+test("renderFrames: fails without overwriting malformed summary JSON", () => {
+  const runDir = createTempDir();
+  const malformedSummary = "{";
+  try {
+    const binDir = path.join(runDir, "bin");
+    fs.mkdirSync(binDir, { recursive: true });
+    writeFakeFFmpeg(binDir);
+    writeFakeFFprobe(binDir);
+
+    const framesDir = path.join(runDir, "frames");
+    fs.mkdirSync(framesDir, { recursive: true });
+    fs.writeFileSync(path.join(framesDir, "00001.png"), "fake png");
+    fs.writeFileSync(path.join(runDir, "run-summary.json"), malformedSummary);
+
+    withFakePath(binDir, () => {
+      const result = renderFrames(runDir, { "keep-frames": true });
+
+      assert.strictEqual(result.success, false);
+      assert.match(result.error, /JSON|position|Unexpected/);
+    });
+
+    assert.strictEqual(
+      fs.readFileSync(path.join(runDir, "run-summary.json"), "utf8"),
+      malformedSummary
+    );
+  } finally {
+    cleanupTempDir(runDir);
+  }
+});
+
 test("cleanupFrames: removes frame files", () => {
   const runDir = createTempDir();
   try {
