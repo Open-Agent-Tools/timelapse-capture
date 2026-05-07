@@ -42,9 +42,11 @@ async function main() {
 }
 
 async function startCommand(args) {
-  if (!args.url) {
-    throw new Error("Missing --url. MVP supports URL capture with the playwright-url backend.");
+  const url = args.url ?? args._?.[0];
+  if (!url) {
+    throw new Error("Missing URL. Usage: timelapse-capture start <url> --duration <d> [--interval <i> | --video-length <l>]");
   }
+  args.url = url;
 
   const durationSeconds = parseDuration(required(args.duration, "--duration"));
   const fps = Number(args.fps ?? 24);
