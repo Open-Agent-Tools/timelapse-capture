@@ -79,6 +79,11 @@ test("CLI smoke flow creates run artifacts and supports status/peek", async () =
     const runDir = startData.runDir;
 
     await assertRunArtifacts(runDir);
+    assert.equal(Number.isInteger(startData.estimatedDiskBytes), true);
+    assert.ok(startData.estimatedDiskBytes > 0);
+
+    const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+    assert.equal(config.estimatedDiskBytes, startData.estimatedDiskBytes);
 
     const statusOutput = runCli({
       cwd: workdir,
@@ -91,6 +96,7 @@ test("CLI smoke flow creates run artifacts and supports status/peek", async () =
     assert.ok(statusData.latestFrame.endsWith(".png"));
     assert.ok(statusData.elapsedMs >= 0);
     assert.equal(typeof statusData.etaMs, "number");
+    assert.equal(statusData.estimatedDiskBytes, startData.estimatedDiskBytes);
 
     const peekLatest = JSON.parse(
       runCli({ cwd: workdir, args: ["peek", runDir, "--latest", "--json"] }).stdout
@@ -119,6 +125,25 @@ test("CLI smoke flow creates run artifacts and supports status/peek", async () =
     }
 
     await fs.rm(workdir, { recursive: true, force: true });
+  });
+});
+
+test("start human output prints approximate estimated disk usage", async () => {
+  await withServer(async (url) => {
+    const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-human-start-"));
+    try {
+      const runDir = path.join(workdir, "run");
+      const output = runCli({
+        cwd: workdir,
+        args: ["start", url, "--out", runDir, "--interval", "100ms", "--duration", "1s"],
+        env: { TIMELAPSE_SIMULATE_FRAMES: "2" }
+      });
+
+      assert.match(output.stdout, /estimated disk:/i);
+      assert.match(output.stdout, /approximate/i);
+    } finally {
+      await fs.rm(workdir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -162,6 +187,10 @@ test("status reports enriched JSON and human progress details", async () => {
   await fs.writeFile(path.join(framesDir, "frame-0001.png"), "first");
   await fs.writeFile(latestFrame, "second");
   await fs.writeFile(path.join(runDir, "output.mp4"), "rendered");
+  await fs.writeFile(
+    path.join(runDir, "config.json"),
+    `${JSON.stringify({ estimatedDiskBytes: 2_000_000 }, null, 2)}\n`
+  );
 
   const startedAt = new Date(Date.now() - 20_000).toISOString();
   const latestFrameTimestamp = new Date(Date.now() - 10_000).toISOString();
@@ -209,6 +238,7 @@ test("status reports enriched JSON and human progress details", async () => {
     assert.equal(jsonStatus.latestFrameTimestamp, latestFrameTimestamp);
     assert.equal(jsonStatus.staleWarning.isStale, true);
     assert.ok(jsonStatus.diskUsage.runDirBytes > jsonStatus.diskUsage.framesBytes);
+    assert.equal(jsonStatus.estimatedDiskBytes, 2_000_000);
     assert.equal(jsonStatus.outputPath, path.join(runDir, "output.mp4"));
     assert.deepEqual(jsonStatus.cleanup, {
       success: true,
@@ -224,6 +254,7 @@ test("status reports enriched JSON and human progress details", async () => {
     assert.match(humanStatus, /latest successful frame:/);
     assert.match(humanStatus, /warning: latest successful frame is stale/);
     assert.match(humanStatus, /disk usage:/);
+    assert.match(humanStatus, /estimated disk:/);
     assert.match(humanStatus, /output: .*output\.mp4/);
     assert.match(humanStatus, /cleanup: removed 3, retained 1/);
   } finally {
