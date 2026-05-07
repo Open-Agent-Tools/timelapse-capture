@@ -30,10 +30,12 @@ export function migrateLegacyState(state) {
   return state;
 }
 
-main().catch((error) => {
-  console.error(error?.message || String(error));
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error(error?.message || String(error));
+    process.exitCode = 1;
+  });
+}
 
 async function main() {
   const [command, ...rest] = process.argv.slice(2);

@@ -26,6 +26,17 @@ test("migrateLegacyState rewrites legacy done to completed and leaves canonical 
   }
 });
 
+test("importing the canonical CLI module has no dispatcher side effects", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", `await import(${JSON.stringify(CLI)});`],
+    { encoding: "utf8" }
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
 test("status command migrates legacy done to completed without rewriting status.json", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-status-vocab-"));
   try {
