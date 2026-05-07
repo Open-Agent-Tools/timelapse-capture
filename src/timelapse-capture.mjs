@@ -1137,6 +1137,8 @@ export async function commandPeek({ runDir, options = {} }) {
     index = Math.min(Math.max(options.index, 0), names.length - 1);
   } else if (typeof options.near === "number") {
     index = Math.min(Math.max(options.near, 0), names.length - 1);
+  } else if (options.latest) {
+    index = names.length - 1;
   }
   return {
     path: path.join(resolved, "frames", names[index]),
@@ -1279,7 +1281,10 @@ function readSummarySync(runDir) {
 }
 
 function writeSummarySync(runDir, summary) {
-  fs.writeFileSync(getSummaryPath(runDir), JSON.stringify(summary, null, 2), "utf8");
+  const summaryPath = getSummaryPath(runDir);
+  const temp = `${summaryPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(temp, JSON.stringify(summary, null, 2), "utf8");
+  fs.renameSync(temp, summaryPath);
 }
 
 export function renderFrames(runDir, options = {}) {
@@ -1424,7 +1429,7 @@ export async function commandRender({ runDir, options = {} }) {
   }
   const result = renderFrames(resolved, renderOptions);
   if (!result.success) {
-    if (result.error && result.error.includes("validation")) {
+    if (result.error && result.error.includes("valid MP4")) {
       throw new Error(`Rendered output is not a valid MP4: ${result.error}`);
     }
     throw new Error(`ffmpeg render failed: ${result.error}`);

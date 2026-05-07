@@ -172,10 +172,17 @@ timelapse-capture render <run-dir>
 Renders `output.mp4` from captured frames. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata.
 
 ```bash
-timelapse-capture cleanup <run-dir> [--force]
+timelapse-capture cleanup <run-dir> [--keep-frames | --keep-samples | --keep-latest | --frames | --all] [--force]
 ```
 
-Deletes raw frame PNGs for a completed run. Refuses to run if `output.mp4` is missing unless `--force` is passed.
+Deletes raw frame PNGs for a completed run.
+
+- `--keep-frames`: preserve all raw frames (no files removed)
+- `--keep-samples`: remove all but the first and last frame
+- `--keep-latest`: remove all but the most recent frame
+- `--frames`: remove raw frames and `latest.png`, preserve `output.mp4` and other artifacts
+- `--all`: remove the entire run directory; requires `--force` if raw frames still exist
+- `--force`: override safety guards (e.g. delete even if frames remain)
 
 ## Troubleshooting
 
@@ -246,11 +253,23 @@ If render already succeeded, raw frames may have been cleaned up. Inspect `poste
 Successful `render` removes raw frame PNGs by default and keeps `output.mp4` plus metadata. Use the `cleanup` command to manually reclaim space if render cleanup was skipped or failed.
 
 ```bash
-# Clean frames only after verifying output.mp4
+# Remove all raw frames (default)
 timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530
 
-# Force cleanup even if output.mp4 was not rendered
-timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --force
+# Keep only the first and last frame as samples
+timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --keep-samples
+
+# Keep only the most recent frame
+timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --keep-latest
+
+# Keep all raw frames
+timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --keep-frames
+
+# Remove frames + latest.png, keep output.mp4
+timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --frames
+
+# Delete the entire run directory (requires --force if frames exist)
+timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --all --force
 ```
 
 ## Artifacts
@@ -288,5 +307,19 @@ src/cli/render.js          MP4 rendering and cleanup helpers
 src/cli/parser.js          argument parsing
 skill/SKILL.md             Codex/Claude-style skill instructions
 docs/PRD.md                product requirements
-test/*.test.js             Node test suite
+test/*.test.{js,mjs}       Node test suite
+```
+
+## Testing
+
+The suite uses a fake-ffmpeg harness (`test/helpers/fake-ffmpeg.mjs`) so render and cleanup tests run on any machine with Node >= 20 — no real ffmpeg required. Tests that exercise real `ffmpeg`/`ffprobe` binaries are automatically skipped when those binaries are absent from PATH and reported as:
+
+```
+real ffmpeg tests skipped (ffmpeg/ffprobe not found)
+```
+
+Run the full suite:
+
+```bash
+npm test
 ```
