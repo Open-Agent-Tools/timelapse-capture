@@ -20,7 +20,27 @@ class FakeBinaryManager {
     if (mode === "success") {
       script =
         "#!/bin/sh\n" +
-        "for arg do out_file=\"$arg\"; done\n" +
+        "input_pattern=\"\"\n" +
+        "args=\"$@\"\n" +
+        "while [ $# -gt 0 ]; do\n" +
+        "  if [ \"$1\" = \"-i\" ]; then input_pattern=\"$2\"; shift; fi\n" +
+        "  out_file=\"$1\"\n" +
+        "  shift\n" +
+        "done\n" +
+        "if [ -n \"$input_pattern\" ] && [ \"$input_pattern\" != \"pipe:0\" ]; then\n" +
+        "  # Convert ffmpeg pattern like %04d.png or frame-%04d.png to a glob\n" +
+        "  # %04d -> [0-9][0-9][0-9][0-9], %05d -> [0-9][0-9][0-9][0-9][0-9]\n" +
+        "  glob_pattern=$(echo \"$input_pattern\" | sed 's/%04d/[0-9][0-9][0-9][0-9]/g' | sed 's/%05d/[0-9][0-9][0-9][0-9][0-9]/g')\n" +
+        "  # Check if at least one file matches the glob\n" +
+        "  found=false\n" +
+        "  for f in $glob_pattern; do\n" +
+        "    if [ -f \"$f\" ]; then found=true; break; fi\n" +
+        "  done\n" +
+        "  if [ \"$found\" = \"false\" ]; then\n" +
+        "    echo \"ffmpeg: $input_pattern: No such file or directory\" >&2\n" +
+        "    exit 1\n" +
+        "  fi\n" +
+        "fi\n" +
         "printf 'fake mp4 bytes' > \"$out_file\"\n" +
         "exit 0";
     } else if (mode === "fail") {

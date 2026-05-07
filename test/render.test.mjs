@@ -54,7 +54,29 @@ function writeFakeFFprobe(binDir) {
 function writeFakeFFmpeg(binDir) {
   writeExecutable(path.join(binDir, "ffmpeg"), [
     "#!/bin/sh",
-    "for arg do out_file=\"$arg\"; done",
+    "input_pattern=\"\"",
+    "while [ $# -gt 0 ]; do",
+    "  if [ \"$1\" = \"-i\" ]; then input_pattern=\"$2\"; shift; fi",
+    "  out_file=\"$1\"",
+    "  shift",
+    "done",
+    "if [ -n \"$input_pattern\" ] && [ \"$input_pattern\" != \"pipe:0\" ]; then",
+    "  dir=$(dirname \"$input_pattern\")",
+    "  base=$(basename \"$input_pattern\")",
+    "  case \"$base\" in",
+    "    *%05d*) check_pattern=$(echo \"$base\" | sed 's/%05d/[0-9][0-9][0-9][0-9][0-9]/') ;;",
+    "    *%04d*) check_pattern=$(echo \"$base\" | sed 's/%04d/[0-9][0-9][0-9][0-9]/') ;;",
+    "    *) check_pattern=\"$base\" ;;",
+    "  esac",
+    "  found=false",
+    "  for f in \"$dir\"/$check_pattern; do",
+    "    if [ -f \"$f\" ]; then found=true; break; fi",
+    "  done",
+    "  if [ \"$found\" = \"false\" ]; then",
+    "    echo \"ffmpeg: $input_pattern: No such file or directory\" >&2",
+    "    exit 1",
+    "  fi",
+    "fi",
     "printf \"fake mp4 bytes\" > \"$out_file\"",
     "exit 0"
   ].join("\n"));
@@ -148,7 +170,7 @@ test("renderFrames: treats shell metacharacters in run directory as literal argv
     const runDir = path.join(tempDir, `run " ; touch ${markerName} ; echo " ok`);
     const framesDir = path.join(runDir, "frames");
     fs.mkdirSync(framesDir, { recursive: true });
-    fs.writeFileSync(path.join(framesDir, "00001.png"), "fake png");
+    fs.writeFileSync(path.join(framesDir, "frame-0001.png"), "fake png");
 
     withFakePath(binDir, () => {
       const result = renderFrames(runDir, { "keep-frames": true });
@@ -158,7 +180,7 @@ test("renderFrames: treats shell metacharacters in run directory as literal argv
     });
 
     assert.strictEqual(fs.existsSync(markerPath), false);
-    assert.strictEqual(fs.existsSync(path.join(framesDir, "00001.png")), true);
+    assert.strictEqual(fs.existsSync(path.join(framesDir, "frame-0001.png")), true);
   } finally {
     fs.rmSync(markerPath, { force: true });
     cleanupTempDir(tempDir);
@@ -170,15 +192,15 @@ test("cleanupFrames: removes frame files", () => {
   try {
     const framesDir = path.join(runDir, "frames");
     fs.mkdirSync(framesDir, { recursive: true });
-    fs.writeFileSync(path.join(framesDir, "00001.png"), "fake png");
-    fs.writeFileSync(path.join(framesDir, "00002.png"), "fake png");
+    fs.writeFileSync(path.join(framesDir, "frame-0001.png"), "fake png");
+    fs.writeFileSync(path.join(framesDir, "frame-0002.png"), "fake png");
     fs.writeFileSync(path.join(framesDir, "other.txt"), "not a frame");
 
     const result = cleanupFrames(framesDir);
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.removed, 2);
-    assert.strictEqual(fs.existsSync(path.join(framesDir, "00001.png")), false);
-    assert.strictEqual(fs.existsSync(path.join(framesDir, "00002.png")), false);
+    assert.strictEqual(fs.existsSync(path.join(framesDir, "frame-0001.png")), false);
+    assert.strictEqual(fs.existsSync(path.join(framesDir, "frame-0002.png")), false);
     assert.strictEqual(fs.existsSync(path.join(framesDir, "other.txt")), true);
   } finally {
     cleanupTempDir(runDir);

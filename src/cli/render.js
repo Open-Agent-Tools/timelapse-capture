@@ -204,7 +204,7 @@ function renderFrames(runDir, options = {}) {
     }
 
     // Build ffmpeg argv and keep a readable command string for metadata.
-    const framePattern = path.join(framesDir, '%05d.png');
+    const framePattern = path.join(framesDir, 'frame-%04d.png');
     const ffmpegExecutable = options.ffmpegPath || 'ffmpeg';
     const ffmpegArgs = [
       '-framerate', (options.framerate || 10).toString(),

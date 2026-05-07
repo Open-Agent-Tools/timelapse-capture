@@ -29,7 +29,7 @@ async function createNumericFrames(runDir, count = 3) {
   const framesDir = path.join(runDir, "frames");
   await fs.mkdir(framesDir, { recursive: true });
   for (let i = 1; i <= count; i += 1) {
-    const name = `${String(i).padStart(5, "0")}.png`;
+    const name = `frame-${String(i).padStart(4, "0")}.png`;
     await fs.writeFile(path.join(framesDir, name), FRAME_PNG);
   }
   return framesDir;
