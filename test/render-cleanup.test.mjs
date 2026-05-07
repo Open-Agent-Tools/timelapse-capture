@@ -30,7 +30,8 @@ async function createNumericFrames(runDir, count = 3) {
   await fs.mkdir(framesDir, { recursive: true });
   for (let i = 1; i <= count; i += 1) {
     const name = `${String(i).padStart(5, "0")}.png`;
-    await fs.writeFile(path.join(framesDir, name), FRAME_PNG);
+    // Append frame index byte so each frame has distinct content for poster selection tests
+    await fs.writeFile(path.join(framesDir, name), Buffer.concat([FRAME_PNG, Buffer.from([i])]));
   }
   return framesDir;
 }
@@ -91,6 +92,40 @@ describe("render with fake ffmpeg", () => {
         assert.ok(summary.ffmpegCommand.includes(path.join(runDir, "output.mp4")));
         assert.strictEqual(summary.cleanup.success, true);
         assert.strictEqual(summary.cleanup.removed, 3);
+
+        // poster assertions: middle frame of 3 is index 1 (Math.floor((3-1)/2) = 1), which is 00002.png
+        const posterPath = path.join(runDir, "poster.png");
+        const posterStat = await fs.stat(posterPath).catch(() => null);
+        assert.ok(posterStat, "poster.png should exist after successful render");
+        const posterContent = await fs.readFile(posterPath);
+        const expectedMiddleContent = Buffer.concat([FRAME_PNG, Buffer.from([2])]);
+        assert.deepStrictEqual(posterContent, expectedMiddleContent, "poster.png should be the middle frame (00002.png)");
+        assert.strictEqual(summary.poster, "poster.png", "summary.poster should be 'poster.png'");
+      }, "success");
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
+  test("render with one frame creates poster from that frame", async () => {
+    const runDir = await createRunDir(tempDir);
+    await createNumericFrames(runDir, 1);
+
+    const oldPath = process.env.PATH;
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        process.env.PATH = manager.getPATHEnv();
+        await commandRender({ runDir, options: {} });
+
+        const posterPath = path.join(runDir, "poster.png");
+        const posterContent = await fs.readFile(posterPath);
+        const expectedContent = Buffer.concat([FRAME_PNG, Buffer.from([1])]);
+        assert.deepStrictEqual(posterContent, expectedContent, "poster.png should be the only frame (00001.png)");
+
+        const summary = JSON.parse(
+          await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+        );
+        assert.strictEqual(summary.poster, "poster.png");
       }, "success");
     } finally {
       process.env.PATH = oldPath;
@@ -117,6 +152,8 @@ describe("render with fake ffmpeg", () => {
           await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
         );
         assert.strictEqual(summary.cleanup.reason, "render-or-validation-failed");
+        const posterStat = await fs.stat(path.join(runDir, "poster.png")).catch(() => null);
+        assert.strictEqual(posterStat, null, "poster.png should not exist after render failure");
       }, "fail");
     } finally {
       process.env.PATH = oldPath;
