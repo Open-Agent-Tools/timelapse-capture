@@ -148,10 +148,12 @@ timelapse-capture doctor [--json]
 Checks runtime dependencies. Run this first.
 
 ```bash
-timelapse-capture start <url> [--duration <duration>] [--interval <duration>] [--viewport <width>x<height>] [--json]
+timelapse-capture start <url> [--duration <duration>] [--interval <duration> | --video-length <duration> [--fps <n>]] [--force-interval] [--viewport <width>x<height>] [--json]
 ```
 
 Captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
+
+When `--interval` is omitted, the capture interval is computed from `--duration` and `--video-length` (default `--fps 24`). The `playwright-url` backend enforces a 250ms minimum interval — sub-minimum intervals exit with `E_INTERVAL_TOO_SMALL` unless `--force-interval` is supplied, in which case a stderr warning is emitted and the forced fields are recorded in `config.json`.
 
 ```bash
 timelapse-capture status <run-dir> [--json]

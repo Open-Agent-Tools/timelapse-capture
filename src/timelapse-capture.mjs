@@ -17,12 +17,41 @@ const SIMULATION_FRAME_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAC0lEQVR4nGNgYAAAAAIAAdde3rAAAAAElFTkSuQmCA==";
 const SIMULATION_FRAME_PNG = Buffer.from(SIMULATION_FRAME_PNG_BASE64, "base64");
 
+export const BACKEND_MIN_INTERVAL_MS = Object.freeze({
+  "playwright-url": 250
+});
+export const DEFAULT_FPS = 24;
+
 export class ParseError extends Error {
   constructor(code, message) {
     super(message);
     this.name = "ParseError";
     this.code = code;
   }
+}
+
+export function validateBackendInterval({ backend, intervalMs, force }) {
+  const minimumMs = BACKEND_MIN_INTERVAL_MS[backend];
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+    throw new ParseError("E_BAD_INTERVAL", `Invalid interval: ${intervalMs}`);
+  }
+  if (typeof minimumMs !== "number") {
+    return { ok: true, intervalMs, minimumMs: null, forced: false, belowMinimum: false };
+  }
+  const belowMinimum = intervalMs < minimumMs;
+  if (belowMinimum && !force) {
+    throw new ParseError(
+      "E_INTERVAL_TOO_SMALL",
+      `interval ${intervalMs}ms is below ${backend} minimum ${minimumMs}ms; pass --force-interval to override`
+    );
+  }
+  return {
+    ok: true,
+    intervalMs,
+    minimumMs,
+    forced: belowMinimum,
+    belowMinimum
+  };
 }
 
 const COMMAND_SCHEMAS = {
@@ -41,7 +70,7 @@ const COMMAND_SCHEMAS = {
       "wait-until",
       "backend"
     ],
-    boolFlags: ["json", "force", "help", "headed", "keep-frames", "keep-latest"]
+    boolFlags: ["json", "force", "force-interval", "help", "headed", "keep-frames", "keep-latest"]
   },
   capture: {
     positional: [],
@@ -276,7 +305,7 @@ function assertBoolFlag(command, schema, key, token) {
 }
 
 function parseValueFlag(flag, value) {
-  if (flag === "duration") {
+  if (flag === "duration" || flag === "video-length") {
     return parseDuration(value);
   }
   if (flag === "viewport") {
@@ -288,6 +317,13 @@ function parseValueFlag(flag, value) {
       throw new ParseError("E_BAD_INTERVAL", `Invalid interval: ${value}`);
     }
     return parsed.ms;
+  }
+  if (flag === "fps") {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new ParseError("E_BAD_FPS", `Invalid fps: ${value}`);
+    }
+    return parsed;
   }
   if (flag === "index" || flag === "near") {
     const parsed = Number.parseInt(value, 10);
@@ -718,6 +754,11 @@ async function writeStartArtifacts(runDir, state) {
     headed: state.headed,
     createdAt: nowIso()
   };
+  if (state.forcedInterval) {
+    config.forcedInterval = true;
+    config.belowMinimum = true;
+    config.minimumIntervalMs = state.minimumIntervalMs;
+  }
   const job = {
     runDir,
     state: state.state,
@@ -926,11 +967,33 @@ export async function commandStart({ target, options = {} } = {}) {
     throw new Error(`navigation failed: page could not be loaded: ${target}`);
   }
 
-  const intervalMs = typeof options.interval === "number"
-    ? options.interval
-    : options.interval?.ms ?? 200;
   const durationMs = options.duration?.ms ?? 0;
-  const fps = Number(options.fps ?? 24);
+  const fps = Number(options.fps ?? DEFAULT_FPS);
+  const videoLengthMs = options["video-length"]?.ms ?? 0;
+  const backend = options.backend ?? "playwright-url";
+  const forceInterval = Boolean(options["force-interval"]);
+
+  let intervalMs;
+  if (typeof options.interval === "number") {
+    intervalMs = options.interval;
+  } else if (videoLengthMs > 0 && durationMs > 0) {
+    const targetFrameCount = Math.max(1, Math.round((videoLengthMs / 1000) * fps));
+    intervalMs = Math.max(1, Math.round(durationMs / targetFrameCount));
+  } else {
+    intervalMs = options.interval?.ms ?? 200;
+  }
+
+  const intervalValidation = validateBackendInterval({
+    backend,
+    intervalMs,
+    force: forceInterval
+  });
+  if (intervalValidation.forced) {
+    process.stderr.write(
+      `warning: interval ${intervalMs}ms is below ${backend} minimum ${intervalValidation.minimumMs}ms (forced)\n`
+    );
+  }
+
   const viewport = options.viewport
     ? { width: options.viewport.width, height: options.viewport.height }
     : { width: 1280, height: 720 };
@@ -958,7 +1021,7 @@ export async function commandStart({ target, options = {} } = {}) {
   const state = {
     runDir,
     target,
-    backend: options.backend ?? "playwright-url",
+    backend,
     state: "starting",
     startedAt,
     targetFrames,
@@ -968,7 +1031,11 @@ export async function commandStart({ target, options = {} } = {}) {
     latestFrameAt: null,
     latestFrameTimestamp: null,
     intervalMs,
+    minimumIntervalMs: intervalValidation.minimumMs,
+    forcedInterval: intervalValidation.forced,
+    belowMinimum: intervalValidation.belowMinimum,
     durationMs,
+    videoLengthMs: videoLengthMs || null,
     fps,
     viewport,
     estimatedDiskBytes,
@@ -1006,11 +1073,17 @@ export async function commandStart({ target, options = {} } = {}) {
     throw error;
   }
 
-  return {
+  const result = {
     runDir,
     estimatedDiskBytes,
     status: buildStatusPayload({ ...state, runDir })
   };
+  if (state.forcedInterval) {
+    result.forcedInterval = true;
+    result.belowMinimum = true;
+    result.minimumIntervalMs = state.minimumIntervalMs;
+  }
+  return result;
 }
 
 async function runStartCli(parsed) {
@@ -1560,7 +1633,7 @@ function printHelp() {
   console.log(`timelapse-capture ${VERSION}
 
 Usage:
-  timelapse-capture start <url> [--duration <2h>] [--interval <5s>] [--out <dir>]
+  timelapse-capture start <url> [--duration <2h>] [--interval <5s> | --video-length <60s> [--fps <24>]] [--force-interval] [--out <dir>]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
   timelapse-capture render <run-dir> [--output <file>] [--json]

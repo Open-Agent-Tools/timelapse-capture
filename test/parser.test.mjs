@@ -5,7 +5,9 @@ import {
   parseArgs,
   parseDuration,
   parseViewport,
-  ParseError
+  ParseError,
+  validateBackendInterval,
+  BACKEND_MIN_INTERVAL_MS
 } from "../src/timelapse-capture.mjs";
 
 test("parses durations from simple units", () => {
@@ -115,4 +117,91 @@ test("ParseError carries structured code", () => {
   const err = new ParseError("E_TEST", "msg");
   assert.equal(err.name, "ParseError");
   assert.equal(err.code, "E_TEST");
+});
+
+test("parses --video-length and --fps flags", () => {
+  const parsed = parseArgs([
+    "start",
+    "https://example.com",
+    "--duration",
+    "2h",
+    "--video-length",
+    "1m",
+    "--fps",
+    "24"
+  ]);
+  assert.equal(parsed.options["video-length"].ms, 60_000);
+  assert.equal(parsed.options.fps, 24);
+});
+
+test("rejects non-positive --fps", () => {
+  for (const value of ["0", "abc"]) {
+    assert.throws(
+      () =>
+        parseArgs([
+          "start",
+          "https://example.com",
+          "--fps",
+          value
+        ]),
+      { name: "ParseError", code: "E_BAD_FPS" }
+    );
+  }
+});
+
+test("parses --force-interval boolean flag", () => {
+  const parsed = parseArgs([
+    "start",
+    "https://example.com",
+    "--force-interval"
+  ]);
+  assert.equal(parsed.options["force-interval"], true);
+});
+
+test("BACKEND_MIN_INTERVAL_MS exposes playwright-url minimum", () => {
+  assert.equal(BACKEND_MIN_INTERVAL_MS["playwright-url"], 250);
+});
+
+test("validateBackendInterval rejects below-minimum without force", () => {
+  assert.throws(
+    () => validateBackendInterval({ backend: "playwright-url", intervalMs: 100, force: false }),
+    { name: "ParseError", code: "E_INTERVAL_TOO_SMALL" }
+  );
+});
+
+test("validateBackendInterval permits below-minimum with force", () => {
+  const result = validateBackendInterval({
+    backend: "playwright-url",
+    intervalMs: 100,
+    force: true
+  });
+  assert.deepEqual(result, {
+    ok: true,
+    intervalMs: 100,
+    minimumMs: 250,
+    forced: true,
+    belowMinimum: true
+  });
+});
+
+test("validateBackendInterval accepts at-minimum without warning", () => {
+  const result = validateBackendInterval({
+    backend: "playwright-url",
+    intervalMs: 250,
+    force: false
+  });
+  assert.equal(result.forced, false);
+  assert.equal(result.belowMinimum, false);
+  assert.equal(result.intervalMs, 250);
+  assert.equal(result.minimumMs, 250);
+});
+
+test("validateBackendInterval accepts above-minimum without warning", () => {
+  const result = validateBackendInterval({
+    backend: "playwright-url",
+    intervalMs: 1000,
+    force: false
+  });
+  assert.equal(result.forced, false);
+  assert.equal(result.belowMinimum, false);
 });
