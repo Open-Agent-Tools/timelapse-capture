@@ -1282,6 +1282,24 @@ function writeSummarySync(runDir, summary) {
   fs.writeFileSync(getSummaryPath(runDir), JSON.stringify(summary, null, 2), "utf8");
 }
 
+function listFrameFilesSync(framesDir) {
+  if (!fs.existsSync(framesDir)) return [];
+  return fs
+    .readdirSync(framesDir)
+    .filter((name) => /\.png$/i.test(name))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+function copyPosterSync(framesDir, runDir) {
+  const names = listFrameFilesSync(framesDir);
+  if (names.length === 0) return null;
+  const middleIndex = Math.floor((names.length - 1) / 2);
+  const src = path.join(framesDir, names[middleIndex]);
+  const dest = path.join(runDir, "poster.png");
+  fs.copyFileSync(src, dest);
+  return "poster.png";
+}
+
 export function renderFrames(runDir, options = {}) {
   const result = {
     success: false,
@@ -1338,12 +1356,15 @@ export function renderFrames(runDir, options = {}) {
       throw new RenderError(`Output is not a valid MP4: ${validation.error}`, "VALIDATION_FAILED");
     }
 
+    const posterRelPath = copyPosterSync(framesDir, runDir);
+
     const existing = readSummarySync(runDir);
     const summary = {
       ...existing,
       duration: validation.duration,
       dimensions: validation.dimensions,
       ffmpegCommand,
+      poster: posterRelPath,
       render: {
         outputPath,
         bytes: validation.bytes,
