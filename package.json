@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node ./src/timelapse-capture.mjs",
     "check": "node --check ./src/timelapse-capture.mjs",
-    "test": "node --test test/*.test.js",
+    "test": "node --test \"test/**/*.test.js\" \"test/**/*.test.mjs\"",
     "ci": "npm run check && npm test"
   },
   "dependencies": {
