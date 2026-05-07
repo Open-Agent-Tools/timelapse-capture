@@ -1567,7 +1567,7 @@ function printHelp() {
 Usage:
   timelapse-capture start <url> [--duration <2h>] [--interval <5s>] [--out <dir>]
   timelapse-capture status <run-dir> [--json]
-  timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
+  timelapse-capture peek <run-dir> [--latest | --index <n> | --near <n>] [--json]
   timelapse-capture render <run-dir> [--output <file>] [--json]
   timelapse-capture cleanup <run-dir> [--force]
   timelapse-capture doctor [--json]

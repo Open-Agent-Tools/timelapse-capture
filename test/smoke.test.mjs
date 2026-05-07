@@ -66,6 +66,16 @@ async function assertRunArtifacts(runDir) {
   assert.ok(frames.filter((f) => f.endsWith(".png")).length > 0);
 }
 
+test("CLI help documents --near as a numeric frame index", () => {
+  const output = runCli({ cwd: __dirname, args: ["--help"] }).stdout;
+
+  assert.match(
+    output,
+    /timelapse-capture peek <run-dir> \[--latest \| --index <n> \| --near <n>\] \[--json\]/
+  );
+  assert.doesNotMatch(output, /--near <iso>/);
+});
+
 test("CLI smoke flow creates run artifacts and supports status/peek", async () => {
   await withServer(async (url) => {
     const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "timelapse-work-"));
