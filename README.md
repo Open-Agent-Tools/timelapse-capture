@@ -160,22 +160,22 @@ timelapse-capture status <run-dir> [--json]
 Reports run state, captured and failed frame counts, latest successful frame, elapsed time, estimated remaining time, output path, cleanup summary, and disk usage.
 
 ```bash
-timelapse-capture peek <run-dir> [--latest | --index <n> | --near <n>] [--json]
+timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
 ```
 
-Returns one frame path. `--latest` selects the newest frame, `--index` selects a zero-based frame index, and `--near` currently selects by numeric frame position.
+Returns one frame path. `--latest` selects the newest frame, `--index` selects a zero-based frame index, and `--near` selects by ISO 8601 timestamp.
 
 ```bash
-timelapse-capture render <run-dir> [--force]
+timelapse-capture render <run-dir>
 ```
 
-Renders `output.mp4` from captured frames. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata. `--force` is only for rendering while a capture is still active.
+Renders `output.mp4` from captured frames. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata.
 
 ```bash
-timelapse-capture cleanup <run-dir> [--frames | --all | --keep-frames | --keep-samples | --keep-latest] [--force]
+timelapse-capture cleanup <run-dir> [--force]
 ```
 
-Performs explicit cleanup or records a retention choice.
+Deletes raw frame PNGs for a completed run. Refuses to run if `output.mp4` is missing unless `--force` is passed.
 
 ## Troubleshooting
 
@@ -243,42 +243,14 @@ If render already succeeded, raw frames may have been cleaned up. Inspect `poste
 
 ## Retention Examples
 
-Successful `render` removes raw frame PNGs by default and keeps `output.mp4` plus metadata. Use explicit cleanup commands when you need to keep or reduce frame artifacts before a final cleanup step.
-
-Record that all raw frames should be preserved:
+Successful `render` removes raw frame PNGs by default and keeps `output.mp4` plus metadata. Use the `cleanup` command to manually reclaim space if render cleanup was skipped or failed.
 
 ```bash
-timelapse-capture cleanup <run-dir> --keep-frames
-```
+# Clean frames only after verifying output.mp4
+timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530
 
-Keep representative sample frames:
-
-```bash
-timelapse-capture cleanup <run-dir> --keep-samples
-```
-
-Keep only the latest frame:
-
-```bash
-timelapse-capture cleanup <run-dir> --keep-latest
-```
-
-Delete raw frames manually:
-
-```bash
-timelapse-capture cleanup <run-dir> --frames
-```
-
-Delete the entire run directory after frames are gone:
-
-```bash
-timelapse-capture cleanup <run-dir> --all
-```
-
-If raw frames still exist and you intentionally want to delete everything:
-
-```bash
-timelapse-capture cleanup <run-dir> --all --force
+# Force cleanup even if output.mp4 was not rendered
+timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --force
 ```
 
 ## Artifacts
@@ -309,10 +281,12 @@ Important paths:
 ## Project Layout
 
 ```text
-src/cli/index.js    CLI entrypoint
-src/cli/doctor.js   dependency checks
-src/cli/render.js   MP4 rendering and cleanup helpers
-skill/SKILL.md      Codex/Claude-style skill instructions
-docs/PRD.md         product requirements
-test/*.test.js      Node test suite
+src/timelapse-capture.mjs  CLI entrypoint
+src/cli/index.js           CLI router
+src/cli/doctor.js          dependency checks
+src/cli/render.js          MP4 rendering and cleanup helpers
+src/cli/parser.js          argument parsing
+skill/SKILL.md             Codex/Claude-style skill instructions
+docs/PRD.md                product requirements
+test/*.test.js             Node test suite
 ```

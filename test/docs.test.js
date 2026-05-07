@@ -27,9 +27,6 @@ test('README documents dogfood tester setup and capture workflow', async () => {
     'timelapse-capture render',
     '## Troubleshooting',
     '## Retention Examples',
-    '--keep-frames',
-    '--keep-samples',
-    '--keep-latest',
     '## Artifacts',
   ];
 
@@ -50,5 +47,4 @@ test('skill requires doctor before capture and describes the agent workflow', as
   assert.match(skill, /Run `timelapse-capture doctor` before any capture work/);
   assert.match(skill, /start .*status .*peek .*render .*report artifact paths/is);
   assert.match(skill, /README\.md/);
-  assert.match(skill, /--keep-frames/);
 });

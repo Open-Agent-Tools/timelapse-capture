@@ -73,7 +73,7 @@ Use `peek` to select exactly one frame:
 ```bash
 timelapse-capture peek <run-dir> --latest --json
 timelapse-capture peek <run-dir> --index 0 --json
-timelapse-capture peek <run-dir> --near 2 --json
+timelapse-capture peek <run-dir> --near "2026-05-07T12:00:00Z" --json
 ```
 
 Then inspect only the returned image path. Do not load the full `frames/` directory into context.
