@@ -10,6 +10,17 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 export const VERSION = "0.1.0";
 export const MIN_NODE_VERSION = "20.0.0";
+export const CANONICAL_STATES = Object.freeze([
+  "starting",
+  "running",
+  "completed",
+  "failed",
+  "rendering",
+  "rendered",
+  "render_failed"
+]);
+const CANONICAL_STATE_SET = new Set(CANONICAL_STATES);
+const LEGACY_COMPLETED_STATE = ["d", "one"].join("");
 
 // Simulation-mode placeholder frame, encoded as base64 to keep the canonical
 // CLI source free of any literal scaffold PNG hex sequence (regression check).
@@ -592,6 +603,12 @@ async function readJsonOptional(file) {
   }
 }
 
+export function normalizeStatusState(state) {
+  if (state === LEGACY_COMPLETED_STATE) return "completed";
+  if (CANONICAL_STATE_SET.has(state)) return state;
+  return state || "starting";
+}
+
 async function appendLog(runDir, message) {
   await fsp.appendFile(path.join(runDir, "capture.log"), `[${nowIso()}] ${message}\n`);
 }
@@ -737,7 +754,7 @@ function buildStatusPayload(state) {
   const elapsedMs = Math.max(0, Date.now() - startedAtMs);
   const totalExpected = Number.isFinite(state.targetFrames) ? state.targetFrames : state.frameCount;
   const completedAttempts = (state.frameCount || 0) + (state.failedFrameCount || 0);
-  const stateName = state.state || "starting";
+  const stateName = normalizeStatusState(state.state);
   const etaMs =
     stateName === "running"
       ? Math.max(0, (totalExpected - completedAttempts) * (state.intervalMs || 0))
@@ -785,7 +802,7 @@ async function writeStatus(runDir, state) {
 
 function inferStateFromStatus(status) {
   if (!status) return "idle";
-  if (status.state) return status.state;
+  if (status.state) return normalizeStatusState(status.state);
   if ((status.failedFrameCount || 0) > 0 && (status.frameCount || 0) === 0) return "failed";
   if (status.lastUpdatedAt) return "completed";
   return "idle";
@@ -1055,7 +1072,7 @@ export async function commandStatus({ runDir }) {
   const summary = await readJsonOptional(path.join(resolved, "run-summary.json"));
   const payload = buildStatusPayload({
     ...status,
-    state: status.state || inferStateFromStatus(status),
+    state: normalizeStatusState(status.state || inferStateFromStatus(status)),
     estimatedDiskBytes: status.estimatedDiskBytes ?? config?.estimatedDiskBytes ?? null,
     runDir: resolved
   });
@@ -1414,7 +1431,7 @@ export async function commandRender({ runDir, options = {} }) {
   const resolved = path.resolve(runDir);
   const statusPath = path.join(resolved, "status.json");
   const status = await readJsonOptional(statusPath);
-  const currentState = status?.state || inferStateFromStatus(status || {});
+  const currentState = normalizeStatusState(status?.state || inferStateFromStatus(status || {}));
   if (["starting", "running", "rendering"].includes(currentState) && !options.force) {
     throw new Error("Cannot render while capture is active. Use --force to override.");
   }
@@ -1422,13 +1439,32 @@ export async function commandRender({ runDir, options = {} }) {
   if (options.force && ["starting", "running", "rendering"].includes(currentState)) {
     renderOptions["keep-frames"] = true;
   }
+  const renderStartedStatus = {
+    ...(status || {}),
+    runDir: resolved,
+    state: "rendering",
+    lastUpdatedAt: nowIso(),
+    error: null
+  };
+  await writeStatus(resolved, renderStartedStatus);
   const result = renderFrames(resolved, renderOptions);
   if (!result.success) {
+    await writeStatus(resolved, {
+      ...renderStartedStatus,
+      state: "render_failed",
+      lastUpdatedAt: nowIso(),
+      error: result.error || "render failed"
+    });
     if (result.error && result.error.includes("validation")) {
       throw new Error(`Rendered output is not a valid MP4: ${result.error}`);
     }
     throw new Error(`ffmpeg render failed: ${result.error}`);
   }
+  await writeStatus(resolved, {
+    ...renderStartedStatus,
+    state: "rendered",
+    lastUpdatedAt: nowIso()
+  });
   return {
     path: result.outputPath,
     frameCount: result.metadata?.frameCount,

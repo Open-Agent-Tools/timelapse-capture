@@ -62,6 +62,10 @@ describe("render with fake ffmpeg", () => {
   test("valid render writes metadata summary and deletes frames", async () => {
     const runDir = await createRunDir(tempDir);
     const framesDir = await createNumericFrames(runDir, 3);
+    await fs.writeFile(
+      path.join(runDir, "status.json"),
+      JSON.stringify({ runDir, state: "completed", frameCount: 3 }, null, 2)
+    );
 
     const oldPath = process.env.PATH;
     try {
@@ -91,6 +95,10 @@ describe("render with fake ffmpeg", () => {
         assert.ok(summary.ffmpegCommand.includes(path.join(runDir, "output.mp4")));
         assert.strictEqual(summary.cleanup.success, true);
         assert.strictEqual(summary.cleanup.removed, 3);
+        const status = JSON.parse(
+          await fs.readFile(path.join(runDir, "status.json"), "utf8")
+        );
+        assert.strictEqual(status.state, "rendered");
       }, "success");
     } finally {
       process.env.PATH = oldPath;
@@ -100,6 +108,10 @@ describe("render with fake ffmpeg", () => {
   test("render failure preserves frames", async () => {
     const runDir = await createRunDir(tempDir);
     const framesDir = await createNumericFrames(runDir, 3);
+    await fs.writeFile(
+      path.join(runDir, "status.json"),
+      JSON.stringify({ runDir, state: "completed", frameCount: 3 }, null, 2)
+    );
 
     const oldPath = process.env.PATH;
     try {
@@ -117,6 +129,10 @@ describe("render with fake ffmpeg", () => {
           await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
         );
         assert.strictEqual(summary.cleanup.reason, "render-or-validation-failed");
+        const status = JSON.parse(
+          await fs.readFile(path.join(runDir, "status.json"), "utf8")
+        );
+        assert.strictEqual(status.state, "render_failed");
       }, "fail");
     } finally {
       process.env.PATH = oldPath;

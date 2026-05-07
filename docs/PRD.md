@@ -154,7 +154,7 @@ timelapse-capture status ./timelapse-runs/app-review
 
 Output should include:
 
-- State: pending, running, completed, failed, rendering, rendered.
+- State: starting, running, completed, failed, rendering, rendered, render_failed.
 - Started at, elapsed time, estimated completion.
 - Frames attempted, captured, failed, skipped.
 - Latest frame timestamp.
@@ -508,4 +508,3 @@ Mitigations:
 - After successful render, raw frames are removed by default.
 - Frame cleanup preserves final video, manifest, logs, summary, poster, and configured samples.
 - Failed screenshot attempts are logged and do not stop the run unless a fatal backend error occurs.
-

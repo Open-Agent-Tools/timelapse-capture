@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { readFileSync } = require('node:fs');
+const { existsSync, readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
 const CANONICAL_BIN = './src/timelapse-capture.mjs';
@@ -19,6 +19,16 @@ test('package.json has ci script that chains check and test', () => {
     pkg.scripts.ci,
     'npm run check && npm test',
     'scripts.ci must be exactly "npm run check && npm test"'
+  );
+});
+
+test('package.json start script invokes canonical CLI entrypoint', () => {
+  const pkgPath = resolve(__dirname, '../package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  assert.strictEqual(
+    pkg.scripts.start,
+    `node ${CANONICAL_BIN}`,
+    `scripts.start must be "node ${CANONICAL_BIN}"`
   );
 });
 
@@ -68,6 +78,11 @@ test('package-lock.json bin metadata matches canonical entrypoint', () => {
   );
 });
 
+test('demoted CLI implementation has been removed', () => {
+  const demotedDir = resolve(__dirname, '../src/cli');
+  assert.equal(existsSync(demotedDir), false, 'src/cli must not remain as a second CLI implementation');
+});
+
 test('canonical entrypoint is not the 1x1 PNG scaffold', () => {
   const canonicalPath = resolve(__dirname, '..', CANONICAL_BIN_NORMALIZED);
   const source = readFileSync(canonicalPath, 'utf8');
@@ -101,9 +116,7 @@ test('canonical CLI entrypoint decision is documented and wired', () => {
   const decision = readFileSync(decisionPath, 'utf8');
   const requiredTerms = [
     'src/timelapse-capture.mjs',
-    'src/cli/index.js',
-    'src/cli/parser.js',
-    'src/cli/render.js',
+    'removed',
     'doctor',
     'stale-frame',
     'ETA',

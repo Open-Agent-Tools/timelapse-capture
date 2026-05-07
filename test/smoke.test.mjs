@@ -90,6 +90,7 @@ test("CLI smoke flow creates run artifacts and supports status/peek", async () =
       args: ["status", runDir, "--json"]
     });
     const statusData = JSON.parse(statusOutput.stdout);
+    assert.equal(statusData.state, "completed");
     assert.equal(statusData.frameCount, 3);
     assert.equal(statusData.failedFrameCount, 0);
     assert.equal(typeof statusData.latestFrame, "string");
