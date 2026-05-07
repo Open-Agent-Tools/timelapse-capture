@@ -289,7 +289,7 @@ function parseValueFlag(flag, value) {
     }
     return parsed.ms;
   }
-  if (flag === "index" || flag === "near") {
+  if (flag === "index") {
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
       throw new ParseError(
@@ -298,6 +298,19 @@ function parseValueFlag(flag, value) {
       );
     }
     return parsed;
+  }
+  if (flag === "near") {
+    if (/^\d+$/.test(value)) {
+      return Number.parseInt(value, 10);
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      throw new ParseError(
+        "E_BAD_NEAR",
+        `Invalid value for --near: ${value}. Expected integer index or ISO timestamp.`
+      );
+    }
+    return value;
   }
   return value;
 }
@@ -1114,6 +1127,33 @@ async function listFrameFiles(runDir) {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+async function findClosestFrameIndex(runDir, targetIso, existingNames) {
+  const manifestPath = path.join(runDir, "manifest.jsonl");
+  const records = await readManifest(manifestPath);
+  if (!records.length) return existingNames.length - 1;
+
+  const targetTime = new Date(targetIso).getTime();
+  let bestIndex = -1;
+  let minDiff = Infinity;
+
+  for (const record of records) {
+    if (record.status !== "captured" || !record.capturedAt) continue;
+
+    const name = path.basename(record.path);
+    const idx = existingNames.indexOf(name);
+    if (idx === -1) continue;
+
+    const time = new Date(record.capturedAt).getTime();
+    const diff = Math.abs(time - targetTime);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestIndex = idx;
+    }
+  }
+
+  return bestIndex !== -1 ? bestIndex : existingNames.length - 1;
+}
+
 export async function commandPeek({ runDir, options = {} }) {
   const resolved = path.resolve(runDir);
   const names = await listFrameFiles(resolved);
@@ -1135,8 +1175,12 @@ export async function commandPeek({ runDir, options = {} }) {
   let index = names.length - 1;
   if (typeof options.index === "number") {
     index = Math.min(Math.max(options.index, 0), names.length - 1);
-  } else if (typeof options.near === "number") {
-    index = Math.min(Math.max(options.near, 0), names.length - 1);
+  } else if (options.near !== undefined) {
+    if (typeof options.near === "number") {
+      index = Math.min(Math.max(options.near, 0), names.length - 1);
+    } else {
+      index = await findClosestFrameIndex(resolved, options.near, names);
+    }
   }
   return {
     path: path.join(resolved, "frames", names[index]),
