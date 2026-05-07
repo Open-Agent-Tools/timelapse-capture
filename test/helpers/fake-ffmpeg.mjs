@@ -96,8 +96,8 @@ export async function withFakeFFmpeg(testFn, mode = "success") {
 
 export function hasRealFFmpeg() {
   try {
-    execFileSync("which", ["ffmpeg"], { stdio: "ignore" });
-    execFileSync("which", ["ffprobe"], { stdio: "ignore" });
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+    execFileSync("ffprobe", ["-version"], { stdio: "ignore" });
     return true;
   } catch {
     return false;

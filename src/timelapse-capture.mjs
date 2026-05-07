@@ -1132,13 +1132,11 @@ export async function commandPeek({ runDir, options = {} }) {
     );
   }
 
-  let index = names.length - 1;
+  let index = names.length - 1; if (options.latest) { index = names.length - 1; } else 
   if (typeof options.index === "number") {
     index = Math.min(Math.max(options.index, 0), names.length - 1);
   } else if (typeof options.near === "number") {
     index = Math.min(Math.max(options.near, 0), names.length - 1);
-  } else if (options.latest) {
-    index = names.length - 1;
   }
   return {
     path: path.join(resolved, "frames", names[index]),
@@ -1270,24 +1268,9 @@ export function cleanupFrames(framesDir) {
   return { success: true, removed };
 }
 
-function readSummarySync(runDir) {
-  const summaryPath = getSummaryPath(runDir);
-  try {
-    return JSON.parse(fs.readFileSync(summaryPath, "utf8"));
-  } catch (error) {
-    if (error?.code === "ENOENT") return null;
-    throw error;
-  }
-}
 
-function writeSummarySync(runDir, summary) {
-  const summaryPath = getSummaryPath(runDir);
-  const temp = `${summaryPath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(temp, JSON.stringify(summary, null, 2), "utf8");
-  fs.renameSync(temp, summaryPath);
-}
 
-export function renderFrames(runDir, options = {}) {
+export async function renderFrames(runDir, options = {}) {
   const result = {
     success: false,
     outputPath: null,
@@ -1343,7 +1326,7 @@ export function renderFrames(runDir, options = {}) {
       throw new RenderError(`Output is not a valid MP4: ${validation.error}`, "VALIDATION_FAILED");
     }
 
-    const existing = readSummarySync(runDir);
+    const existing = await readJsonOptional(getSummaryPath(runDir));
     const summary = {
       ...existing,
       duration: validation.duration,
@@ -1378,16 +1361,16 @@ export function renderFrames(runDir, options = {}) {
       };
     }
 
-    writeSummarySync(runDir, summary);
+    await writeJsonAtomic(getSummaryPath(runDir), summary);
     result.success = true;
     result.outputPath = outputPath;
     result.metadata = summary.render;
     return result;
   } catch (error) {
-    result.error = error.message;
+    result.error = error.message; result.code = error.code;
     let summary;
     try {
-      summary = readSummarySync(runDir) || {};
+      summary = await readJsonOptional(getSummaryPath(runDir)) || {};
     } catch (summaryError) {
       result.error = `${result.error}; failed to update summary: ${summaryError.message}`;
       return result;
@@ -1407,7 +1390,7 @@ export function renderFrames(runDir, options = {}) {
       }
     };
     try {
-      writeSummarySync(runDir, updated);
+      await writeJsonAtomic(getSummaryPath(runDir), updated);
     } catch {
       /* best effort */
     }
@@ -1427,9 +1410,9 @@ export async function commandRender({ runDir, options = {} }) {
   if (options.force && ["starting", "running", "rendering"].includes(currentState)) {
     renderOptions["keep-frames"] = true;
   }
-  const result = renderFrames(resolved, renderOptions);
+  const result = await renderFrames(resolved, renderOptions);
   if (!result.success) {
-    if (result.error && result.error.includes("valid MP4")) {
+    if (result.code === "VALIDATION_FAILED") {
       throw new Error(`Rendered output is not a valid MP4: ${result.error}`);
     }
     throw new Error(`ffmpeg render failed: ${result.error}`);

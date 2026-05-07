@@ -60,27 +60,27 @@ function writeFakeFFmpeg(binDir) {
   ].join("\n"));
 }
 
-function withFakePath(binDir, testFn) {
+async function withFakePath(binDir, testFn) {
   const oldPath = process.env.PATH;
   process.env.PATH = `${binDir}:${oldPath || ""}`;
   try {
-    return testFn();
+    return await testFn();
   } finally {
     process.env.PATH = oldPath;
   }
 }
 
-test("renderFrames: fails with missing run directory", () => {
-  const result = renderFrames("/nonexistent/run/dir");
+test("renderFrames: fails with missing run directory", async () => {
+  const result = await renderFrames("/nonexistent/run/dir");
   assert.strictEqual(result.success, false);
   assert.match(result.error, /does not exist/);
 });
 
-test("renderFrames: fails with no frames", () => {
+test("renderFrames: fails with no frames", async () => {
   const runDir = createTempDir();
   try {
     fs.mkdirSync(path.join(runDir, "frames"), { recursive: true });
-    const result = renderFrames(runDir);
+    const result = await renderFrames(runDir);
     assert.strictEqual(result.success, false);
     assert.match(result.error, /No frames found/);
   } finally {
@@ -88,13 +88,13 @@ test("renderFrames: fails with no frames", () => {
   }
 });
 
-test("validateMP4: detects missing file", () => {
+test("validateMP4: detects missing file", async () => {
   const result = validateMP4("/nonexistent/file.mp4");
   assert.strictEqual(result.exists, false);
   assert.match(result.error, /does not exist/);
 });
 
-test("validateMP4: detects empty file", () => {
+test("validateMP4: detects empty file", async () => {
   const runDir = createTempDir();
   try {
     const mp4Path = path.join(runDir, "empty.mp4");
@@ -108,7 +108,7 @@ test("validateMP4: detects empty file", () => {
   }
 });
 
-test("validateMP4: treats shell metacharacters in output path as literal argv", () => {
+test("validateMP4: treats shell metacharacters in output path as literal argv", async () => {
   const runDir = createTempDir();
   const markerName = `ffprobe-marker-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const markerPath = path.join(process.cwd(), markerName);
@@ -120,7 +120,7 @@ test("validateMP4: treats shell metacharacters in output path as literal argv", 
     const mp4Path = path.join(runDir, `safe " ; touch ${markerName} ; echo ".mp4`);
     fs.writeFileSync(mp4Path, "fake mp4 bytes");
 
-    withFakePath(binDir, () => {
+    await withFakePath(binDir, async () => {
       const result = validateMP4(mp4Path);
 
       assert.strictEqual(result.error, null);
@@ -135,7 +135,7 @@ test("validateMP4: treats shell metacharacters in output path as literal argv", 
   }
 });
 
-test("renderFrames: treats shell metacharacters in run directory as literal argv", () => {
+test("renderFrames: treats shell metacharacters in run directory as literal argv", async () => {
   const tempDir = createTempDir();
   const markerName = `ffmpeg-marker-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const markerPath = path.join(process.cwd(), markerName);
@@ -150,8 +150,8 @@ test("renderFrames: treats shell metacharacters in run directory as literal argv
     fs.mkdirSync(framesDir, { recursive: true });
     fs.writeFileSync(path.join(framesDir, "00001.png"), "fake png");
 
-    withFakePath(binDir, () => {
-      const result = renderFrames(runDir, { "keep-frames": true });
+    await withFakePath(binDir, async () => {
+      const result = await renderFrames(runDir, { "keep-frames": true });
 
       assert.strictEqual(result.success, true);
       assert.strictEqual(result.outputPath, path.join(runDir, "output.mp4"));
@@ -165,7 +165,7 @@ test("renderFrames: treats shell metacharacters in run directory as literal argv
   }
 });
 
-test("renderFrames: fails without overwriting malformed summary JSON", () => {
+test("renderFrames: fails without overwriting malformed summary JSON", async () => {
   const runDir = createTempDir();
   const malformedSummary = "{";
   try {
@@ -179,8 +179,8 @@ test("renderFrames: fails without overwriting malformed summary JSON", () => {
     fs.writeFileSync(path.join(framesDir, "00001.png"), "fake png");
     fs.writeFileSync(path.join(runDir, "run-summary.json"), malformedSummary);
 
-    withFakePath(binDir, () => {
-      const result = renderFrames(runDir, { "keep-frames": true });
+    await withFakePath(binDir, async () => {
+      const result = await renderFrames(runDir, { "keep-frames": true });
 
       assert.strictEqual(result.success, false);
       assert.match(result.error, /JSON|position|Unexpected/);
@@ -195,7 +195,7 @@ test("renderFrames: fails without overwriting malformed summary JSON", () => {
   }
 });
 
-test("cleanupFrames: removes frame files", () => {
+test("cleanupFrames: removes frame files", async () => {
   const runDir = createTempDir();
   try {
     const framesDir = path.join(runDir, "frames");
@@ -215,7 +215,7 @@ test("cleanupFrames: removes frame files", () => {
   }
 });
 
-test("cleanupFrames: handles empty directory", () => {
+test("cleanupFrames: handles empty directory", async () => {
   const runDir = createTempDir();
   try {
     const framesDir = path.join(runDir, "frames");
@@ -228,7 +228,7 @@ test("cleanupFrames: handles empty directory", () => {
   }
 });
 
-test("cleanupFrames: handles nonexistent directory", () => {
+test("cleanupFrames: handles nonexistent directory", async () => {
   const result = cleanupFrames("/nonexistent/frames");
   assert.strictEqual(result.success, true);
   assert.strictEqual(result.removed, 0);
