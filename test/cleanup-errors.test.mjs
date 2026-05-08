@@ -44,6 +44,40 @@ test("cleanupFrames reports unexpected frames directory removal failures", async
   }
 });
 
+test("cleanupFrames removes leftover render staging before removing frames directory", async () => {
+  const { runDir, framesDir } = await makeRun();
+  try {
+    const stagingDir = path.join(framesDir, ".render-staging");
+    await fsp.mkdir(stagingDir);
+    await fsp.writeFile(path.join(stagingDir, "frame-000001.png"), FRAME_PNG_1x1);
+
+    const result = cleanupFrames(framesDir);
+    assert.equal(result.success, true);
+    assert.equal(result.removed, 1);
+    assert.equal(fs.existsSync(framesDir), false);
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanupFrames removes render staging when no image files exist", async () => {
+  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-cleanup-errors-"));
+  const framesDir = path.join(runDir, "frames");
+  const stagingDir = path.join(framesDir, ".render-staging");
+  try {
+    await fsp.mkdir(stagingDir, { recursive: true });
+    await fsp.writeFile(path.join(stagingDir, "frame-000001.png"), FRAME_PNG_1x1);
+
+    const result = cleanupFrames(framesDir);
+    assert.equal(result.success, true);
+    assert.equal(result.removed, 0);
+    assert.equal(fs.existsSync(framesDir), true);
+    assert.equal(fs.existsSync(stagingDir), false);
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("cleanup --frames ignores a non-empty frames directory after deleting raw frames", async () => {
   const { runDir, framesDir } = await makeRun();
   try {
