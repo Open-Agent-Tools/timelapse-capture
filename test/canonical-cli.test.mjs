@@ -244,6 +244,129 @@ test("render succeeds when status.json is initially missing", async () => {
   }
 });
 
+test("render succeeds with sparse (gapped) frame numbering", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-sparse-"));
+  const framesDir = path.join(runDir, "frames");
+  await fs.mkdir(framesDir);
+  const indices = [1, 3, 5];
+  for (const index of indices) {
+    await fs.writeFile(
+      path.join(framesDir, `frame-${String(index).padStart(4, "0")}.png`),
+      FRAME_PNG_1x1
+    );
+  }
+  const status = {
+    state: "completed",
+    pid: 1234,
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    expectedFrames: 5,
+    framesAttempted: 5,
+    framesCaptured: 3,
+    framesFailed: 2,
+    latestFrame: null
+  };
+  const config = {
+    version: "0.1.0",
+    backend: "playwright-url",
+    url: "http://example.test/",
+    durationSeconds: 5,
+    intervalSeconds: 1,
+    expectedFrames: 5,
+    fps: 24,
+    viewport: { width: 1280, height: 720 },
+    outDir: runDir,
+    cleanup: "after-render",
+    keepSamples: 0,
+    keepLatest: false,
+    waitUntil: "domcontentloaded",
+    headed: false,
+    createdAt: new Date().toISOString()
+  };
+  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
+  await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.sourceFrames, 3);
+      const ffmpegArgs = JSON.parse(
+        await fs.readFile(path.join(manager.outputDir, "ffmpeg-args.json"), "utf8")
+      );
+      const inputPattern = ffmpegArgs[ffmpegArgs.indexOf("-i") + 1];
+      assert.equal(path.basename(inputPattern), "frame-%04d.png");
+      assert.equal(path.basename(path.dirname(inputPattern)), ".render-staging");
+
+      const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(finalStatus.state, "rendered");
+
+      const stagingDir = path.join(framesDir, ".render-staging");
+      const stagingExists = await fs.stat(stagingDir).then(() => true, () => false);
+      assert.equal(stagingExists, false, "staging directory should be cleaned up");
+    }, "success-require-contiguous-input");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render with contiguous frames skips staging", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-contiguous-"));
+  const framesDir = path.join(runDir, "frames");
+  await fs.mkdir(framesDir);
+  for (let index = 1; index <= 3; index++) {
+    await fs.writeFile(
+      path.join(framesDir, `frame-${String(index).padStart(4, "0")}.png`),
+      FRAME_PNG_1x1
+    );
+  }
+  const status = {
+    state: "completed",
+    pid: 1234,
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    expectedFrames: 3,
+    framesAttempted: 3,
+    framesCaptured: 3,
+    framesFailed: 0,
+    latestFrame: null
+  };
+  const config = {
+    version: "0.1.0",
+    backend: "playwright-url",
+    url: "http://example.test/",
+    durationSeconds: 3,
+    intervalSeconds: 1,
+    expectedFrames: 3,
+    fps: 24,
+    viewport: { width: 1280, height: 720 },
+    outDir: runDir,
+    cleanup: "after-render",
+    keepSamples: 0,
+    keepLatest: false,
+    waitUntil: "domcontentloaded",
+    headed: false,
+    createdAt: new Date().toISOString()
+  };
+  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
+  await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.sourceFrames, 3);
+
+      const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(finalStatus.state, "rendered");
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("cleanup refuses to delete frames before output.mp4 exists without --force", async () => {
   const { runDir } = await makeRun();
   try {
