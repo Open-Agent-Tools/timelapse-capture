@@ -5,7 +5,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { cleanupFrames, commandCleanup, renderFrames } from "../src/timelapse-capture.mjs";
+import { cleanupFrames, commandCleanup, renderFrames, __test__ } from "../src/timelapse-capture.mjs";
 
 const FRAME_PNG_1x1 = Buffer.from(
   "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
@@ -20,6 +20,22 @@ async function makeRun() {
   await fsp.writeFile(path.join(runDir, "output.mp4"), "placeholder");
   return { runDir, framesDir };
 }
+
+test("writeJsonSync writes correct JSON and leaves no tmp file", async () => {
+  const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-writejson-"));
+  try {
+    const filePath = path.join(tmpDir, "out.json");
+    __test__.writeJsonSync(filePath, { key: "val" });
+
+    const written = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    assert.deepEqual(written, { key: "val" });
+
+    const leftover = fs.readdirSync(tmpDir).filter((f) => f.startsWith("out.json.tmp-"));
+    assert.equal(leftover.length, 0);
+  } finally {
+    await fsp.rm(tmpDir, { recursive: true, force: true });
+  }
+});
 
 test("cleanupFrames reports unexpected frames directory removal failures", async () => {
   const { runDir, framesDir } = await makeRun();

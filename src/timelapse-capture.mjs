@@ -1232,18 +1232,18 @@ function readStatusSync(runDir) {
   }
 }
 
+function writeJsonSync(filePath, data) {
+  const temp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(temp, JSON.stringify(data, null, 2), "utf8");
+  fs.renameSync(temp, filePath);
+}
+
 function writeSummarySync(runDir, summary) {
-  const summaryPath = getSummaryPath(runDir);
-  const temp = `${summaryPath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(temp, JSON.stringify(summary, null, 2), "utf8");
-  fs.renameSync(temp, summaryPath);
+  writeJsonSync(getSummaryPath(runDir), summary);
 }
 
 function writeStatusSync(runDir, status) {
-  const statusPath = path.join(runDir, "status.json");
-  const temp = `${statusPath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(temp, JSON.stringify(status, null, 2), "utf8");
-  fs.renameSync(temp, statusPath);
+  writeJsonSync(path.join(runDir, "status.json"), status);
 }
 
 function listFrameFilesSync(framesDir) {
@@ -1613,4 +1613,4 @@ Usage:
 }
 
 // Compatibility re-exports kept lightweight for tests.
-export const __test__ = { SIMULATION_FRAME_PNG, frameName, slugify, formatBytes, formatDuration };
+export const __test__ = { SIMULATION_FRAME_PNG, frameName, slugify, formatBytes, formatDuration, writeJsonSync };
