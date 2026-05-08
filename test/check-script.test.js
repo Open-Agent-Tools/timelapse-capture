@@ -113,6 +113,12 @@ test('source does not use comment-only catch blocks', () => {
   }
 });
 
+test('commandPeek --near branch guards against indexOf returning -1', () => {
+  const source = readFileSync(resolve(REPO_ROOT, 'src/timelapse-capture.mjs'), 'utf8');
+  assert.match(source, /names\.indexOf\(nearestName\)/, 'source must call names.indexOf(nearestName)');
+  assert.match(source, /if\s*\(\s*index\s*===\s*-1\s*\)/, 'commandPeek --near branch must guard against indexOf returning -1');
+});
+
 test('canonical CLI entrypoint decision is documented and wired', () => {
   const decisionPath = resolve(REPO_ROOT, 'docs/decisions/001-canonical-cli-entrypoint.md');
   const decision = readFileSync(decisionPath, 'utf8');

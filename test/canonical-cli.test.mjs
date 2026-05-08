@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 import {
   commandCleanup,
+  commandPeek,
   parseArgs,
   ParseError,
   resolveStartTiming
@@ -257,6 +258,20 @@ test("peek --near rejects a plain integer (use --index instead)", async () => {
   }
 });
 
+test("commandPeek --near unit: returns nearest frame via direct API", async () => {
+  const { runDir, captured } = await makeRun({ frameCount: 4 });
+  try {
+    const nearTimestamp = new Date(
+      new Date(captured[2].capturedAt).getTime() + 10
+    ).toISOString();
+    const result = await commandPeek({ runDir, options: { near: nearTimestamp } });
+    assert.equal(result.exists, true);
+    assert.equal(result.frame.index, captured[2].index);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("peek --near rejects a year-only string that parseInt would have accepted", async () => {
   const { runDir } = await makeRun();
   try {
@@ -313,6 +328,20 @@ test("peek --near selects first, middle, and last frame by timestamp proximity",
     const r3 = runCli(["peek", runDir, "--near", "2026-01-01T12:02:40Z", "--json"]);
     assert.equal(r3.status, 0, r3.stderr);
     assert.equal(JSON.parse(r3.stdout).framePath, path.join(runDir, captured[2].path));
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("commandPeek --near unit: throws descriptive error when manifest has no timestamp records", async () => {
+  const { runDir } = await makeRun({ frameCount: 2 });
+  try {
+    const emptyManifest = path.join(runDir, "manifest.jsonl");
+    await fs.writeFile(emptyManifest, "");
+    await assert.rejects(
+      () => commandPeek({ runDir, options: { near: new Date().toISOString() } }),
+      /No captured frame timestamps are available for --near/
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
