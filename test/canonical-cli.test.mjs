@@ -175,6 +175,24 @@ test("peek --near rejects invalid timestamps", async () => {
   }
 });
 
+test("peek --near with no captured frame timestamps exits non-zero", async () => {
+  const { runDir } = await makeRun({ frameCount: 2 });
+  try {
+    const manifestPath = path.join(runDir, "manifest.jsonl");
+    const failedRecords = [
+      { index: 1, scheduledAt: new Date().toISOString(), capturedAt: null, path: "frames/frame-000001.png", status: "failed", error: "timeout" },
+      { index: 2, scheduledAt: new Date().toISOString(), capturedAt: null, path: "frames/frame-000002.png", status: "failed", error: "timeout" }
+    ];
+    await fs.writeFile(manifestPath, failedRecords.map((r) => JSON.stringify(r)).join("\n") + "\n");
+
+    const result = runCli(["peek", runDir, "--near", new Date().toISOString()]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /No captured frame timestamps are available for --near/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render writes rendering then rendered states with fake ffmpeg", async () => {
   const { runDir } = await makeRun();
   try {
