@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
