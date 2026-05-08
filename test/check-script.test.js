@@ -55,7 +55,27 @@ test('source does not use empty promise catch cleanup handlers', () => {
     'src/timelapse-capture.mjs',
     'src/doctor.mjs',
   ];
-  const emptyPromiseCatch = /\.catch\(\s*\(\s*\)\s*=>\s*\{\s*\}\s*\)/;
+  const emptyPromiseCatch =
+    /\.catch\(\s*(?:async\s+)?(?:(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>|function(?:\s+[A-Za-z_$][\w$]*)?\s*\([^)]*\))\s*\{\s*\}\s*\)/;
+  const rejectedExamples = [
+    'cleanup().catch(() => {})',
+    'cleanup().catch((_) => {})',
+    'cleanup().catch(_ => {})',
+    'cleanup().catch(function() {})',
+  ];
+  const allowedExamples = [
+    'cleanup().catch(() => [])',
+    'cleanup().catch((error) => { throw error; })',
+    'cleanup().catch(function(error) { console.error(error); })',
+  ];
+
+  for (const example of rejectedExamples) {
+    assert.match(example, emptyPromiseCatch, `${example} must be rejected`);
+  }
+
+  for (const example of allowedExamples) {
+    assert.doesNotMatch(example, emptyPromiseCatch, `${example} must remain allowed`);
+  }
 
   for (const source of sources) {
     const raw = readFileSync(resolve(REPO_ROOT, source), 'utf8');
