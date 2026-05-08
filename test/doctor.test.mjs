@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   checkBinary,
+  checkChromium,
   checkNode,
   commandDoctor,
   formatDoctorHuman,
@@ -53,6 +54,28 @@ test("checkBinary reports missing binaries with actionable fixes", async () => {
   assert.equal(result.status, "fail");
   assert.match(result.error, /ffprobe was not found/);
   assert.match(result.fix, /Install FFmpeg/);
+});
+
+test("checkChromium reports browser close failures", async () => {
+  const result = await checkChromium({
+    requireFn() {
+      return {
+        chromium: {
+          async launch() {
+            return {
+              async close() {
+                throw new Error("close failed");
+              }
+            };
+          }
+        }
+      };
+    }
+  });
+
+  assert.equal(result.status, "fail");
+  assert.match(result.message, /could not close cleanly/);
+  assert.match(result.error, /close failed/);
 });
 
 test("runAllChecks returns summary counts and exit code", async () => {
