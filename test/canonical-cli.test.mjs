@@ -50,10 +50,10 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
   const config = {
     version: "0.1.0",
     backend: "playwright-url",
-    url: "http://example.test/",
-    durationSeconds: frameCount,
-    intervalSeconds: 1,
-    expectedFrames: frameCount,
+    target: "http://example.test/",
+    durationMs: frameCount * 1000,
+    intervalMs: 1000,
+    targetFrames: frameCount,
     fps: 24,
     viewport: { width: 1280, height: 720 },
     outDir: runDir,
@@ -70,10 +70,12 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
     pid: 1234,
     startedAt: captured[0]?.scheduledAt ?? new Date().toISOString(),
     updatedAt: captured.at(-1)?.capturedAt ?? new Date().toISOString(),
-    expectedFrames: frameCount,
     framesAttempted: frameCount,
-    framesCaptured: frameCount,
-    framesFailed: 0,
+    frames: {
+      captured: frameCount,
+      failed: 0,
+      totalExpected: frameCount
+    },
     latestFrame: captured.at(-1) ?? null
   };
 
@@ -97,10 +99,43 @@ test("status --json reports canonical state for a completed run", async () => {
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.status.state, "completed");
-    assert.equal(payload.status.framesCaptured, 3);
-    assert.equal(payload.config.expectedFrames, 3);
+    assert.equal(payload.status.frames.captured, 3);
+    assert.equal(payload.config.targetFrames, 3);
     assert.ok(payload.latestFrame?.path?.endsWith(".png"));
     assert.ok(typeof payload.framesDiskUsageBytes === "number");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("start writes config.json with canonical field names only", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-config-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "2s",
+        "--interval",
+        "1s",
+        "--out",
+        runDir,
+        "--json"
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "2" }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+    assert.equal(config.target, "http://example.test/");
+    assert.equal(config.intervalMs, 1000);
+    assert.equal(config.durationMs, 2000);
+    assert.equal(config.targetFrames, 2);
+    assert.equal(Object.hasOwn(config, "url"), false);
+    assert.equal(Object.hasOwn(config, "intervalSeconds"), false);
+    assert.equal(Object.hasOwn(config, "durationSeconds"), false);
+    assert.equal(Object.hasOwn(config, "expectedFrames"), false);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -286,7 +321,7 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.ok(summary.output.endsWith("output.mp4"));
-      assert.equal(summary.sourceFrames, 3);
+      assert.equal(summary.frameCount, 3);
 
       const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(status.state, "rendered");
@@ -367,19 +402,21 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
     pid: 1234,
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    expectedFrames: 5,
     framesAttempted: 5,
-    framesCaptured: 3,
-    framesFailed: 2,
+    frames: {
+      captured: 3,
+      failed: 2,
+      totalExpected: 5
+    },
     latestFrame: null
   };
   const config = {
     version: "0.1.0",
     backend: "playwright-url",
-    url: "http://example.test/",
-    durationSeconds: 5,
-    intervalSeconds: 1,
-    expectedFrames: 5,
+    target: "http://example.test/",
+    durationMs: 5000,
+    intervalMs: 1000,
+    targetFrames: 5,
     fps: 24,
     viewport: { width: 1280, height: 720 },
     outDir: runDir,
@@ -398,7 +435,7 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.sourceFrames, 3);
+      assert.equal(summary.frameCount, 3);
       const ffmpegArgs = JSON.parse(
         await fs.readFile(path.join(manager.outputDir, "ffmpeg-args.json"), "utf8")
       );
@@ -493,19 +530,21 @@ test("render with contiguous frames skips staging", async () => {
     pid: 1234,
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    expectedFrames: 3,
     framesAttempted: 3,
-    framesCaptured: 3,
-    framesFailed: 0,
+    frames: {
+      captured: 3,
+      failed: 0,
+      totalExpected: 3
+    },
     latestFrame: null
   };
   const config = {
     version: "0.1.0",
     backend: "playwright-url",
-    url: "http://example.test/",
-    durationSeconds: 3,
-    intervalSeconds: 1,
-    expectedFrames: 3,
+    target: "http://example.test/",
+    durationMs: 3000,
+    intervalMs: 1000,
+    targetFrames: 3,
     fps: 24,
     viewport: { width: 1280, height: 720 },
     outDir: runDir,
@@ -524,7 +563,7 @@ test("render with contiguous frames skips staging", async () => {
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.sourceFrames, 3);
+      assert.equal(summary.frameCount, 3);
 
       const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(finalStatus.state, "rendered");

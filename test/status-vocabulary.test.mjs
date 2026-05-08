@@ -60,6 +60,13 @@ test("status command migrates legacy done to completed without rewriting status.
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.status.state, "completed");
+    assert.deepEqual(payload.status.frames, {
+      captured: 5,
+      failed: 0,
+      totalExpected: 5
+    });
+    assert.equal(Object.hasOwn(payload.status, "framesCaptured"), false);
+    assert.equal(Object.hasOwn(payload.status, "framesFailed"), false);
 
     const after = await fs.readFile(statusPath, "utf8");
     assert.equal(before, after, "status.json must not be rewritten by a read-only status migration");
