@@ -93,7 +93,6 @@ test("cleanupFrames removes render staging when no image files exist", async () 
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
-
 test("cleanup --keep-samples reports one retained frame when only one frame exists", async () => {
   const { runDir } = await makeRun();
   try {
