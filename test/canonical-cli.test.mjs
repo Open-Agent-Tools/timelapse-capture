@@ -193,6 +193,78 @@ test("peek --near with no captured frame timestamps exits non-zero", async () =>
   }
 });
 
+test("peek --near rejects a plain integer (use --index instead)", async () => {
+  const { runDir } = await makeRun();
+  try {
+    const result = runCli(["peek", runDir, "--near", "5"]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Invalid ISO timestamp for --near/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("peek --near rejects a year-only string that parseInt would have accepted", async () => {
+  const { runDir } = await makeRun();
+  try {
+    const result = runCli(["peek", runDir, "--near", "2026"]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Invalid ISO timestamp for --near/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("peek --near selects first, middle, and last frame by timestamp proximity", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-canonical-"));
+  try {
+    const framesDir = path.join(runDir, "frames");
+    await fs.mkdir(framesDir);
+
+    const timestamps = [
+      "2026-01-01T12:00:00Z",
+      "2026-01-01T12:01:00Z",
+      "2026-01-01T12:02:00Z"
+    ];
+    const captured = [];
+    for (let i = 0; i < timestamps.length; i += 1) {
+      const index = i + 1;
+      const relative = path.join("frames", `frame-${String(index).padStart(6, "0")}.png`);
+      await fs.writeFile(path.join(runDir, relative), FRAME_PNG_1x1);
+      captured.push({
+        index,
+        scheduledAt: timestamps[i],
+        capturedAt: timestamps[i],
+        path: relative,
+        status: "captured",
+        url: "http://example.test/",
+        title: "fixture",
+        viewport: { width: 1280, height: 720 },
+        error: null
+      });
+    }
+    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify({ state: "completed" }));
+    await fs.writeFile(
+      path.join(runDir, "manifest.jsonl"),
+      captured.map((r) => JSON.stringify(r)).join("\n") + "\n"
+    );
+
+    const r1 = runCli(["peek", runDir, "--near", "2026-01-01T12:00:20Z", "--json"]);
+    assert.equal(r1.status, 0, r1.stderr);
+    assert.equal(JSON.parse(r1.stdout).framePath, path.join(runDir, captured[0].path));
+
+    const r2 = runCli(["peek", runDir, "--near", "2026-01-01T12:01:10Z", "--json"]);
+    assert.equal(r2.status, 0, r2.stderr);
+    assert.equal(JSON.parse(r2.stdout).framePath, path.join(runDir, captured[1].path));
+
+    const r3 = runCli(["peek", runDir, "--near", "2026-01-01T12:02:40Z", "--json"]);
+    assert.equal(r3.status, 0, r3.stderr);
+    assert.equal(JSON.parse(r3.stdout).framePath, path.join(runDir, captured[2].path));
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render writes rendering then rendered states with fake ffmpeg", async () => {
   const { runDir } = await makeRun();
   try {

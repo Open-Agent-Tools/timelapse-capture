@@ -1069,7 +1069,8 @@ export async function commandPeek({ runDir, options = {} }) {
     index = Math.min(Math.max(options.index, 0), names.length - 1);
   } else if (typeof options.near === "string") {
     const nearestName = await findNearestFrameName(resolved, names, options.near);
-    index = names.indexOf(nearestName);
+    const nearIndex = names.indexOf(nearestName);
+    if (nearIndex !== -1) index = nearIndex;
   } else if (options.latest) {
     index = names.length - 1;
   }
@@ -1265,7 +1266,6 @@ function removeStagingDir(stagingDir) {
   try {
     fs.rmSync(stagingDir, { recursive: true, force: true });
   } catch {
-    /* best effort */
   }
 }
 
