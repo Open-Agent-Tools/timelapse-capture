@@ -452,33 +452,21 @@ async function removeDirIfExists(dir) {
   await fsp.rm(dir, { recursive: true, force: true });
 }
 
-async function directorySize(dir) {
-  let total = 0;
+async function reduceDir(dir, fn, init) {
+  let acc = init;
   const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     const itemPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      total += await directorySize(itemPath);
+      acc = await reduceDir(itemPath, fn, acc);
     } else if (entry.isFile()) {
-      total += (await fsp.stat(itemPath)).size;
+      acc = await fn(acc, itemPath, entry);
     }
   }
-  return total;
+  return acc;
 }
 
-async function countFiles(dir) {
-  let count = 0;
-  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    const itemPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      count += await countFiles(itemPath);
-    } else if (entry.isFile()) {
-      count += 1;
-    }
-  }
-  return count;
-}
+const directorySize = (dir) => reduceDir(dir, async (sum, file) => sum + (await fsp.stat(file)).size, 0);
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;

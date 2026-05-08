@@ -105,6 +105,34 @@ test("status --json reports canonical state for a completed run", async () => {
   }
 });
 
+test("status --json reports exact frame disk usage for nested directories", async () => {
+  const { runDir } = await makeRun({ frameCount: 0, state: "completed" });
+  try {
+    const framesDir = path.join(runDir, "frames");
+    const nestedDir = path.join(framesDir, "nested");
+    const deeperDir = path.join(nestedDir, "deeper");
+    const files = [
+      { path: path.join(framesDir, "root.png"), data: "root-frame" },
+      { path: path.join(nestedDir, "nested.png"), data: "nested-frame" },
+      { path: path.join(deeperDir, "deep.png"), data: "deep-frame" }
+    ];
+    await fs.mkdir(deeperDir, { recursive: true });
+    for (const file of files) {
+      await fs.writeFile(file.path, file.data);
+    }
+
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(
+      payload.framesDiskUsageBytes,
+      files.reduce((sum, file) => sum + Buffer.byteLength(file.data), 0)
+    );
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("peek --latest --json returns the latest captured frame", async () => {
   const { runDir, captured } = await makeRun();
   try {
