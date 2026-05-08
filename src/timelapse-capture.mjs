@@ -1195,6 +1195,7 @@ export function cleanupFrames(framesDir) {
     return { success: true, removed: 0 };
   }
   let removed = 0;
+  fs.rmSync(path.join(framesDir, ".render-staging"), { recursive: true, force: true });
   const files = fs.readdirSync(framesDir);
   for (const file of files) {
     if (/\.(png|jpg|jpeg)$/i.test(file)) {
