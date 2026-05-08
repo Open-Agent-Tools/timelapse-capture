@@ -7,7 +7,12 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
-import { commandCleanup } from "../src/timelapse-capture.mjs";
+import {
+  commandCleanup,
+  parseArgs,
+  ParseError,
+  resolveStartTiming
+} from "../src/timelapse-capture.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -618,10 +623,108 @@ test("start command accepts positional URL and validates required flags", async 
   }
 });
 
+test("start parser accepts video length and fps options", () => {
+  const parsed = parseArgs([
+    "start",
+    "http://example.test",
+    "--duration",
+    "2h",
+    "--video-length",
+    "1m",
+    "--fps",
+    "24"
+  ]);
+
+  assert.equal(parsed.options.duration.ms, 7_200_000);
+  assert.equal(parsed.options["video-length"].ms, 60_000);
+  assert.equal(parsed.options.fps, 24);
+});
+
+test("start parser rejects video length and interval together", () => {
+  assert.throws(
+    () => parseArgs([
+      "start",
+      "http://example.test",
+      "--duration",
+      "2h",
+      "--video-length",
+      "1m",
+      "--interval",
+      "5s"
+    ]),
+    (error) => error instanceof ParseError
+      && /--video-length.*--interval|--interval.*--video-length/.test(error.message)
+  );
+});
+
+test("start parser still requires duration with video length", () => {
+  const result = runCli(["start", "http://example.test", "--video-length", "1m"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Missing --duration/);
+});
+
+test("start timing derives interval from target video length", () => {
+  const timing = resolveStartTiming({
+    duration: { ms: 7_200_000 },
+    "video-length": { ms: 60_000 },
+    fps: 24
+  });
+
+  assert.equal(timing.durationMs, 7_200_000);
+  assert.equal(timing.videoLengthMs, 60_000);
+  assert.equal(timing.fps, 24);
+  assert.equal(timing.targetFrames, 1440);
+  assert.equal(timing.intervalMs, 5000);
+  assert.equal(timing.computedFromVideoLength, true);
+});
+
+test("start timing keeps explicit interval behavior unchanged", () => {
+  const timing = resolveStartTiming({
+    duration: { ms: 10_000 },
+    interval: 250,
+    fps: 12
+  });
+
+  assert.equal(timing.intervalMs, 250);
+  assert.equal(timing.targetFrames, 40);
+  assert.equal(timing.fps, 12);
+  assert.equal(timing.computedFromVideoLength, false);
+});
+
+test("start command warns when computed video length interval is below one second", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-video-length-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test",
+        "--duration",
+        "1s",
+        "--video-length",
+        "2s",
+        "--fps",
+        "2",
+        "--out",
+        runDir,
+        "--json"
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "1" }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /warning: computed interval 250ms is below 1000ms/);
+    assert.equal(JSON.parse(result.stdout).status.intervalMs, 250);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("help command prints usage banner with the canonical commands", () => {
   const result = runCli(["help"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /timelapse-capture/);
   assert.match(result.stdout, /start <url>/);
+  assert.match(result.stdout, /--video-length/);
+  assert.match(result.stdout, /--fps/);
   assert.match(result.stdout, /doctor/);
 });
