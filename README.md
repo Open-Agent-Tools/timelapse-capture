@@ -148,10 +148,11 @@ timelapse-capture doctor [--json]
 Checks runtime dependencies. Run this first.
 
 ```bash
-timelapse-capture start <url> [--duration <duration>] [--interval <duration>] [--viewport <width>x<height>] [--json]
+timelapse-capture start <url> [--duration <duration>] [--interval <duration> | --video-length <duration>] [--fps <number>] [--viewport <width>x<height>] [--json]
 ```
 
 Captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
+Use `--interval <duration>` to set capture cadence directly, or use `--video-length <duration>` with `--fps <number>` to derive the interval from the requested output video length.
 
 ```bash
 timelapse-capture status <run-dir> [--json]

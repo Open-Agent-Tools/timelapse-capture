@@ -36,6 +36,7 @@ const SIMULATION_FRAME_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAC0lEQVR4nGNgYAAAAAIAAdde3rAAAAAElFTkSuQmCA==";
 const SIMULATION_FRAME_PNG = Buffer.from(SIMULATION_FRAME_PNG_BASE64, "base64");
 const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set(["ENOENT", "ENOTEMPTY", "EEXIST"]);
+const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
 
 export class ParseError extends Error {
   constructor(code, message) {
@@ -284,6 +285,12 @@ export function parseArgs(argv) {
   if (command === "start" && !options.duration) {
     throw new ParseError("E_MISSING_VALUE", "Missing --duration.");
   }
+  if (command === "start" && options["video-length"] && options.interval !== undefined) {
+    throw new ParseError(
+      "E_MUTUALLY_EXCLUSIVE",
+      "--video-length and --interval cannot be used together."
+    );
+  }
 
   if (schema.positional[0] === "runDir") {
     result.runDir = positional[0];
@@ -313,6 +320,20 @@ function parseValueFlag(flag, value) {
       throw new ParseError("E_BAD_INTERVAL", `Invalid interval: ${value}`);
     }
     return parsed.ms;
+  }
+  if (flag === "video-length") {
+    const parsed = parseDuration(value);
+    if (parsed.ms === 0) {
+      throw new ParseError("E_BAD_VIDEO_LENGTH", `Invalid video length: ${value}`);
+    }
+    return parsed;
+  }
+  if (flag === "fps") {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new ParseError("E_BAD_FPS", `Invalid fps: ${value}`);
+    }
+    return parsed;
   }
   if (flag === "index") {
     const parsed = Number.parseInt(value, 10);
@@ -807,21 +828,25 @@ export async function commandStart({ target, options = {} } = {}) {
     throw new Error(`navigation failed: page could not be loaded: ${target}`);
   }
 
-  const intervalMs = typeof options.interval === "number"
-    ? options.interval
-    : options.interval?.ms ?? 200;
-  const durationMs = options.duration?.ms ?? 0;
-  const fps = Number(options.fps ?? 24);
+  const timing = resolveStartTiming(options);
+  if (
+    timing.computedFromVideoLength
+    && timing.intervalMs < MIN_COMPUTED_INTERVAL_WARNING_MS
+  ) {
+    console.error(
+      `warning: computed interval ${timing.intervalMs}ms is below 1000ms; capture may miss the requested cadence`
+    );
+  }
+  const intervalMs = timing.intervalMs;
+  const durationMs = timing.durationMs;
+  const fps = timing.fps;
   const viewport = options.viewport
     ? { width: options.viewport.width, height: options.viewport.height }
     : { width: 1280, height: 720 };
   const targetFrames = (() => {
     const fromEnv = Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAMES || "", 10);
     if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
-    if (durationMs > 0 && intervalMs > 0) {
-      return Math.max(1, Math.ceil(durationMs / intervalMs));
-    }
-    return 3;
+    return timing.targetFrames;
   })();
   const estimatedDiskBytes = estimateDiskBytes(viewport, targetFrames);
   const cleanup = options["keep-frames"] ? "never" : options.cleanup ?? "after-render";
@@ -891,6 +916,39 @@ export async function commandStart({ target, options = {} } = {}) {
     runDir,
     estimatedDiskBytes,
     status: buildStatusPayload({ ...state, runDir })
+  };
+}
+
+export function resolveStartTiming(options = {}) {
+  const durationMs = options.duration?.ms ?? 0;
+  const fps = Number(options.fps ?? 24);
+  const explicitIntervalMs = typeof options.interval === "number"
+    ? options.interval
+    : options.interval?.ms;
+  const videoLengthMs = options["video-length"]?.ms ?? null;
+
+  if (videoLengthMs !== null) {
+    const targetFrames = Math.max(1, Math.round((videoLengthMs / 1000) * fps));
+    return {
+      durationMs,
+      videoLengthMs,
+      fps,
+      targetFrames,
+      intervalMs: Math.max(1, Math.round(durationMs / targetFrames)),
+      computedFromVideoLength: true
+    };
+  }
+
+  const intervalMs = explicitIntervalMs ?? 200;
+  return {
+    durationMs,
+    videoLengthMs,
+    fps,
+    intervalMs,
+    targetFrames: durationMs > 0 && intervalMs > 0
+      ? Math.max(1, Math.ceil(durationMs / intervalMs))
+      : 3,
+    computedFromVideoLength: false
   };
 }
 
@@ -1596,7 +1654,7 @@ function printHelp() {
   console.log(`timelapse-capture ${VERSION}
 
 Usage:
-  timelapse-capture start <url> [--duration <2h>] [--interval <5s>] [--out <dir>]
+  timelapse-capture start <url> [--duration <2h>] [--interval <5s>] [--video-length <1m>] [--fps <24>] [--out <dir>]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
   timelapse-capture render <run-dir> [--output <file>] [--json]
