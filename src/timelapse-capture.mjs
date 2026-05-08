@@ -445,7 +445,7 @@ async function readManifest(file) {
 }
 
 async function removeIfExists(file) {
-  await fsp.rm(file, { force: true }).catch(() => {});
+  await fsp.rm(file, { force: true });
 }
 
 async function removeDirIfExists(dir) {
@@ -697,7 +697,9 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
       }
     }
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    if (browser) await browser.close().catch((e) => {
+      console.error(`browser close failed: ${e.message}`);
+    });
   }
 }
 
