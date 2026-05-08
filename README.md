@@ -300,11 +300,8 @@ Important paths:
 ## Project Layout
 
 ```text
-src/timelapse-capture.mjs  CLI entrypoint
-src/cli/index.js           CLI router
-src/cli/doctor.js          dependency checks
-src/cli/render.js          MP4 rendering and cleanup helpers
-src/cli/parser.js          argument parsing
+src/timelapse-capture.mjs  CLI entrypoint and all commands
+src/doctor.mjs             dependency checks (doctor command)
 skill/SKILL.md             Codex/Claude-style skill instructions
 docs/PRD.md                product requirements
 test/*.test.{js,mjs}       Node test suite
