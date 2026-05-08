@@ -1357,8 +1357,8 @@ export function renderFrames(runDir, options = {}) {
     };
     try {
       writeSummarySync(runDir, updated);
-    } catch {
-      /* best effort */
+    } catch (summaryWriteError) {
+      result.error = `${result.error}; failed to update render summary: ${summaryWriteError.message}`;
     }
     return result;
   }
@@ -1424,7 +1424,7 @@ export async function commandCleanup({ runDir, options = {} }) {
   }
 
   const framesDir = path.join(resolved, "frames");
-  const frameFiles = await listFrameFiles(resolved).catch(() => []);
+  const frameFiles = await listFrameFiles(resolved);
 
   if (options["keep-frames"]) {
     const result = { message: "Frames preserved (--keep-frames)", frameCount: frameFiles.length };
