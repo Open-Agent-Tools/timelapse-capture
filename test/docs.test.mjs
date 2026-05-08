@@ -1,8 +1,10 @@
-const assert = require('node:assert');
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const test = require('node:test');
+import assert from 'node:assert';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 
 async function readProjectFile(...segments) {

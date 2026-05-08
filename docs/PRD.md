@@ -154,7 +154,7 @@ timelapse-capture status ./timelapse-runs/app-review
 
 Output should include:
 
-- State: pending, running, completed, failed, rendering, rendered.
+- State: one of `starting`, `running`, `completed`, `failed`, `rendering`, `rendered`, `render_failed`.
 - Started at, elapsed time, estimated completion.
 - Frames attempted, captured, failed, skipped.
 - Latest frame timestamp.

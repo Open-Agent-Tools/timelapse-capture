@@ -6,10 +6,30 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { commandDoctor, formatDoctorHuman } from "./doctor.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 export const VERSION = "0.1.0";
 export const MIN_NODE_VERSION = "20.0.0";
+
+export const CANONICAL_STATES = Object.freeze([
+  "starting",
+  "running",
+  "completed",
+  "failed",
+  "rendering",
+  "rendered",
+  "render_failed"
+]);
+
+const LEGACY_STATE_MIGRATIONS = Object.freeze({ done: "completed" });
+
+export function migrateLegacyState(state) {
+  if (state && Object.prototype.hasOwnProperty.call(LEGACY_STATE_MIGRATIONS, state)) {
+    return LEGACY_STATE_MIGRATIONS[state];
+  }
+  return state;
+}
 
 // Simulation-mode placeholder frame, encoded as base64 to keep the canonical
 // CLI source free of any literal scaffold PNG hex sequence (regression check).
@@ -244,10 +264,10 @@ export function parseArgs(argv) {
 
   const expected = schema.positional.length;
   if (positional.length < expected) {
-    throw new ParseError(
-      "E_MISSING_ARGUMENT",
-      `Missing required argument for ${command}`
-    );
+    const msg = command === "start"
+      ? "Missing URL. Pass it positionally (start <url>) or via --url."
+      : `Missing required argument for ${command}`;
+    throw new ParseError("E_MISSING_ARGUMENT", msg);
   }
   if (positional.length > expected) {
     throw new ParseError(
@@ -260,6 +280,11 @@ export function parseArgs(argv) {
   if (schema.positional[0] === "target") {
     result.target = positional[0];
   }
+
+  if (command === "start" && !options.duration) {
+    throw new ParseError("E_MISSING_VALUE", "Missing --duration.");
+  }
+
   if (schema.positional[0] === "runDir") {
     result.runDir = positional[0];
   }
@@ -339,195 +364,6 @@ export function parseViewport(input) {
     throw new ParseError("E_BAD_VIEWPORT", `Invalid viewport: ${input}`);
   }
   return { input, width, height };
-}
-
-// ---------- Doctor ----------
-
-function compareVersions(actual, minimum) {
-  const actualParts = String(actual).split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const minimumParts = String(minimum).split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const length = Math.max(actualParts.length, minimumParts.length);
-  for (let index = 0; index < length; index += 1) {
-    const a = actualParts[index] || 0;
-    const m = minimumParts[index] || 0;
-    if (a > m) return 1;
-    if (a < m) return -1;
-  }
-  return 0;
-}
-
-function checkResult({ name, status, message, details = {}, error = null, fix = null }) {
-  return { name, status, message, details, error, fix };
-}
-
-export async function checkNode({ version = process.versions.node } = {}) {
-  const details = {
-    version,
-    minimumVersion: MIN_NODE_VERSION,
-    executable: process.execPath
-  };
-  if (compareVersions(version, MIN_NODE_VERSION) >= 0) {
-    return checkResult({
-      name: "node",
-      status: "pass",
-      message: `Node.js ${version} satisfies >= ${MIN_NODE_VERSION}`,
-      details
-    });
-  }
-  return checkResult({
-    name: "node",
-    status: "fail",
-    message: `Node.js ${version} is below required version ${MIN_NODE_VERSION}`,
-    details,
-    error: "Node.js 20 or newer is required.",
-    fix: "Install Node.js 20 or newer, then run doctor again."
-  });
-}
-
-export async function checkPlaywright({ importer } = {}) {
-  const importerFn = importer || ((spec) => import(spec));
-  try {
-    const mod = await importerFn("playwright");
-    let resolvedPath = null;
-    try {
-      const localRequire = createRequire(import.meta.url);
-      resolvedPath = localRequire.resolve("playwright");
-    } catch {
-      resolvedPath = mod ? "playwright" : null;
-    }
-    return checkResult({
-      name: "playwright",
-      status: "pass",
-      message: "Playwright package can be imported",
-      details: { resolvedPath }
-    });
-  } catch (error) {
-    return checkResult({
-      name: "playwright",
-      status: "fail",
-      message: "Playwright package cannot be imported",
-      details: {},
-      error: error?.message || String(error),
-      fix: "Run npm install in this project. Do not rely on doctor to install dependencies."
-    });
-  }
-}
-
-export async function checkChromium({ importer } = {}) {
-  const importerFn = importer || ((spec) => import(spec));
-  let browser;
-  try {
-    const { chromium } = await importerFn("playwright");
-    browser = await chromium.launch({ headless: true });
-    return checkResult({
-      name: "chromium",
-      status: "pass",
-      message: "Chromium can be launched by Playwright",
-      details: {}
-    });
-  } catch (error) {
-    return checkResult({
-      name: "chromium",
-      status: "fail",
-      message: "Chromium cannot be launched by Playwright",
-      details: {},
-      error: error?.message || String(error),
-      fix: "Run npx playwright install chromium, then run doctor again."
-    });
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
-  }
-}
-
-function parseBinaryVersion(binary, output) {
-  const firstLine = String(output).split(/\r?\n/).find(Boolean) || "";
-  const escaped = binary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = firstLine.match(new RegExp(`${escaped}\\s+version\\s+([^\\s]+)`, "i"));
-  return {
-    version: match ? match[1] : null,
-    firstLine
-  };
-}
-
-export async function checkBinary(binary, { execFileSync: run = execFileSync } = {}) {
-  try {
-    const stdout = run(binary, ["-version"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 5000
-    });
-    const parsed = parseBinaryVersion(binary, stdout);
-    return checkResult({
-      name: binary,
-      status: "pass",
-      message: parsed.version
-        ? `${binary} ${parsed.version} is available`
-        : `${binary} is available`,
-      details: parsed
-    });
-  } catch (error) {
-    return checkResult({
-      name: binary,
-      status: "fail",
-      message: `${binary} is not available on PATH`,
-      details: {},
-      error: `${binary} was not found or could not run: ${error?.message || String(error)}`,
-      fix: "Install FFmpeg and ensure both ffmpeg and ffprobe are available on PATH."
-    });
-  }
-}
-
-export async function checkFfmpeg(options) {
-  return checkBinary("ffmpeg", options);
-}
-
-export async function checkFfprobe(options) {
-  return checkBinary("ffprobe", options);
-}
-
-export async function runAllChecks({ checks } = {}) {
-  const checkFns = checks || [
-    checkNode,
-    checkPlaywright,
-    checkChromium,
-    checkFfmpeg,
-    checkFfprobe
-  ];
-  const results = [];
-  for (const check of checkFns) {
-    results.push(await check());
-  }
-  const summary = {
-    pass: results.filter((r) => r.status === "pass").length,
-    fail: results.filter((r) => r.status === "fail").length,
-    total: results.length
-  };
-  return {
-    ok: summary.fail === 0,
-    summary,
-    checks: results,
-    exitCode: summary.fail === 0 ? 0 : 1
-  };
-}
-
-export async function commandDoctor(options) {
-  return runAllChecks(options);
-}
-
-export function formatDoctorHuman(result) {
-  const lines = result.checks.flatMap((check) => {
-    const status = check.status === "pass" ? "PASS" : "FAIL";
-    const out = [`[${status}] ${check.name}: ${check.message}`];
-    if (check.error) out.push(`  error: ${check.error}`);
-    if (check.fix) out.push(`  fix: ${check.fix}`);
-    return out;
-  });
-  lines.push(
-    `summary: ${result.summary.pass} passed, ${result.summary.fail} failed, ${result.summary.total} total`
-  );
-  return lines.join("\n");
 }
 
 async function runDoctorCli(parsed) {
@@ -735,8 +571,10 @@ async function writeStartArtifacts(runDir, state) {
 function buildStatusPayload(state) {
   const startedAtMs = state.startedAt ? new Date(state.startedAt).getTime() : Date.now();
   const elapsedMs = Math.max(0, Date.now() - startedAtMs);
-  const totalExpected = Number.isFinite(state.targetFrames) ? state.targetFrames : state.frameCount;
-  const completedAttempts = (state.frameCount || 0) + (state.failedFrameCount || 0);
+  const frameCount = state.frameCount ?? state.framesCaptured ?? 0;
+  const failedFrameCount = state.failedFrameCount ?? state.framesFailed ?? 0;
+  const totalExpected = Number.isFinite(state.targetFrames) ? state.targetFrames : (state.expectedFrames ?? frameCount);
+  const completedAttempts = frameCount + failedFrameCount;
   const stateName = state.state || "starting";
   const etaMs =
     stateName === "running"
@@ -755,11 +593,11 @@ function buildStatusPayload(state) {
   return {
     runDir: state.runDir,
     state: stateName,
-    frameCount: state.frameCount || 0,
-    failedFrameCount: state.failedFrameCount || 0,
+    frameCount,
+    failedFrameCount,
     frames: {
-      captured: state.frameCount || 0,
-      failed: state.failedFrameCount || 0,
+      captured: frameCount,
+      failed: failedFrameCount,
       totalExpected
     },
     latestFrame: state.latestFrame || null,
@@ -1042,6 +880,9 @@ export async function commandStatus({ runDir }) {
   }
   const resolved = path.resolve(runDir);
   const statusPath = path.join(resolved, "status.json");
+  const configPath = path.join(resolved, "config.json");
+  const latestFramePath = path.join(resolved, "latest-frame.json");
+
   const status = await readJsonOptional(statusPath);
   if (!status) {
     const reason = fs.existsSync(resolved)
@@ -1049,23 +890,26 @@ export async function commandStatus({ runDir }) {
       : "missing run directory";
     throw new Error(`${reason}: ${statusPath}`);
   }
-  const totalBytes = await directorySize(resolved);
-  const frameBytes = await directorySize(path.join(resolved, "frames"));
-  const config = await readJsonOptional(path.join(resolved, "config.json"));
-  const summary = await readJsonOptional(path.join(resolved, "run-summary.json"));
+
+  const config = await readJsonOptional(configPath);
+  const latestFrame = await readJsonOptional(latestFramePath);
+  const framesDiskUsageBytes = await directorySize(path.join(resolved, "frames"));
+
   const payload = buildStatusPayload({
     ...status,
-    state: status.state || inferStateFromStatus(status),
-    estimatedDiskBytes: status.estimatedDiskBytes ?? config?.estimatedDiskBytes ?? null,
+    state: migrateLegacyState(status.state || inferStateFromStatus(status)),
     runDir: resolved
   });
+
   return {
-    ...payload,
-    diskUsage: { runDirBytes: totalBytes, framesBytes: frameBytes },
-    outputPath: summary?.render?.outputPath || null,
-    renderedOutput: summary?.render?.outputPath || null,
-    cleanup: summary?.cleanup || null,
-    cleanupSummary: summary?.cleanup || null
+    status: {
+      ...payload,
+      framesCaptured: payload.frameCount,
+      framesFailed: payload.failedFrameCount
+    },
+    config,
+    latestFrame,
+    framesDiskUsageBytes
   };
 }
 
@@ -1100,7 +944,7 @@ async function runStatusCli(parsed) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  printHumanStatus(result);
+  printHumanStatus(result.status);
 }
 
 // ---------- Peek ----------
@@ -1122,10 +966,10 @@ export async function commandPeek({ runDir, options = {} }) {
     const posterPath = path.join(resolved, "poster.png");
     const retainedPath = path.join(resolved, "latest-retained.png");
     if (fs.existsSync(posterPath)) {
-      return { path: posterPath, pathCount: 1 };
+      return { exists: true, path: posterPath, pathCount: 1 };
     }
     if (fs.existsSync(retainedPath)) {
-      return { path: retainedPath, pathCount: 1 };
+      return { exists: true, path: retainedPath, pathCount: 1 };
     }
     throw new Error(
       "No frames available. Raw frames were cleaned up. Use poster.png or latest-retained.png from the run directory."
@@ -1140,9 +984,17 @@ export async function commandPeek({ runDir, options = {} }) {
   } else if (options.latest) {
     index = names.length - 1;
   }
+
+  const framePath = path.join(resolved, "frames", names[index]);
   return {
-    path: path.join(resolved, "frames", names[index]),
-    pathCount: names.length
+    exists: true,
+    path: framePath,
+    framePath,
+    pathCount: names.length,
+    frame: {
+      index: Number.parseInt(names[index].match(/\d+/)?.[0] || "0", 10),
+      path: path.join("frames", names[index])
+    }
   };
 }
 
@@ -1314,10 +1166,12 @@ export function renderFrames(runDir, options = {}) {
     error: null
   };
 
+  if (!fs.existsSync(runDir)) {
+    result.error = `Run directory does not exist: ${runDir}`;
+    return result;
+  }
+
   try {
-    if (!fs.existsSync(runDir)) {
-      throw new RenderError(`Run directory does not exist: ${runDir}`, "ENOENT");
-    }
     const expectedOutputPath = path.resolve(runDir, "output.mp4");
     const framesDir = getFramesDir(runDir);
     const frameCount = countFrameFiles(framesDir);
@@ -1332,6 +1186,10 @@ export function renderFrames(runDir, options = {}) {
       );
     }
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+    const status = (fs.existsSync(path.join(runDir, "status.json")) && JSON.parse(fs.readFileSync(path.join(runDir, "status.json"), "utf8"))) || {};
+    status.state = "rendering";
+    fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
 
     const framePattern = path.join(framesDir, "frame-%04d.png");
     const ffmpegPath = options.ffmpegPath || "ffmpeg";
@@ -1400,12 +1258,23 @@ export function renderFrames(runDir, options = {}) {
     }
 
     writeSummarySync(runDir, summary);
+
+    status.state = "rendered";
+    status.renderedAt = nowIso();
+    fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+
     result.success = true;
     result.outputPath = outputPath;
     result.metadata = summary.render;
     return result;
   } catch (error) {
     result.error = error.message;
+
+    const status = (fs.existsSync(path.join(runDir, "status.json")) && JSON.parse(fs.readFileSync(path.join(runDir, "status.json"), "utf8"))) || {};
+    status.state = "render_failed";
+    status.error = result.error;
+    fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+
     let summary;
     try {
       summary = readSummarySync(runDir) || {};
@@ -1457,7 +1326,9 @@ export async function commandRender({ runDir, options = {} }) {
   }
   return {
     path: result.outputPath,
+    output: result.outputPath,
     frameCount: result.metadata?.frameCount,
+    sourceFrames: result.metadata?.frameCount,
     message: "Render successful"
   };
 }
@@ -1487,6 +1358,12 @@ export async function commandCleanup({ runDir, options = {} }) {
   if (!stat) {
     throw new Error("Run directory not found");
   }
+
+  const outputPath = path.join(resolved, "output.mp4");
+  if (!options.force && !fs.existsSync(outputPath)) {
+    throw new Error("Refusing to delete frames before output.mp4 exists. Pass --force to override.");
+  }
+
   const framesDir = path.join(resolved, "frames");
   const frameFiles = await listFrameFiles(resolved).catch(() => []);
 
@@ -1574,6 +1451,7 @@ export async function commandCleanup({ runDir, options = {} }) {
   });
   return result;
 }
+
 
 async function runCleanupCli(parsed) {
   const result = await commandCleanup({ runDir: parsed.runDir, options: parsed.options });

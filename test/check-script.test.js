@@ -2,102 +2,56 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { readFileSync } = require('node:fs');
+const { existsSync, readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
+const REPO_ROOT = resolve(__dirname, '..');
 const CANONICAL_BIN = './src/timelapse-capture.mjs';
-const CANONICAL_BIN_NORMALIZED = 'src/timelapse-capture.mjs';
-// Scaffold-only 1x1 PNG fixture used by the demoted CLI. The canonical entry
-// must produce real screenshots, so this byte sequence must not appear in it.
-const SCAFFOLD_FRAME_PNG_HEX_PREFIX =
-  '89504e470d0a1a0a0000000d4948445200000001000000010802';
 
-test('package.json has ci script that chains check and test', () => {
-  const pkgPath = resolve(__dirname, '../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  assert.strictEqual(
-    pkg.scripts.ci,
-    'npm run check && npm test',
-    'scripts.ci must be exactly "npm run check && npm test"'
-  );
+function readJson(relative) {
+  return JSON.parse(readFileSync(resolve(REPO_ROOT, relative), 'utf8'));
+}
+
+test('package.json bin points at the canonical CLI entrypoint', () => {
+  const pkg = readJson('package.json');
+  assert.strictEqual(pkg.bin['timelapse-capture'], CANONICAL_BIN);
 });
 
-test('package.json bin points at canonical CLI entrypoint', () => {
-  const pkgPath = resolve(__dirname, '../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  assert.strictEqual(
-    pkg.bin['timelapse-capture'],
-    CANONICAL_BIN,
-    `package.json#bin.timelapse-capture must be "${CANONICAL_BIN}"`
-  );
+test('package.json scripts target the canonical entry and run Node\'s test runner', () => {
+  const pkg = readJson('package.json');
+  assert.strictEqual(pkg.scripts.start, `node ${CANONICAL_BIN}`);
+  assert.match(pkg.scripts.check, /node --check \.\/src\/timelapse-capture\.mjs/);
+  assert.match(pkg.scripts.check, /node --check \.\/src\/doctor\.mjs/);
+  assert.match(pkg.scripts.test, /^node --test\b/);
+  assert.strictEqual(pkg.scripts.ci, 'npm run check && npm test');
 });
 
-test('package.json check script validates only the canonical entrypoint', () => {
-  const pkgPath = resolve(__dirname, '../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  assert.strictEqual(
-    pkg.scripts.check,
-    `node --check ${CANONICAL_BIN}`,
-    `scripts.check must be "node --check ${CANONICAL_BIN}" so CI does not validate demoted scaffold files`
-  );
+test('package.json scripts no longer reference the demoted src/cli implementation', () => {
+  const raw = readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8');
+  assert.ok(!raw.includes('src/cli'), 'package.json must not reference src/cli');
 });
 
-test('package.json test script runs node --test against test/*.test.{js,mjs}', () => {
-  const pkgPath = resolve(__dirname, '../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  assert.match(
-    pkg.scripts.test,
-    /^node --test\b/,
-    'scripts.test must invoke node --test'
-  );
-  assert.match(
-    pkg.scripts.test,
-    /test\/\*\*\/\*\.test\.mjs/,
-    'scripts.test must include the .mjs canonical test glob'
-  );
+test('package-lock.json root bin matches package.json', () => {
+  const lock = readJson('package-lock.json');
+  assert.strictEqual(lock.packages[''].bin['timelapse-capture'], 'src/timelapse-capture.mjs');
 });
 
-test('package-lock.json bin metadata matches canonical entrypoint', () => {
-  const lockPath = resolve(__dirname, '../package-lock.json');
-  const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
-  const rootBin = lock.packages?.['']?.bin?.['timelapse-capture'];
-  assert.strictEqual(
-    rootBin,
-    CANONICAL_BIN_NORMALIZED,
-    `package-lock.json root package bin must be "${CANONICAL_BIN_NORMALIZED}"`
-  );
+test('the demoted src/cli directory has been removed', () => {
+  assert.strictEqual(existsSync(resolve(REPO_ROOT, 'src/cli')), false);
 });
 
-test('canonical entrypoint is not the 1x1 PNG scaffold', () => {
-  const canonicalPath = resolve(__dirname, '..', CANONICAL_BIN_NORMALIZED);
-  const source = readFileSync(canonicalPath, 'utf8');
+test('canonical entry uses real Playwright (not the scaffold 1x1 PNG fixture)', () => {
+  const cli = readFileSync(resolve(REPO_ROOT, 'src/timelapse-capture.mjs'), 'utf8');
+  assert.match(cli, /chromium\.launch/);
+  assert.match(cli, /page\.screenshot/);
   assert.ok(
-    !source.toLowerCase().includes(SCAFFOLD_FRAME_PNG_HEX_PREFIX),
-    'canonical CLI must not embed the scaffold 1x1 PNG fixture'
-  );
-  assert.match(
-    source,
-    /chromium\.launch/,
-    'canonical CLI must launch a real browser to capture screenshots'
-  );
-  assert.match(
-    source,
-    /page\.screenshot/,
-    'canonical CLI must call page.screenshot to capture real frames'
+    !cli.toLowerCase().includes('89504e470d0a1a0a0000000d4948445200000001000000010802'),
+    'canonical CLI must not embed the 1x1 PNG scaffold fixture'
   );
 });
 
 test('canonical CLI entrypoint decision is documented and wired', () => {
-  const pkgPath = resolve(__dirname, '../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-
-  assert.strictEqual(
-    pkg.bin['timelapse-capture'],
-    './src/timelapse-capture.mjs',
-    'published binary must point at the canonical ESM entrypoint'
-  );
-
-  const decisionPath = resolve(__dirname, '../docs/decisions/001-canonical-cli-entrypoint.md');
+  const decisionPath = resolve(REPO_ROOT, 'docs/decisions/001-canonical-cli-entrypoint.md');
   const decision = readFileSync(decisionPath, 'utf8');
   const requiredTerms = [
     'src/timelapse-capture.mjs',

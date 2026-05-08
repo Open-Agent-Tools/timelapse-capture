@@ -58,6 +58,10 @@ scope:
 feedback:
   cadence_plays: null
   cadence_minutes: null
+waivers:
+  diff_size:
+    - pr: 52
+      reason: "Bulk deletion of demoted src/cli/* CommonJS files; additions reviewed clean at SHA 638ad17."
 identities:
   jwesleye:
     git_user_name: jwesleye
