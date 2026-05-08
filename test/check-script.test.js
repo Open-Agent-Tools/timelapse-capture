@@ -50,6 +50,19 @@ test('canonical entry uses real Playwright (not the scaffold 1x1 PNG fixture)', 
   );
 });
 
+test('source does not use empty promise catch cleanup handlers', () => {
+  const sources = [
+    'src/timelapse-capture.mjs',
+    'src/doctor.mjs',
+  ];
+  const emptyPromiseCatch = /\.catch\(\s*\(\s*\)\s*=>\s*\{\s*\}\s*\)/;
+
+  for (const source of sources) {
+    const raw = readFileSync(resolve(REPO_ROOT, source), 'utf8');
+    assert.doesNotMatch(raw, emptyPromiseCatch, `${source} must report or propagate cleanup failures`);
+  }
+});
+
 test('canonical CLI entrypoint decision is documented and wired', () => {
   const decisionPath = resolve(REPO_ROOT, 'docs/decisions/001-canonical-cli-entrypoint.md');
   const decision = readFileSync(decisionPath, 'utf8');

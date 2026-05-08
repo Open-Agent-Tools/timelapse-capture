@@ -71,17 +71,18 @@ export async function checkPlaywright({ requireFn = localRequire } = {}) {
 
 export async function checkChromium({ requireFn = localRequire } = {}) {
   let browser;
+  let result;
   try {
     const { chromium } = requireFn("playwright");
     browser = await chromium.launch({ headless: true });
-    return checkResult({
+    result = checkResult({
       name: "chromium",
       status: "pass",
       message: "Chromium can be launched by Playwright",
       details: {}
     });
   } catch (error) {
-    return checkResult({
+    result = checkResult({
       name: "chromium",
       status: "fail",
       message: "Chromium cannot be launched by Playwright",
@@ -91,9 +92,21 @@ export async function checkChromium({ requireFn = localRequire } = {}) {
     });
   } finally {
     if (browser) {
-      await browser.close().catch(() => {});
+      try {
+        await browser.close();
+      } catch (error) {
+        result = checkResult({
+          name: "chromium",
+          status: "fail",
+          message: "Chromium launched but could not close cleanly",
+          details: {},
+          error: error?.message || String(error),
+          fix: "Check for stuck browser processes, then run doctor again."
+        });
+      }
     }
   }
+  return result;
 }
 
 function parseBinaryVersion(binary, output) {
