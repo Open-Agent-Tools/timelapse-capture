@@ -986,9 +986,6 @@ export async function commandPeek({ runDir, options = {} }) {
   }
 
   const framePath = path.join(resolved, "frames", names[index]);
-  // The test expects a 'frame' object with an 'index' (1-based if possible, but let's see).
-  // manifest.jsonl records have 1-based index.
-  // For now, let's just return what the test wants if possible.
   return {
     exists: true,
     path: framePath,
