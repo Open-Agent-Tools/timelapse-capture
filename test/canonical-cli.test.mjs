@@ -164,6 +164,18 @@ test("peek --near --json returns the frame closest to an ISO timestamp", async (
   }
 });
 
+test("peek --near reports missing captured timestamps when manifest is absent", async () => {
+  const { runDir, captured } = await makeRun();
+  try {
+    await fs.rm(path.join(runDir, "manifest.jsonl"));
+    const result = runCli(["peek", runDir, "--near", captured.at(-1).capturedAt]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /No captured frame timestamps are available for --near\./);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("peek --near rejects invalid timestamps", async () => {
   const { runDir } = await makeRun();
   try {
