@@ -1238,6 +1238,13 @@ function writeSummarySync(runDir, summary) {
   fs.renameSync(temp, summaryPath);
 }
 
+function writeStatusSync(runDir, status) {
+  const statusPath = path.join(runDir, "status.json");
+  const temp = `${statusPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(temp, JSON.stringify(status, null, 2), "utf8");
+  fs.renameSync(temp, statusPath);
+}
+
 function listFrameFilesSync(framesDir) {
   if (!fs.existsSync(framesDir)) return [];
   return fs
@@ -1311,7 +1318,7 @@ export function renderFrames(runDir, options = {}) {
 
     const status = readStatusSync(runDir) || {};
     status.state = "rendering";
-    fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+    writeStatusSync(runDir, status);
 
     const staging = stageContiguousFrames(framesDir);
     const framePattern = path.join(staging.dir, "frame-%04d.png");
@@ -1386,7 +1393,7 @@ export function renderFrames(runDir, options = {}) {
 
     status.state = "rendered";
     status.renderedAt = nowIso();
-    fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+    writeStatusSync(runDir, status);
 
     result.success = true;
     result.outputPath = outputPath;
@@ -1398,7 +1405,7 @@ export function renderFrames(runDir, options = {}) {
     const status = readStatusSync(runDir) || {};
     status.state = "render_failed";
     status.error = result.error;
-    fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+    writeStatusSync(runDir, status);
 
     let summary;
     try {
