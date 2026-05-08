@@ -212,6 +212,23 @@ test("peek --near reports missing captured timestamps when manifest is absent", 
   }
 });
 
+test("peek --near guard does not fire for matching manifest and frames", async () => {
+  const { runDir, captured } = await makeRun({ frameCount: 2 });
+  try {
+    const midMs =
+      (new Date(captured[0].capturedAt).getTime() +
+        new Date(captured[1].capturedAt).getTime()) /
+      2;
+    const result = runCli(["peek", runDir, "--near", new Date(midMs).toISOString(), "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.exists, true);
+    assert.match(payload.framePath, /\.png$/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("peek --near rejects invalid timestamps", async () => {
   const { runDir } = await makeRun();
   try {
