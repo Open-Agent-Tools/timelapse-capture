@@ -78,6 +78,40 @@ test("cleanupFrames removes render staging when no image files exist", async () 
   }
 });
 
+test("cleanup --keep-samples reports one retained frame when only one frame exists", async () => {
+  const { runDir } = await makeRun();
+  try {
+    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+    assert.equal(result.removed, 0);
+    assert.equal(result.retained, 1);
+
+    const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.removed, 0);
+    assert.equal(summary.cleanup.retained, 1);
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --keep-samples keeps distinct first and last frames", async () => {
+  const { runDir, framesDir } = await makeRun();
+  try {
+    await fsp.writeFile(path.join(framesDir, "frame-000002.png"), FRAME_PNG_1x1);
+    await fsp.writeFile(path.join(framesDir, "frame-000003.png"), FRAME_PNG_1x1);
+
+    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+    assert.equal(result.removed, 1);
+    assert.equal(result.retained, 2);
+    assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png", "frame-000003.png"]);
+
+    const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.removed, 1);
+    assert.equal(summary.cleanup.retained, 2);
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("cleanup --frames ignores a non-empty frames directory after deleting raw frames", async () => {
   const { runDir, framesDir } = await makeRun();
   try {
