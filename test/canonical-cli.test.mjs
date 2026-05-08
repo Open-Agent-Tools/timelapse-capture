@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
+import { commandCleanup } from "../src/timelapse-capture.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -204,6 +205,23 @@ test("cleanup refuses to delete frames before output.mp4 exists without --force"
     const result = runCli(["cleanup", runDir]);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Refusing to delete frames/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --keep-samples reports one retained frame for a one-frame run", async () => {
+  const { runDir } = await makeRun({ frameCount: 1 });
+  try {
+    await fs.writeFile(path.join(runDir, "output.mp4"), "rendered");
+
+    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+    assert.equal(result.removed, 0);
+    assert.equal(result.retained, 1);
+
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.removed, 0);
+    assert.equal(summary.cleanup.retained, 1);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

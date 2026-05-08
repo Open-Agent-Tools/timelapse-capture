@@ -1411,14 +1411,16 @@ export async function commandCleanup({ runDir, options = {} }) {
     }
     const first = frameFiles[0];
     const last = frameFiles[frameFiles.length - 1];
-    const toDelete = frameFiles.filter((f) => f !== first && f !== last);
+    const retainedSamples = new Set([first, last]);
+    const retained = retainedSamples.size;
+    const toDelete = frameFiles.filter((f) => !retainedSamples.has(f));
     await Promise.all(toDelete.map((p) => fsp.rm(path.join(framesDir, p), { force: true })));
     const result = {
       message: "Frames cleaned up (kept first and last)",
       removed: toDelete.length,
-      retained: 2
+      retained
     };
-    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained: 2 });
+    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained });
     return result;
   }
 
