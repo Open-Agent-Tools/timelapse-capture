@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -80,7 +81,7 @@ class FakeBinaryManager {
 
 export async function withFakeFFmpeg(testFn, mode = "success") {
   const tempDir = path.join(
-    "/tmp",
+    os.tmpdir(),
     `fake-ffmpeg-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
   const manager = new FakeBinaryManager(tempDir);
