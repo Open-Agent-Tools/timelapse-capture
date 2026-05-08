@@ -1252,12 +1252,18 @@ function stageContiguousFrames(framesDir) {
   const isContiguous = names.every((name, i) => name === frameName(i + 1));
   if (isContiguous) return { dir: framesDir, staged: false };
   const stagingDir = path.join(framesDir, ".render-staging");
+  removeStagingDir(stagingDir);
   fs.mkdirSync(stagingDir, { recursive: true });
-  for (let i = 0; i < names.length; i++) {
-    fs.linkSync(
-      path.join(framesDir, names[i]),
-      path.join(stagingDir, frameName(i + 1))
-    );
+  try {
+    for (let i = 0; i < names.length; i++) {
+      fs.linkSync(
+        path.join(framesDir, names[i]),
+        path.join(stagingDir, frameName(i + 1))
+      );
+    }
+  } catch (err) {
+    removeStagingDir(stagingDir);
+    throw err;
   }
   return { dir: stagingDir, staged: true };
 }
