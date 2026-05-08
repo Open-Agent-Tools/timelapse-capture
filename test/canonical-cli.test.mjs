@@ -154,6 +154,22 @@ test("render writes render_failed when ffmpeg exits non-zero", async () => {
   }
 });
 
+test("render succeeds when status.json is initially missing", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await fs.rm(path.join(runDir, "status.json"));
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json", "--force"], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+
+      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, "rendered");
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("cleanup refuses to delete frames before output.mp4 exists without --force", async () => {
   const { runDir } = await makeRun();
   try {

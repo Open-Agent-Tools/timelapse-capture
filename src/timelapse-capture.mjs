@@ -1131,6 +1131,16 @@ function readSummarySync(runDir) {
   }
 }
 
+function readStatusSync(runDir) {
+  const statusPath = path.join(runDir, "status.json");
+  try {
+    return JSON.parse(fs.readFileSync(statusPath, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 function writeSummarySync(runDir, summary) {
   const summaryPath = getSummaryPath(runDir);
   const temp = `${summaryPath}.tmp-${process.pid}-${Date.now()}`;
@@ -1186,7 +1196,7 @@ export function renderFrames(runDir, options = {}) {
     }
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
-    const status = (fs.existsSync(path.join(runDir, "status.json")) && JSON.parse(fs.readFileSync(path.join(runDir, "status.json"), "utf8"))) || {};
+    const status = readStatusSync(runDir) || {};
     status.state = "rendering";
     fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
 
@@ -1269,7 +1279,7 @@ export function renderFrames(runDir, options = {}) {
   } catch (error) {
     result.error = error.message;
 
-    const status = (fs.existsSync(path.join(runDir, "status.json")) && JSON.parse(fs.readFileSync(path.join(runDir, "status.json"), "utf8"))) || {};
+    const status = readStatusSync(runDir) || {};
     status.state = "render_failed";
     status.error = result.error;
     fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
