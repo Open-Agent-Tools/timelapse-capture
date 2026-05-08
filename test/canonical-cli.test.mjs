@@ -49,10 +49,10 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
   const config = {
     version: "0.1.0",
     backend: "playwright-url",
-    url: "http://example.test/",
-    durationSeconds: frameCount,
-    intervalSeconds: 1,
-    expectedFrames: frameCount,
+    target: "http://example.test/",
+    intervalMs: 1000,
+    durationMs: frameCount * 1000,
+    targetFrames: frameCount,
     fps: 24,
     viewport: { width: 1280, height: 720 },
     outDir: runDir,
@@ -69,10 +69,10 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
     pid: 1234,
     startedAt: captured[0]?.scheduledAt ?? new Date().toISOString(),
     updatedAt: captured.at(-1)?.capturedAt ?? new Date().toISOString(),
-    expectedFrames: frameCount,
+    targetFrames: frameCount,
     framesAttempted: frameCount,
-    framesCaptured: frameCount,
-    framesFailed: 0,
+    frameCount,
+    failedFrameCount: 0,
     latestFrame: captured.at(-1) ?? null
   };
 
@@ -96,8 +96,8 @@ test("status --json reports canonical state for a completed run", async () => {
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.status.state, "completed");
-    assert.equal(payload.status.framesCaptured, 3);
-    assert.equal(payload.config.expectedFrames, 3);
+    assert.equal(payload.status.frames.captured, 3);
+    assert.equal(payload.config.targetFrames, 3);
     assert.ok(payload.latestFrame?.path?.endsWith(".png"));
     assert.ok(typeof payload.framesDiskUsageBytes === "number");
   } finally {
@@ -127,7 +127,7 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.ok(summary.output.endsWith("output.mp4"));
-      assert.equal(summary.sourceFrames, 3);
+      assert.equal(summary.frameCount, 3);
 
       const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(status.state, "rendered");

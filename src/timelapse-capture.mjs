@@ -535,13 +535,9 @@ async function writeStartArtifacts(runDir, state) {
     version: VERSION,
     backend: state.backend,
     target: state.target,
-    url: state.target,
     intervalMs: state.intervalMs,
-    intervalSeconds: state.intervalMs / 1000,
     durationMs: state.durationMs,
-    durationSeconds: state.durationMs / 1000,
     targetFrames: state.targetFrames,
-    expectedFrames: state.targetFrames,
     fps: state.fps,
     viewport: state.viewport,
     estimatedDiskBytes: state.estimatedDiskBytes,
@@ -592,8 +588,6 @@ function buildStatusPayload(state) {
   return {
     runDir: state.runDir,
     state: stateName,
-    frameCount,
-    failedFrameCount,
     frames: {
       captured: frameCount,
       failed: failedFrameCount,
@@ -601,13 +595,11 @@ function buildStatusPayload(state) {
     },
     latestFrame: state.latestFrame || null,
     latestFrameTimestamp,
-    latestFrameAt: latestFrameTimestamp,
     elapsedMs,
     etaMs,
     staleWarning,
     startedAt: state.startedAt,
     lastUpdatedAt: state.lastUpdatedAt,
-    targetFrames: totalExpected,
     intervalMs: state.intervalMs,
     estimatedDiskBytes: state.estimatedDiskBytes ?? null,
     error: state.error || null
@@ -623,7 +615,7 @@ async function writeStatus(runDir, state) {
 function inferStateFromStatus(status) {
   if (!status) return "idle";
   if (status.state) return status.state;
-  if ((status.failedFrameCount || 0) > 0 && (status.frameCount || 0) === 0) return "failed";
+  if ((status.frames?.failed ?? status.failedFrameCount ?? 0) > 0 && (status.frames?.captured ?? status.frameCount ?? 0) === 0) return "failed";
   if (status.lastUpdatedAt) return "completed";
   return "idle";
 }
@@ -901,11 +893,7 @@ export async function commandStatus({ runDir }) {
   });
 
   return {
-    status: {
-      ...payload,
-      framesCaptured: payload.frameCount,
-      framesFailed: payload.failedFrameCount
-    },
+    status: payload,
     config,
     latestFrame,
     framesDiskUsageBytes
@@ -1327,7 +1315,6 @@ export async function commandRender({ runDir, options = {} }) {
     path: result.outputPath,
     output: result.outputPath,
     frameCount: result.metadata?.frameCount,
-    sourceFrames: result.metadata?.frameCount,
     message: "Render successful"
   };
 }
