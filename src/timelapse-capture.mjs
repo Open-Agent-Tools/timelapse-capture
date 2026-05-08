@@ -1151,6 +1151,30 @@ function listFrameFilesSync(framesDir) {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+function stageContiguousFrames(framesDir) {
+  const names = listFrameFilesSync(framesDir);
+  if (names.length === 0) return { dir: framesDir, staged: false };
+  const isContiguous = names.every((name, i) => name === frameName(i + 1));
+  if (isContiguous) return { dir: framesDir, staged: false };
+  const stagingDir = path.join(framesDir, ".render-staging");
+  fs.mkdirSync(stagingDir, { recursive: true });
+  for (let i = 0; i < names.length; i++) {
+    fs.linkSync(
+      path.join(framesDir, names[i]),
+      path.join(stagingDir, frameName(i + 1))
+    );
+  }
+  return { dir: stagingDir, staged: true };
+}
+
+function removeStagingDir(stagingDir) {
+  try {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  } catch {
+    /* best effort */
+  }
+}
+
 function copyPosterSync(framesDir, runDir) {
   const names = listFrameFilesSync(framesDir);
   if (names.length === 0) return null;
@@ -1195,7 +1219,8 @@ export function renderFrames(runDir, options = {}) {
     status.state = "rendering";
     fs.writeFileSync(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
 
-    const framePattern = path.join(framesDir, "frame-%04d.png");
+    const staging = stageContiguousFrames(framesDir);
+    const framePattern = path.join(staging.dir, "frame-%04d.png");
     const ffmpegPath = options.ffmpegPath || "ffmpeg";
     const ffmpegArgs = [
       "-framerate",
@@ -1216,6 +1241,8 @@ export function renderFrames(runDir, options = {}) {
       execFileSync(ffmpegPath, ffmpegArgs, { stdio: "pipe", encoding: "utf8" });
     } catch (error) {
       throw new RenderError(`ffmpeg failed: ${error.message}`, "FFMPEG_FAILED");
+    } finally {
+      if (staging.staged) removeStagingDir(staging.dir);
     }
 
     const validation = validateMP4(outputPath);
