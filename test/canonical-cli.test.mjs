@@ -455,10 +455,11 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
   }
 });
 
-test("render succeeds when pre-existing .render-staging dir is present (retry scenario)", async () => {
-  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-retry-"));
+test("render replaces stale sparse-frame staging before restaging", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-stale-staging-"));
   const framesDir = path.join(runDir, "frames");
-  await fs.mkdir(framesDir);
+  const stagingDir = path.join(framesDir, ".render-staging");
+  await fs.mkdir(stagingDir, { recursive: true });
   const indices = [1, 3, 5];
   for (const index of indices) {
     await fs.writeFile(
@@ -466,11 +467,7 @@ test("render succeeds when pre-existing .render-staging dir is present (retry sc
       FRAME_PNG_1x1
     );
   }
-  // Simulate a leftover .render-staging dir from a prior partial run
-  const staleStagingDir = path.join(framesDir, ".render-staging");
-  await fs.mkdir(staleStagingDir);
-  await fs.writeFile(path.join(staleStagingDir, "frame-0001.png"), FRAME_PNG_1x1);
-
+  await fs.writeFile(path.join(stagingDir, "frame-0001.png"), "stale fixture");
   const status = {
     state: "completed",
     pid: 1234,
@@ -506,9 +503,14 @@ test("render succeeds when pre-existing .render-staging dir is present (retry sc
     await withFakeFFmpeg(async (manager) => {
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.sourceFrames, 3);
 
-      const stagingExists = await fs.stat(staleStagingDir).then(() => true, () => false);
-      assert.equal(stagingExists, false, "staging directory should be cleaned up after render");
+      const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(finalStatus.state, "rendered");
+
+      const stagingExists = await fs.stat(stagingDir).then(() => true, () => false);
+      assert.equal(stagingExists, false, "staging directory should be cleaned up");
     }, "success-require-contiguous-input");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
