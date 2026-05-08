@@ -246,6 +246,12 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.equal(summary.sourceFrames, 3);
+      const ffmpegArgs = JSON.parse(
+        await fs.readFile(path.join(manager.outputDir, "ffmpeg-args.json"), "utf8")
+      );
+      const inputPattern = ffmpegArgs[ffmpegArgs.indexOf("-i") + 1];
+      assert.equal(path.basename(inputPattern), "frame-%04d.png");
+      assert.equal(path.basename(path.dirname(inputPattern)), ".render-staging");
 
       const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(finalStatus.state, "rendered");
@@ -253,7 +259,7 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
       const stagingDir = path.join(framesDir, ".render-staging");
       const stagingExists = await fs.stat(stagingDir).then(() => true, () => false);
       assert.equal(stagingExists, false, "staging directory should be cleaned up");
-    }, "success");
+    }, "success-require-contiguous-input");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
