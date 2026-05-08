@@ -316,6 +316,28 @@ test("render succeeds when status.json is initially missing", async () => {
   }
 });
 
+test("render leaves no .tmp status file after success", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+
+      const statusJson = await fs.readFile(path.join(runDir, "status.json"), "utf8");
+      const status = JSON.parse(statusJson);
+      assert.equal(status.state, "rendered");
+
+      const entries = await fs.readdir(runDir);
+      assert.deepEqual(
+        entries.filter((entry) => entry.startsWith("status.json.tmp-")),
+        []
+      );
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render succeeds with sparse (gapped) frame numbering", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-sparse-"));
   const framesDir = path.join(runDir, "frames");
