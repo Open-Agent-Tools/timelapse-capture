@@ -83,6 +83,36 @@ test('source does not use empty promise catch cleanup handlers', () => {
   }
 });
 
+test('source does not use comment-only catch blocks', () => {
+  const sources = [
+    'src/timelapse-capture.mjs',
+    'src/doctor.mjs',
+  ];
+  const commentOnlyCatch =
+    /catch\s*\{\s*(?:(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))\s*)+\}/;
+  const rejectedExamples = [
+    'catch { /* ignore */ }',
+    'catch {\n  // best effort\n}',
+  ];
+  const allowedExamples = [
+    'catch { return null; }',
+    'catch (error) { console.error(error); }',
+  ];
+
+  for (const example of rejectedExamples) {
+    assert.match(example, commentOnlyCatch, `${example} must be rejected`);
+  }
+
+  for (const example of allowedExamples) {
+    assert.doesNotMatch(example, commentOnlyCatch, `${example} must remain allowed`);
+  }
+
+  for (const source of sources) {
+    const raw = readFileSync(resolve(REPO_ROOT, source), 'utf8');
+    assert.doesNotMatch(raw, commentOnlyCatch, `${source} must not contain comment-only catch blocks`);
+  }
+});
+
 test('canonical CLI entrypoint decision is documented and wired', () => {
   const decisionPath = resolve(REPO_ROOT, 'docs/decisions/001-canonical-cli-entrypoint.md');
   const decision = readFileSync(decisionPath, 'utf8');

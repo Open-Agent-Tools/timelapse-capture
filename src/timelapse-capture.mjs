@@ -35,6 +35,7 @@ export function migrateLegacyState(state) {
 const SIMULATION_FRAME_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAC0lEQVR4nGNgYAAAAAIAAdde3rAAAAAElFTkSuQmCA==";
 const SIMULATION_FRAME_PNG = Buffer.from(SIMULATION_FRAME_PNG_BASE64, "base64");
+const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set(["ENOENT", "ENOTEMPTY", "EEXIST"]);
 
 export class ParseError extends Error {
   constructor(code, message) {
@@ -460,6 +461,45 @@ async function removeIfExists(file) {
 
 async function removeDirIfExists(dir) {
   await fsp.rm(dir, { recursive: true, force: true });
+}
+
+function isBenignEmptyDirRemovalError(error) {
+  return BENIGN_EMPTY_DIR_REMOVAL_CODES.has(error?.code);
+}
+
+function formatFsError(action, target, error) {
+  const code = error?.code ? `${error.code}: ` : "";
+  return `${action} ${target}: ${code}${error.message}`;
+}
+
+function removeEmptyDirSync(dir) {
+  try {
+    fs.rmdirSync(dir);
+    return { success: true };
+  } catch (error) {
+    if (isBenignEmptyDirRemovalError(error)) {
+      return { success: true, ignored: error.code };
+    }
+    return {
+      success: false,
+      error: formatFsError("Failed to remove frames directory", dir, error)
+    };
+  }
+}
+
+async function removeEmptyDir(dir) {
+  try {
+    await fsp.rmdir(dir);
+    return { success: true };
+  } catch (error) {
+    if (isBenignEmptyDirRemovalError(error)) {
+      return { success: true, ignored: error.code };
+    }
+    return {
+      success: false,
+      error: formatFsError("Failed to remove frames directory", dir, error)
+    };
+  }
 }
 
 async function reduceDir(dir, fn, init) {
@@ -1162,10 +1202,9 @@ export function cleanupFrames(framesDir) {
     }
   }
   if (files.length === removed && removed > 0) {
-    try {
-      fs.rmdirSync(framesDir);
-    } catch {
-      /* ignore */
+    const removeResult = removeEmptyDirSync(framesDir);
+    if (!removeResult.success) {
+      return { success: false, removed, error: removeResult.error };
     }
   }
   return { success: true, removed };
@@ -1442,10 +1481,9 @@ export async function commandCleanup({ runDir, options = {} }) {
     const latestPng = path.join(resolved, "latest.png");
     if (fs.existsSync(latestPng)) toDelete.push(latestPng);
     await Promise.all(toDelete.map((p) => fsp.rm(p, { force: true })));
-    try {
-      await fsp.rmdir(framesDir);
-    } catch {
-      /* not empty */
+    const removeResult = await removeEmptyDir(framesDir);
+    if (!removeResult.success) {
+      throw new Error(removeResult.error);
     }
     return { message: "Raw frames and latest.png cleaned up", removed: frameFiles.length };
   }
@@ -1497,10 +1535,9 @@ export async function commandCleanup({ runDir, options = {} }) {
 
   const toDelete = frameFiles.map((f) => path.join(framesDir, f));
   await Promise.all(toDelete.map((p) => fsp.rm(p, { force: true })));
-  try {
-    await fsp.rmdir(framesDir);
-  } catch {
-    /* not empty */
+  const removeResult = await removeEmptyDir(framesDir);
+  if (!removeResult.success) {
+    throw new Error(removeResult.error);
   }
   const result = { message: "Cleanup complete", removed: frameFiles.length };
   await writeCleanupSummary(resolved, {
