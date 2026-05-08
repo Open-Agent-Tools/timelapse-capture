@@ -73,7 +73,7 @@ test("renderFrames includes summary write failures in render failure diagnostics
     const result = renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
     assert.equal(result.success, false);
     assert.match(result.error, /ffmpeg failed/);
-    assert.match(result.error, /failed to update summary: summary volume is read-only/);
+    assert.match(result.error, /failed to update render summary: summary volume is read-only/);
   } finally {
     fs.writeFileSync = originalWriteFileSync;
     await fsp.rm(runDir, { recursive: true, force: true });
