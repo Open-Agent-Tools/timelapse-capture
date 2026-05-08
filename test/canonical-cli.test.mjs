@@ -147,6 +147,34 @@ test("peek --latest --json returns the latest captured frame", async () => {
   }
 });
 
+test("peek --near --json returns the frame closest to an ISO timestamp", async () => {
+  const { runDir, captured } = await makeRun({ frameCount: 4 });
+  try {
+    const nearTimestamp = new Date(
+      new Date(captured[1].capturedAt).getTime() + 25
+    ).toISOString();
+    const result = runCli(["peek", runDir, "--near", nearTimestamp, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.exists, true);
+    assert.equal(payload.frame.index, captured[1].index);
+    assert.equal(payload.framePath, path.join(runDir, captured[1].path));
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("peek --near rejects invalid timestamps", async () => {
+  const { runDir } = await makeRun();
+  try {
+    const result = runCli(["peek", runDir, "--near", "not-a-date"]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Invalid ISO timestamp for --near/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render writes rendering then rendered states with fake ffmpeg", async () => {
   const { runDir } = await makeRun();
   try {

@@ -313,7 +313,7 @@ function parseValueFlag(flag, value) {
     }
     return parsed.ms;
   }
-  if (flag === "index" || flag === "near") {
+  if (flag === "index") {
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
       throw new ParseError(
@@ -322,6 +322,17 @@ function parseValueFlag(flag, value) {
       );
     }
     return parsed;
+  }
+  if (flag === "near") {
+    const parsed = Date.parse(value);
+    if (
+      typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T/.test(value) ||
+      !Number.isFinite(parsed)
+    ) {
+      throw new ParseError("E_BAD_TIMESTAMP", `Invalid ISO timestamp for --near: ${value}`);
+    }
+    return new Date(parsed).toISOString();
   }
   return value;
 }
@@ -952,6 +963,49 @@ async function listFrameFiles(runDir) {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+async function readCapturedFrameRecords(runDir, frameNames) {
+  const frameNameSet = new Set(frameNames);
+  const manifestPath = path.join(runDir, "manifest.jsonl");
+  const manifest = await fsp.readFile(manifestPath, "utf8").catch(() => "");
+  const records = [];
+
+  for (const line of manifest.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const capturedAtMs = Date.parse(record?.capturedAt);
+    const name = path.basename(record?.path || "");
+    if (
+      record?.status === "captured" &&
+      Number.isFinite(capturedAtMs) &&
+      frameNameSet.has(name)
+    ) {
+      records.push({ ...record, name, capturedAtMs });
+    }
+  }
+
+  return records;
+}
+
+async function findNearestFrameName(runDir, names, nearIso) {
+  const targetMs = Date.parse(nearIso);
+  const records = await readCapturedFrameRecords(runDir, names);
+
+  if (!records.length) {
+    throw new Error("No captured frame timestamps are available for --near.");
+  }
+
+  return records.reduce((nearest, record) => {
+    const nearestDelta = Math.abs(nearest.capturedAtMs - targetMs);
+    const recordDelta = Math.abs(record.capturedAtMs - targetMs);
+    return recordDelta < nearestDelta ? record : nearest;
+  }).name;
+}
+
 export async function commandPeek({ runDir, options = {} }) {
   const resolved = path.resolve(runDir);
   const names = await listFrameFiles(resolved);
@@ -973,8 +1027,9 @@ export async function commandPeek({ runDir, options = {} }) {
   let index = names.length - 1;
   if (typeof options.index === "number") {
     index = Math.min(Math.max(options.index, 0), names.length - 1);
-  } else if (typeof options.near === "number") {
-    index = Math.min(Math.max(options.near, 0), names.length - 1);
+  } else if (typeof options.near === "string") {
+    const nearestName = await findNearestFrameName(resolved, names, options.near);
+    index = names.indexOf(nearestName);
   } else if (options.latest) {
     index = names.length - 1;
   }
@@ -1470,7 +1525,7 @@ function printHelp() {
 Usage:
   timelapse-capture start <url> [--duration <2h>] [--interval <5s>] [--out <dir>]
   timelapse-capture status <run-dir> [--json]
-  timelapse-capture peek <run-dir> [--latest | --index <n> | --near <n>] [--json]
+  timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
   timelapse-capture render <run-dir> [--output <file>] [--json]
   timelapse-capture cleanup <run-dir> [--force]
   timelapse-capture doctor [--json]
