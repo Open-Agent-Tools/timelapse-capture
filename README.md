@@ -103,24 +103,24 @@ timelapse-capture start http://localhost:3000 \
   --viewport 1440x900
 ```
 
-The command prints a `run-dir`. Save that path for the next commands. The default location is under `./runs/`.
+The command prints a `run-dir`. Save that path for the next commands. The default location is under `./timelapse-runs/`.
 
 3. Check capture progress:
 
 ```bash
-timelapse-capture status ./runs/localhost-3000-1760000000000
+timelapse-capture status ./timelapse-runs/localhost-3000-20260507-121530
 ```
 
 Use JSON if you need structured fields:
 
 ```bash
-timelapse-capture status ./runs/localhost-3000-1760000000000 --json
+timelapse-capture status ./timelapse-runs/localhost-3000-20260507-121530 --json
 ```
 
 4. Peek at one frame for inspection:
 
 ```bash
-timelapse-capture peek ./runs/localhost-3000-1760000000000 --latest
+timelapse-capture peek ./timelapse-runs/localhost-3000-20260507-121530 --latest
 ```
 
 `peek` returns a single image path. Open or inspect that one image; do not load the whole `frames/` directory into an agent context.
@@ -128,13 +128,13 @@ timelapse-capture peek ./runs/localhost-3000-1760000000000 --latest
 5. Render the MP4:
 
 ```bash
-timelapse-capture render ./runs/localhost-3000-1760000000000
+timelapse-capture render ./timelapse-runs/localhost-3000-20260507-121530
 ```
 
 6. Inspect the video:
 
 ```bash
-open ./runs/localhost-3000-1760000000000/output.mp4
+open ./timelapse-runs/localhost-3000-20260507-121530/output.mp4
 ```
 
 On Linux, use your desktop file opener or video player instead of `open`.
@@ -278,7 +278,7 @@ timelapse-capture cleanup ./timelapse-runs/example-com-20260507-121530 --all --f
 A run directory contains files like:
 
 ```text
-runs/<slug>-<timestamp>/
+timelapse-runs/<slug>-<timestamp>/
   config.json
   job.json
   manifest.json
