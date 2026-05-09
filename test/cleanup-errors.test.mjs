@@ -12,11 +12,13 @@ const FRAME_PNG_1x1 = Buffer.from(
   "hex"
 );
 
-async function makeRun() {
+async function makeRun({ frameCount = 1 } = {}) {
   const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-cleanup-errors-"));
   const framesDir = path.join(runDir, "frames");
   await fsp.mkdir(framesDir);
-  await fsp.writeFile(path.join(framesDir, "frame-000001.png"), FRAME_PNG_1x1);
+  for (let index = 1; index <= frameCount; index += 1) {
+    await fsp.writeFile(path.join(framesDir, `frame-${String(index).padStart(6, "0")}.png`), FRAME_PNG_1x1);
+  }
   await fsp.writeFile(path.join(runDir, "output.mp4"), "placeholder");
   return { runDir, framesDir };
 }
@@ -94,8 +96,8 @@ test("cleanupFrames removes render staging when no image files exist", async () 
   }
 });
 
-test("cleanup --keep-samples reports one retained frame when only one frame exists", async () => {
-  const { runDir } = await makeRun();
+test("cleanup --keep-samples reports one retained frame for one-frame runs", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 1 });
   try {
     const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
     assert.equal(result.removed, 0);
@@ -104,17 +106,16 @@ test("cleanup --keep-samples reports one retained frame when only one frame exis
     const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
     assert.equal(summary.cleanup.removed, 0);
     assert.equal(summary.cleanup.retained, 1);
+    assert.equal(summary.cleanup.success, true);
+    assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png"]);
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
 
 test("cleanup --keep-samples keeps distinct first and last frames", async () => {
-  const { runDir, framesDir } = await makeRun();
+  const { runDir, framesDir } = await makeRun({ frameCount: 3 });
   try {
-    await fsp.writeFile(path.join(framesDir, "frame-000002.png"), FRAME_PNG_1x1);
-    await fsp.writeFile(path.join(framesDir, "frame-000003.png"), FRAME_PNG_1x1);
-
     const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
     assert.equal(result.removed, 1);
     assert.equal(result.retained, 2);
@@ -123,6 +124,7 @@ test("cleanup --keep-samples keeps distinct first and last frames", async () => 
     const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
     assert.equal(summary.cleanup.removed, 1);
     assert.equal(summary.cleanup.retained, 2);
+    assert.equal(summary.cleanup.success, true);
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
