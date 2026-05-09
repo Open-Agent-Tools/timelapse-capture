@@ -113,6 +113,38 @@ test("status --json reports canonical state for a completed run", async () => {
   }
 });
 
+test("status --json round-trips status.json with canonical frames object", async () => {
+  const { runDir, captured } = await makeRun({ frameCount: 3, state: "completed" });
+  try {
+    const statusPath = path.join(runDir, "status.json");
+    const status = {
+      state: "completed",
+      pid: 1234,
+      startedAt: captured[0]?.capturedAt ?? new Date().toISOString(),
+      updatedAt: captured.at(-1)?.capturedAt ?? new Date().toISOString(),
+      frames: {
+        captured: 3,
+        failed: 0,
+        totalExpected: 3
+      },
+      latestFrame: captured.at(-1) ?? null
+    };
+
+    await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
+
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.frames.captured, 3);
+    assert.equal(payload.status.frames.failed, 0);
+    assert.equal(payload.status.frames.totalExpected, 3);
+    assert.equal(Object.hasOwn(payload.status, "framesCaptured"), false);
+    assert.equal(Object.hasOwn(payload.status, "frameCount"), false);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("start writes config.json with canonical field names only", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-config-"));
   try {
