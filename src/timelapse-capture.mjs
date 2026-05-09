@@ -692,6 +692,29 @@ async function writeFakeFrame(runDir, index) {
   return filename;
 }
 
+async function recordCapturedFrame({ state, runDir, manifestPath, index, scheduledAt, filename, url, title }) {
+  const capturedAt = nowIso();
+  const record = { index, scheduledAt, capturedAt, path: filename, status: "captured", url, title: title ?? null, viewport: state.viewport, error: null };
+  state.frameCount += 1;
+  state.latestFrame = filename;
+  state.latestFrameAt = capturedAt;
+  state.latestFrameTimestamp = capturedAt;
+  state.lastUpdatedAt = capturedAt;
+  state.state = "running";
+  await appendJsonLine(manifestPath, record);
+  await writeJsonAtomic(path.join(runDir, "latest-frame.json"), record);
+  await fsp.copyFile(filename, path.join(runDir, "latest.png"));
+  await writeStatus(runDir, state);
+}
+
+async function recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url, title, error }) {
+  state.failedFrameCount += 1;
+  state.lastUpdatedAt = nowIso();
+  const record = { index, scheduledAt, capturedAt: null, path: null, status: "failed", url, title: title ?? null, viewport: state.viewport, error };
+  await appendJsonLine(manifestPath, record);
+  await writeStatus(runDir, state);
+}
+
 async function captureWithPlaywright({ runDir, state, framesDir, manifestPath }) {
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ headless: !state.headed });
@@ -711,46 +734,11 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
       try {
         await page.screenshot({ path: tempPath, fullPage: false });
         await fsp.rename(tempPath, filename);
-        const capturedAt = nowIso();
         const title = await safePageTitle(page);
-        const record = {
-          index,
-          scheduledAt,
-          capturedAt,
-          path: filename,
-          status: "captured",
-          url: page.url(),
-          title,
-          viewport: state.viewport,
-          error: null
-        };
-        state.frameCount += 1;
-        state.latestFrame = filename;
-        state.latestFrameAt = capturedAt;
-        state.latestFrameTimestamp = capturedAt;
-        state.lastUpdatedAt = capturedAt;
-        state.state = "running";
-        await appendJsonLine(manifestPath, record);
-        await writeJsonAtomic(path.join(runDir, "latest-frame.json"), record);
-        await fsp.copyFile(filename, path.join(runDir, "latest.png"));
-        await writeStatus(runDir, state);
+        await recordCapturedFrame({ state, runDir, manifestPath, index, scheduledAt, filename, url: page.url(), title });
       } catch (error) {
         await removeIfExists(tempPath);
-        state.failedFrameCount += 1;
-        state.lastUpdatedAt = nowIso();
-        const record = {
-          index,
-          scheduledAt,
-          capturedAt: null,
-          path: null,
-          status: "failed",
-          url: page?.url?.() ?? state.target,
-          title: await safePageTitle(page),
-          viewport: state.viewport,
-          error: error?.message || String(error)
-        };
-        await appendJsonLine(manifestPath, record);
-        await writeStatus(runDir, state);
+        await recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url: page?.url?.() ?? state.target, title: await safePageTitle(page), error: error?.message || String(error) });
       }
     }
   } finally {
@@ -772,43 +760,11 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
   for (let index = 1; index <= state.targetFrames; index += 1) {
     const scheduledAt = new Date(startedAtMs + (index - 1) * (state.intervalMs || 0)).toISOString();
     if (failIndex && index === failIndex) {
-      state.failedFrameCount += 1;
-      state.lastUpdatedAt = nowIso();
-      await appendJsonLine(manifestPath, {
-        index,
-        scheduledAt,
-        capturedAt: null,
-        path: null,
-        status: "failed",
-        url: state.target,
-        viewport: state.viewport,
-        error: "simulated failure"
-      });
-      await writeStatus(runDir, state);
+      await recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url: state.target, error: "simulated failure" });
       continue;
     }
     const filename = await writeFakeFrame(runDir, index);
-    const capturedAt = nowIso();
-    const record = {
-      index,
-      scheduledAt,
-      capturedAt,
-      path: filename,
-      status: "captured",
-      url: state.target,
-      viewport: state.viewport,
-      error: null
-    };
-    state.frameCount += 1;
-    state.latestFrame = filename;
-    state.latestFrameAt = capturedAt;
-    state.latestFrameTimestamp = capturedAt;
-    state.lastUpdatedAt = capturedAt;
-    state.state = "running";
-    await appendJsonLine(manifestPath, record);
-    await writeJsonAtomic(path.join(runDir, "latest-frame.json"), record);
-    await fsp.copyFile(filename, path.join(runDir, "latest.png"));
-    await writeStatus(runDir, state);
+    await recordCapturedFrame({ state, runDir, manifestPath, index, scheduledAt, filename, url: state.target });
   }
 }
 
