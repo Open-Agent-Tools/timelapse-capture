@@ -146,6 +146,62 @@ test("start writes config.json with canonical field names only", async () => {
   }
 });
 
+test("start records simulated captured and failed frames with canonical fields", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-records-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "3s",
+        "--interval",
+        "1s",
+        "--out",
+        runDir,
+        "--json"
+      ],
+      {
+        TIMELAPSE_SIMULATE_FRAMES: "3",
+        TIMELAPSE_SIMULATE_FRAME_FAILURE: "1"
+      }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const manifestLines = (await fs.readFile(path.join(runDir, "manifest.jsonl"), "utf8"))
+      .trim()
+      .split("\n");
+    const records = manifestLines.map((line) => JSON.parse(line));
+    assert.equal(records.length, 3);
+
+    const captured = records.filter((record) => record.status === "captured");
+    assert.equal(captured.length, 2);
+    assert.equal(captured[0].url, "http://example.test/");
+    assert.equal(captured[0].title, null);
+    assert.deepEqual(captured[0].viewport, { width: 1280, height: 720 });
+    assert.equal(captured[0].error, null);
+
+    const failed = records.find((record) => record.status === "failed");
+    assert.equal(failed.index, 2);
+    assert.equal(failed.capturedAt, null);
+    assert.equal(failed.path, null);
+    assert.equal(failed.url, "http://example.test/");
+    assert.equal(failed.title, null);
+    assert.deepEqual(failed.viewport, { width: 1280, height: 720 });
+    assert.equal(failed.error, "simulated failure");
+
+    const latestFrame = JSON.parse(await fs.readFile(path.join(runDir, "latest-frame.json"), "utf8"));
+    assert.equal(latestFrame.index, 3);
+    assert.equal(latestFrame.title, null);
+
+    const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+    assert.equal(status.frames.captured, 2);
+    assert.equal(status.frames.failed, 1);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("status --json reports exact frame disk usage for nested directories", async () => {
   const { runDir } = await makeRun({ frameCount: 0, state: "completed" });
   try {
@@ -509,7 +565,7 @@ test("render replaces stale sparse-frame staging before restaging", async () => 
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.sourceFrames, 3);
+      assert.equal(summary.frameCount, 3);
 
       const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(finalStatus.state, "rendered");
