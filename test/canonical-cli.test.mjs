@@ -113,6 +113,39 @@ test("status --json reports canonical state for a completed run", async () => {
   }
 });
 
+test("status --json round-trips new-format status.json with frames sub-object", async () => {
+  const { runDir, status } = await makeRun({ state: "completed" });
+  try {
+    const newFormatStatus = {
+      state: "completed",
+      pid: 1234,
+      startedAt: status.startedAt,
+      updatedAt: status.updatedAt,
+      frames: {
+        captured: 3,
+        failed: 0,
+        totalExpected: 3
+      },
+      latestFrame: status.latestFrame
+    };
+    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(newFormatStatus, null, 2));
+
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.frames.captured, 3);
+    assert.equal(payload.status.frames.failed, 0);
+    assert.equal(payload.status.frames.totalExpected, 3);
+    assert.equal(Object.hasOwn(payload.status, "frameCount"), false);
+    assert.equal(Object.hasOwn(payload.status, "framesCaptured"), false);
+    assert.equal(Object.hasOwn(payload.status, "failedFrameCount"), false);
+    assert.equal(Object.hasOwn(payload.status, "framesFailed"), false);
+    assert.equal(Object.hasOwn(payload.status, "expectedFrames"), false);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("start writes config.json with canonical field names only", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-config-"));
   try {
@@ -509,7 +542,7 @@ test("render replaces stale sparse-frame staging before restaging", async () => 
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.sourceFrames, 3);
+      assert.equal(summary.frameCount, 3);
 
       const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(finalStatus.state, "rendered");
