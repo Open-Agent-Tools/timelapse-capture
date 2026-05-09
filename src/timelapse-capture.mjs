@@ -1078,7 +1078,12 @@ export async function commandPeek({ runDir, options = {} }) {
   } else if (typeof options.near === "string") {
     const nearestName = await findNearestFrameName(resolved, names, options.near);
     const nearIndex = names.indexOf(nearestName);
-    if (nearIndex !== -1) index = nearIndex;
+    if (nearIndex === -1) {
+      throw new Error(
+        `--near selected frame "${nearestName}" is not present in the frames directory.`
+      );
+    }
+    index = nearIndex;
   } else if (options.latest) {
     index = names.length - 1;
   }
