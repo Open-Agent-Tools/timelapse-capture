@@ -525,7 +525,10 @@ async function removeEmptyDir(dir) {
 
 async function reduceDir(dir, fn, init) {
   let acc = init;
-  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch((error) => {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  });
   for (const entry of entries) {
     const itemPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -1004,7 +1007,10 @@ async function runStatusCli(parsed) {
 
 async function listFrameFiles(runDir) {
   const framesDir = path.join(runDir, "frames");
-  const entries = await fsp.readdir(framesDir, { withFileTypes: true }).catch(() => []);
+  const entries = await fsp.readdir(framesDir, { withFileTypes: true }).catch((error) => {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  });
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".png"))
     .map((entry) => entry.name)
@@ -1014,7 +1020,10 @@ async function listFrameFiles(runDir) {
 async function readCapturedFrameRecords(runDir, frameNames) {
   const frameNameSet = new Set(frameNames);
   const manifestPath = path.join(runDir, "manifest.jsonl");
-  const manifest = await fsp.readFile(manifestPath, "utf8").catch(() => "");
+  const manifest = await fsp.readFile(manifestPath, "utf8").catch((error) => {
+    if (error?.code === "ENOENT") return "";
+    throw error;
+  });
   const records = [];
 
   for (const line of manifest.split(/\r?\n/)) {
@@ -1144,8 +1153,9 @@ function countFrameFiles(framesDir) {
 function fileSize(filePath) {
   try {
     return fs.statSync(filePath).size;
-  } catch {
-    return 0;
+  } catch (error) {
+    if (error?.code === "ENOENT") return 0;
+    throw error;
   }
 }
 
@@ -1163,7 +1173,12 @@ export function validateMP4(outputPath) {
     return result;
   }
   result.exists = true;
-  result.bytes = fileSize(outputPath);
+  try {
+    result.bytes = fileSize(outputPath);
+  } catch (error) {
+    result.error = `Failed to stat output file: ${error.message}`;
+    return result;
+  }
   if (result.bytes === 0) {
     result.error = "Output file is empty";
     return result;
