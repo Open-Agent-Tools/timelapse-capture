@@ -141,3 +141,28 @@ test("validateMP4 surfaces non-ENOENT stat errors in validation output", async (
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
+
+test("validateMP4 surfaces ENOENT stat errors instead of reporting an empty output file", async () => {
+  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-status-vocab-mp4-enoent-"));
+  const outputPath = path.join(runDir, "output.mp4");
+  const originalStatSync = nodeFs.statSync;
+
+  try {
+    await fsp.writeFile(outputPath, Buffer.from("not a video"));
+    nodeFs.statSync = (target) => {
+      if (target === outputPath) {
+        const error = new Error("output file vanished before stat");
+        error.code = "ENOENT";
+        throw error;
+      }
+      return originalStatSync(target);
+    };
+
+    const result = validateMP4(outputPath);
+    assert.equal(result.exists, true);
+    assert.equal(result.error, "Failed to stat output file: output file vanished before stat");
+  } finally {
+    nodeFs.statSync = originalStatSync;
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});

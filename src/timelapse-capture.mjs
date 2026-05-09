@@ -1154,7 +1154,6 @@ function fileSize(filePath) {
   try {
     return fs.statSync(filePath).size;
   } catch (error) {
-    if (error?.code === "ENOENT") return 0;
     throw error;
   }
 }
