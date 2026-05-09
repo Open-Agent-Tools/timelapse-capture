@@ -43,3 +43,15 @@ test("computeWaitSchedule clamps non-positive maxWaitMs to 1ms", () => {
   assert.equal(schedule.every((value) => value === 1), true);
   assert.equal(schedule.reduce((sum, value) => sum + value, 0), 3);
 });
+
+test("computeWaitSchedule returns no chunks when target equals now", () => {
+  const now = () => 1_000;
+  const schedule = __test__.computeWaitSchedule(1_000, { now, maxWaitMs: 250 });
+  assert.deepEqual(schedule, []);
+});
+
+test("computeWaitSchedule produces equal-sized chunks when delay is exact multiple of maxWaitMs", () => {
+  const now = () => 1_000;
+  const schedule = __test__.computeWaitSchedule(1_500, { now, maxWaitMs: 250 });
+  assert.deepEqual(schedule, [250, 250]);
+});
