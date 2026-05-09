@@ -572,10 +572,26 @@ async function safePageTitle(page) {
   }
 }
 
-async function sleepUntil(timestampMs) {
-  const delay = timestampMs - Date.now();
-  if (delay > 0) {
-    await new Promise((resolve) => setTimeout(resolve, delay));
+function computeWaitSchedule(targetTimestampMs, { now = Date.now, maxWaitMs = 1000 } = {}) {
+  const delay = Math.max(0, Math.round(targetTimestampMs - now()));
+  if (delay <= 0) return [];
+  const schedule = [];
+  let remaining = delay;
+  while (remaining > 0) {
+    const chunk = Math.min(remaining, maxWaitMs);
+    schedule.push(chunk);
+    remaining -= chunk;
+  }
+  return schedule;
+}
+
+async function waitUntilFrameTime(
+  targetTimestampMs,
+  { now = Date.now, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), maxWaitMs = 1000 } = {}
+) {
+  const schedule = computeWaitSchedule(targetTimestampMs, { now, maxWaitMs });
+  for (const chunkMs of schedule) {
+    await wait(chunkMs);
   }
 }
 
@@ -729,7 +745,9 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
     const startedAtMs = new Date(state.startedAt).getTime();
     for (let index = 1; index <= state.targetFrames; index += 1) {
       const scheduledAtMs = startedAtMs + Math.round((index - 1) * (state.intervalMs || 0));
-      await sleepUntil(scheduledAtMs);
+      await waitUntilFrameTime(scheduledAtMs, {
+        maxWaitMs: Math.min(1_000, state.intervalMs || 1_000)
+      });
 
       const filename = path.join(framesDir, frameName(index));
       const tempPath = path.join(framesDir, `.tmp-${process.pid}-${frameName(index)}`);
@@ -1640,4 +1658,13 @@ Usage:
 }
 
 // Compatibility re-exports kept lightweight for tests.
-export const __test__ = { SIMULATION_FRAME_PNG, frameName, slugify, formatBytes, formatDuration, writeJsonSync };
+export const __test__ = {
+  SIMULATION_FRAME_PNG,
+  frameName,
+  slugify,
+  formatBytes,
+  formatDuration,
+  writeJsonSync,
+  computeWaitSchedule,
+  waitUntilFrameTime
+};
