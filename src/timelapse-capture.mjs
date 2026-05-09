@@ -575,10 +575,11 @@ async function safePageTitle(page) {
 function computeWaitSchedule(targetTimestampMs, { now = Date.now, maxWaitMs = 1000 } = {}) {
   const delay = Math.max(0, Math.round(targetTimestampMs - now()));
   if (delay <= 0) return [];
+  const clampedMaxWaitMs = Math.max(1, Math.floor(maxWaitMs));
   const schedule = [];
   let remaining = delay;
   while (remaining > 0) {
-    const chunk = Math.min(remaining, maxWaitMs);
+    const chunk = Math.min(remaining, clampedMaxWaitMs);
     schedule.push(chunk);
     remaining -= chunk;
   }
