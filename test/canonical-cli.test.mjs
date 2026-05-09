@@ -509,7 +509,7 @@ test("render replaces stale sparse-frame staging before restaging", async () => 
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.sourceFrames, 3);
+      assert.equal(summary.frameCount, 3);
 
       const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(finalStatus.state, "rendered");
