@@ -476,6 +476,33 @@ async function readManifest(file) {
   return text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
 }
 
+async function readDirIfExists(dir, options) {
+  try {
+    return await fsp.readdir(dir, options);
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function readTextIfExists(file) {
+  try {
+    return await fsp.readFile(file, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return "";
+    throw error;
+  }
+}
+
+async function statIfExists(file) {
+  try {
+    return await fsp.stat(file);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 async function removeIfExists(file) {
   await fsp.rm(file, { force: true });
 }
@@ -525,7 +552,7 @@ async function removeEmptyDir(dir) {
 
 async function reduceDir(dir, fn, init) {
   let acc = init;
-  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+  const entries = await readDirIfExists(dir, { withFileTypes: true });
   for (const entry of entries) {
     const itemPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -1048,7 +1075,7 @@ async function runStatusCli(parsed) {
 
 async function listFrameFiles(runDir) {
   const framesDir = path.join(runDir, "frames");
-  const entries = await fsp.readdir(framesDir, { withFileTypes: true }).catch(() => []);
+  const entries = await readDirIfExists(framesDir, { withFileTypes: true });
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".png"))
     .map((entry) => entry.name)
@@ -1058,7 +1085,7 @@ async function listFrameFiles(runDir) {
 async function readCapturedFrameRecords(runDir, frameNames) {
   const frameNameSet = new Set(frameNames);
   const manifestPath = path.join(runDir, "manifest.jsonl");
-  const manifest = await fsp.readFile(manifestPath, "utf8").catch(() => "");
+  const manifest = await readTextIfExists(manifestPath);
   const records = [];
 
   for (const line of manifest.split(/\r?\n/)) {
@@ -1182,9 +1209,16 @@ function countFrameFiles(framesDir) {
 
 function fileSize(filePath) {
   try {
-    return fs.statSync(filePath).size;
-  } catch {
-    return 0;
+    return { exists: true, bytes: fs.statSync(filePath).size, error: null };
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { exists: false, bytes: 0, error: "Output file does not exist" };
+    }
+    return {
+      exists: true,
+      bytes: 0,
+      error: formatFsError("Failed to read output file size", filePath, error)
+    };
   }
 }
 
@@ -1201,8 +1235,13 @@ export function validateMP4(outputPath) {
     result.error = "Output file does not exist";
     return result;
   }
-  result.exists = true;
-  result.bytes = fileSize(outputPath);
+  const sizeResult = fileSize(outputPath);
+  result.exists = sizeResult.exists;
+  result.bytes = sizeResult.bytes;
+  if (sizeResult.error) {
+    result.error = sizeResult.error;
+    return result;
+  }
   if (result.bytes === 0) {
     result.error = "Output file is empty";
     return result;
@@ -1519,6 +1558,7 @@ export async function commandRender({ runDir, options = {} }) {
     path: result.outputPath,
     output: result.outputPath,
     frameCount: result.metadata?.frameCount,
+    sourceFrames: result.metadata?.sourceFrameCount,
     message: "Render successful"
   };
 }
@@ -1544,7 +1584,7 @@ async function writeCleanupSummary(runDir, cleanup) {
 
 export async function commandCleanup({ runDir, options = {} }) {
   const resolved = path.resolve(runDir);
-  const stat = await fsp.stat(resolved).catch(() => null);
+  const stat = await statIfExists(resolved);
   if (!stat) {
     throw new Error("Run directory not found");
   }

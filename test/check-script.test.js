@@ -113,6 +113,41 @@ test('source does not use comment-only catch blocks', () => {
   }
 });
 
+test('source does not use catch-all .catch() with default return values', () => {
+  const sources = [
+    'src/timelapse-capture.mjs',
+    'src/doctor.mjs',
+  ];
+  const catchAllDefault =
+    /\.catch\(\s*\(\s*\)\s*=>\s*(?:\[\s*\]|""|''|``|null|0)\s*\)/;
+  const rejectedExamples = [
+    '.catch(() => [])',
+    '.catch(() => "")',
+    ".catch(() => '')",
+    '.catch(() => null)',
+    '.catch(() => 0)',
+    '.catch( () => [] )',
+  ];
+  const allowedExamples = [
+    '.catch((e) => { if (e.code === "ENOENT") return []; throw e; })',
+    '.catch((error) => { throw error; })',
+    '.catch(() => { cleanup(); })',
+  ];
+
+  for (const example of rejectedExamples) {
+    assert.match(example, catchAllDefault, `${example} must be rejected`);
+  }
+
+  for (const example of allowedExamples) {
+    assert.doesNotMatch(example, catchAllDefault, `${example} must remain allowed`);
+  }
+
+  for (const source of sources) {
+    const raw = readFileSync(resolve(REPO_ROOT, source), 'utf8');
+    assert.doesNotMatch(raw, catchAllDefault, `${source} must not silently swallow errors with default return values`);
+  }
+});
+
 test('canonical CLI entrypoint decision is documented and wired', () => {
   const decisionPath = resolve(REPO_ROOT, 'docs/decisions/001-canonical-cli-entrypoint.md');
   const decision = readFileSync(decisionPath, 'utf8');
