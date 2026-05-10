@@ -24,7 +24,7 @@ test('package.json scripts target the canonical entry and run Node\'s test runne
   assert.match(pkg.scripts.check, /node --check \.\/src\/doctor\.mjs/);
   assert.match(pkg.scripts.test, /^node --test\b/);
   assert.strictEqual(pkg.scripts.typecheck, 'tsc --noEmit');
-  assert.strictEqual(pkg.scripts.ci, 'npm run check && npm test');
+  assert.strictEqual(pkg.scripts.ci, 'npm run check && npm run typecheck && npm test');
 });
 
 test('package.json installs the local TypeScript compiler used by typecheck', () => {
