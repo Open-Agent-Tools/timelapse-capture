@@ -735,7 +735,11 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
   let page;
   try {
     page = await browser.newPage({ viewport: state.viewport });
-    await page.goto(state.target, { waitUntil: state.waitUntil, timeout: 60_000 });
+    try {
+      await page.goto(state.target, { waitUntil: state.waitUntil, timeout: 60_000 });
+    } catch (error) {
+      throw new Error(`navigation failed: ${error?.message || error}`);
+    }
 
     const startedAtMs = new Date(state.startedAt).getTime();
     for (let index = 1; index <= state.targetFrames; index += 1) {
@@ -958,21 +962,23 @@ export async function commandStatus({ runDir }) {
 
   const status = await readJsonOptional(statusPath);
   if (!status) {
-    const reason = fs.existsSync(resolved)
-      ? "missing run status file"
-      : "missing run directory";
-    throw new Error(`${reason}: ${statusPath}`);
+    if (!fs.existsSync(resolved)) {
+      throw new Error(`run directory not found: ${resolved}`);
+    }
+    throw new Error(`missing run status file: ${statusPath}`);
   }
 
   const config = await readJsonOptional(configPath);
   const latestFrame = await readJsonOptional(latestFramePath);
   const framesDiskUsageBytes = await directorySize(path.join(resolved, "frames"));
+  const runDirBytes = await directorySize(resolved);
 
   const payload = buildStatusPayload({
     ...status,
     state: migrateLegacyState(status.state || inferStateFromStatus(status)),
     runDir: resolved
   });
+  payload.diskUsage = { runDirBytes, framesBytes: framesDiskUsageBytes };
 
   return {
     status: payload,
