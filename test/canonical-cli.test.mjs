@@ -758,6 +758,57 @@ test("render with contiguous frames skips staging", async () => {
   }
 });
 
+test("render refuses active capture runs without --force", async () => {
+  for (const activeState of ["starting", "running", "rendering"]) {
+    const { runDir } = await makeRun({ state: activeState });
+    try {
+      const result = runCli(["render", runDir]);
+      assert.notEqual(result.status, 0, `Expected non-zero exit for state=${activeState}`);
+      assert.match(result.stderr, /Cannot render while capture is active/);
+      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, activeState, `status.state should remain ${activeState}`);
+    } finally {
+      await fs.rm(runDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test("render --force refuses when no frames exist during active capture", async () => {
+  const { runDir } = await makeRun({ frameCount: 0, state: "running" });
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--force"], { PATH: manager.getPATHEnv() });
+      assert.notEqual(result.status, 0, result.stderr);
+      assert.match(result.stderr, /no frames/i);
+      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, "running");
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render --force during active capture preserves frames after success", async () => {
+  const { runDir } = await makeRun({ frameCount: 3, state: "running" });
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--force", "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+      const summary = JSON.parse(result.stdout);
+      assert.ok(summary.output.endsWith("output.mp4"));
+
+      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, "rendered");
+
+      const frames = await fs.readdir(path.join(runDir, "frames"));
+      const pngs = frames.filter((f) => f.endsWith(".png"));
+      assert.equal(pngs.length, 3, "frames must be preserved after forced active-state render");
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("cleanup refuses to delete frames before output.mp4 exists without --force", async () => {
   const { runDir } = await makeRun();
   try {

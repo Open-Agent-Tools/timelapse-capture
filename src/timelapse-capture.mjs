@@ -1504,6 +1504,10 @@ export async function commandRender({ runDir, options = {} }) {
   }
   const renderOptions = { ...options };
   if (options.force && ["starting", "running", "rendering"].includes(currentState)) {
+    const frames = await listFrameFiles(resolved);
+    if (frames.length === 0) {
+      throw new Error("Cannot force render: no frames present in run directory");
+    }
     renderOptions["keep-frames"] = true;
   }
   const result = renderFrames(resolved, renderOptions);
