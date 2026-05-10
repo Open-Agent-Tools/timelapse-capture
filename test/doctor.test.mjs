@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  DEFAULT_CHECKS,
   checkBinary,
   checkChromium,
   checkNode,
@@ -57,6 +58,40 @@ test("checkBinary reports missing binaries with actionable fixes", async () => {
   assert.match(result.fix, /Install FFmpeg/);
   assert.match(result.message, /ffprobe is missing from PATH/);
   assert.match(result.message, /tests and captures that require ffprobe should be skipped/);
+});
+
+test("DEFAULT_CHECKS locks the canonical doctor check order", () => {
+  assert.deepEqual(
+    DEFAULT_CHECKS.map((fn) => fn.name),
+    ["checkNode", "checkPlaywright", "checkChromium", "checkFfmpeg", "checkFfprobe"]
+  );
+});
+
+test("checkPlaywright passes when the package can be required", async () => {
+  let factoryCalls = 0;
+  let resolveCalls = 0;
+  const stub = (specifier) => {
+    if (specifier === "playwright") {
+      factoryCalls += 1;
+      return { sentinel: true };
+    }
+    throw new Error(`unexpected specifier ${specifier}`);
+  };
+  stub.resolve = (specifier) => {
+    if (specifier === "playwright") {
+      resolveCalls += 1;
+      return "/fake/playwright";
+    }
+    throw new Error(`unexpected resolve specifier ${specifier}`);
+  };
+
+  const result = await checkPlaywright({ requireFn: stub });
+
+  assert.equal(result.name, "playwright");
+  assert.equal(result.status, "pass");
+  assert.equal(result.details.resolvedPath, "/fake/playwright");
+  assert.equal(factoryCalls, 1);
+  assert.equal(resolveCalls, 1);
 });
 
 test("checkChromium reports browser close failures", async () => {

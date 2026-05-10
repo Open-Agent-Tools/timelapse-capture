@@ -164,8 +164,10 @@ export async function checkFfprobe(options) {
   return checkBinary("ffprobe", options);
 }
 
+export const DEFAULT_CHECKS = [checkNode, checkPlaywright, checkChromium, checkFfmpeg, checkFfprobe];
+
 export async function runAllChecks({ checks } = {}) {
-  const checkFns = checks || [checkNode, checkPlaywright, checkChromium, checkFfmpeg, checkFfprobe];
+  const checkFns = checks || DEFAULT_CHECKS;
   const results = [];
   for (const check of checkFns) {
     results.push(normalizeCheckResult(await check()));
