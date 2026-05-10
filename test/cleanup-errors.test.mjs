@@ -143,6 +143,27 @@ test("cleanup --frames ignores a non-empty frames directory after deleting raw f
   }
 });
 
+test("cleanup --keep-latest promotes the surviving frame to latest-retained.png", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 2 });
+  await fsp.writeFile(path.join(runDir, "output.mp4"), "placeholder");
+  try {
+    const lastFrameSrc = path.join(framesDir, "frame-000002.png");
+    const expectedBytes = await fsp.readFile(lastFrameSrc);
+
+    const result = await commandCleanup({ runDir, options: { "keep-latest": true } });
+    assert.equal(result.message, "Frames cleaned up (kept latest)");
+
+    const retainedPath = path.join(runDir, "latest-retained.png");
+    assert.ok(fs.existsSync(retainedPath), "latest-retained.png should exist");
+    const actualBytes = await fsp.readFile(retainedPath);
+    assert.deepEqual(actualBytes, expectedBytes, "latest-retained.png should match the last frame");
+
+    assert.equal(fs.existsSync(framesDir), false, "frames/ directory should be removed");
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("renderFrames includes summary write failures in render failure diagnostics", async () => {
   const { runDir } = await makeRun();
   const originalWriteFileSync = fs.writeFileSync;
