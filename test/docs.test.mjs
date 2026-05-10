@@ -35,6 +35,11 @@ test('README documents dogfood tester setup and capture workflow', async () => {
   for (const snippet of requiredSnippets) {
     assert.match(readme, new RegExp(snippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+
+  // Troubleshooting subsection for ffprobe specifically
+  assert.match(readme, /### .*ffprobe/i);
+  // Rendered artifact path is documented
+  assert.match(readme, /output\.mp4/);
 });
 
 test('skill requires doctor before capture and describes the agent workflow', async () => {
@@ -49,6 +54,13 @@ test('skill requires doctor before capture and describes the agent workflow', as
   assert.match(skill, /Run `timelapse-capture doctor` before any capture work/);
   assert.match(skill, /start .*status .*peek .*render .*report artifact paths/is);
   assert.match(skill, /README\.md/);
+
+  // Frame inspection discipline: inspect single path, not full frames dir
+  assert.match(skill, /inspect only the returned image path|Do not load the (full|whole) [`']?frames\/?[`']? directory/i);
+  // Explicit rendered MP4 path format
+  assert.match(skill, /<run-dir>\/output\.mp4/);
+  // Report artifact paths instruction
+  assert.match(skill, /report.*artifact path/i);
 });
 
 test('dogfood-protocol.md covers install checklist, all three scenarios, feedback section, and key CLI coverage', async () => {
