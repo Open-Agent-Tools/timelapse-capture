@@ -1360,14 +1360,19 @@ export function renderFrames(runDir, options = {}) {
     return result;
   }
 
+  let sourceFrameCount = 0;
+  let ffmpegCommand = ["ffmpeg"];
+
   try {
     const expectedOutputPath = path.resolve(runDir, "output.mp4");
     const framesDir = getFramesDir(runDir);
-    const frameCount = countFrameFiles(framesDir);
-    if (frameCount === 0) {
+    sourceFrameCount = countFrameFiles(framesDir);
+    if (sourceFrameCount === 0) {
       throw new RenderError("No frames found to render", "NO_FRAMES");
     }
     const outputPath = getOutputPath(runDir, options.config);
+    const ffmpegPath = options.ffmpegPath || "ffmpeg";
+    ffmpegCommand = [ffmpegPath];
     if (outputPath !== expectedOutputPath) {
       throw new RenderError(
         `Output path does not match expected path: ${expectedOutputPath}`,
@@ -1382,7 +1387,6 @@ export function renderFrames(runDir, options = {}) {
 
     const staging = stageContiguousFrames(framesDir);
     const framePattern = path.join(staging.dir, "frame-%04d.png");
-    const ffmpegPath = options.ffmpegPath || "ffmpeg";
     const ffmpegArgs = [
       "-framerate",
       String(options.framerate || 10),
@@ -1396,7 +1400,17 @@ export function renderFrames(runDir, options = {}) {
       "23",
       outputPath
     ];
-    const ffmpegCommand = [ffmpegPath, ...ffmpegArgs];
+    ffmpegCommand = [ffmpegPath, ...ffmpegArgs];
+    const renderMetadata = {
+      outputPath,
+      bytes: 0,
+      duration: null,
+      dimensions: null,
+      frameCount: sourceFrameCount,
+      sourceFrameCount,
+      ffmpegCommand,
+      timestamp: nowIso()
+    };
 
     try {
       execFileSync(ffmpegPath, ffmpegArgs, { stdio: "pipe", encoding: "utf8" });
@@ -1411,6 +1425,10 @@ export function renderFrames(runDir, options = {}) {
       throw new RenderError(`Output is not a valid MP4: ${validation.error}`, "VALIDATION_FAILED");
     }
 
+    renderMetadata.bytes = validation.bytes;
+    renderMetadata.duration = validation.duration;
+    renderMetadata.dimensions = validation.dimensions;
+
     const posterRelPath = copyPosterSync(framesDir, runDir);
 
     const existing = readSummarySync(runDir);
@@ -1420,16 +1438,7 @@ export function renderFrames(runDir, options = {}) {
       dimensions: validation.dimensions,
       ffmpegCommand,
       poster: posterRelPath,
-      render: {
-        outputPath,
-        bytes: validation.bytes,
-        duration: validation.duration,
-        dimensions: validation.dimensions,
-        frameCount,
-        sourceFrameCount: frameCount,
-        ffmpegCommand,
-        timestamp: nowIso()
-      },
+      render: renderMetadata,
       cleanup: null
     };
 
@@ -1438,14 +1447,21 @@ export function renderFrames(runDir, options = {}) {
       summary.cleanup = {
         success: cleanup.success,
         removed: cleanup.removed,
+        retained: 0,
+        reason: "post-render-cleanup",
         error: cleanup.error || null
       };
+      summary.cleanup.timestamp = nowIso();
       result.cleanupResult = cleanup;
     } else {
+      const reason = options["keep-frames"] ? "keep-frames" : "keep-all";
       summary.cleanup = {
-        success: false,
-        reason: "Frames preserved by option",
-        removed: 0
+        success: true,
+        reason,
+        removed: 0,
+        retained: sourceFrameCount,
+        error: null,
+        timestamp: nowIso()
       };
     }
 
@@ -1479,13 +1495,18 @@ export function renderFrames(runDir, options = {}) {
       lastRenderAttempt: {
         error: result.error,
         outputPath: getOutputPath(runDir, options.config),
-        frameCount: countFrameFiles(getFramesDir(runDir)),
+        frameCount: sourceFrameCount,
+        sourceFrameCount,
+        ffmpegCommand,
         timestamp: nowIso()
       },
       cleanup: {
         success: false,
         reason: "render-or-validation-failed",
-        removed: 0
+        removed: 0,
+        retained: 0,
+        error: null,
+        timestamp: nowIso()
       }
     };
     try {

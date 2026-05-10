@@ -186,3 +186,24 @@ test("renderFrames includes summary write failures in render failure diagnostics
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
+
+test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async () => {
+  const { runDir } = await makeRun({ frameCount: 1 });
+  try {
+    const result = renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
+    assert.equal(result.success, false);
+    assert.match(result.error, /ffmpeg failed/);
+
+    const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.deepEqual(summary.lastRenderAttempt.outputPath, path.join(runDir, "output.mp4"));
+    assert.equal(summary.lastRenderAttempt.sourceFrameCount, 1);
+    assert.equal(Array.isArray(summary.lastRenderAttempt.ffmpegCommand), true);
+    assert.ok(summary.lastRenderAttempt.ffmpegCommand.includes("definitely-not-ffmpeg"));
+    assert.match(summary.lastRenderAttempt.error, /ffmpeg failed/);
+    assert.equal(summary.cleanup.success, false);
+    assert.equal(summary.cleanup.reason, "render-or-validation-failed");
+    assert.equal(summary.cleanup.removed, 0);
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});

@@ -504,9 +504,48 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
       assert.ok(summary.output.endsWith("output.mp4"));
       assert.equal(summary.frameCount, 3);
 
+      const onDisk = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+      );
+      assert.equal(onDisk.render.outputPath, path.join(runDir, "output.mp4"));
+      assert.equal(onDisk.render.bytes > 0, true);
+      assert.equal(onDisk.render.duration, 10);
+      assert.deepEqual(onDisk.render.dimensions, { width: 1280, height: 720 });
+      assert.equal(onDisk.render.sourceFrameCount, 3);
+      assert.ok(Array.isArray(onDisk.render.ffmpegCommand));
+      assert.equal(onDisk.render.ffmpegCommand[0].includes("ffmpeg"), true);
+      assert.equal(onDisk.cleanup.success, true);
+      assert.equal(onDisk.cleanup.removed, 3);
+      assert.equal(onDisk.cleanup.retained, 0);
+      assert.equal(onDisk.cleanup.error, null);
+      assert.ok(typeof onDisk.cleanup.timestamp === "string");
+
       const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(status.state, "rendered");
       assert.ok(status.renderedAt);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render with --keep-frames records retained cleanup summary", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json", "--keep-frames"], {
+        PATH: manager.getPATHEnv()
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.cleanup.success, true);
+      assert.equal(summary.cleanup.removed, 0);
+      assert.equal(summary.cleanup.retained, 3);
+      assert.equal(summary.cleanup.reason, "keep-frames");
+
+      const frames = await fs.readdir(path.join(runDir, "frames"));
+      assert.equal(frames.length, 3);
     }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
