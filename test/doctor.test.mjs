@@ -8,6 +8,7 @@ import {
   checkBinary,
   checkChromium,
   checkNode,
+  checkPlaywright,
   commandDoctor,
   formatDoctorHuman,
   runAllChecks
@@ -97,13 +98,95 @@ test("runAllChecks returns summary counts and exit code", async () => {
 test("commandDoctor returns the structured agent payload", async () => {
   const result = await commandDoctor({
     checks: [
-      async () => ({ name: "node", status: "pass", message: "Node.js 25.0.0", fix: null, details: { version: "25.0.0" } })
+      async () => ({
+        name: "node",
+        status: "pass",
+        message: "Node.js 25.0.0",
+        details: { version: "25.0.0" }
+      })
     ]
   });
 
   assert.deepEqual(Object.keys(result).sort(), ["checks", "exitCode", "ok", "summary"]);
   assert.equal(result.checks[0].name, "node");
   assert.equal(result.exitCode, 0);
+  assert.equal(result.checks[0].details.version, "25.0.0");
+  assert.equal(result.checks[0].error, null);
+  assert.equal(result.checks[0].fix, null);
+});
+
+test("commandDoctor normalizes custom check payloads to the stable contract", async () => {
+  const result = await commandDoctor({
+    checks: [
+      async () => ({ name: "custom-pass", status: "pass", message: "ok" }),
+      async () => ({ name: "custom-fail", status: "fail", message: "broken", error: "broken", details: { reason: "bad" } })
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.summary.pass, 1);
+  assert.equal(result.summary.fail, 1);
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(result.checks[0], {
+    name: "custom-pass",
+    status: "pass",
+    message: "ok",
+    details: {},
+    error: null,
+    fix: null
+  });
+  assert.deepEqual(result.checks[1], {
+    name: "custom-fail",
+    status: "fail",
+    message: "broken",
+    details: { reason: "bad" },
+    error: "broken",
+    fix: null
+  });
+});
+
+test("checkPlaywright reports missing dependency with manual fix guidance", async () => {
+  const error = new Error("Cannot find module 'playwright'");
+  const calls = [];
+  const result = await checkPlaywright({
+    requireFn: Object.assign(
+      () => {
+        calls.push("require-playwright");
+        throw error;
+      },
+      {
+        resolve() {
+          calls.push("resolve-playwright");
+          throw error;
+        }
+      }
+    )
+  });
+
+  assert.equal(result.status, "fail");
+  assert.equal(result.name, "playwright");
+  assert.equal(result.error, error.message);
+  assert.equal(result.fix, "Run npm install in this project. Do not rely on doctor to install dependencies.");
+  assert.equal(calls.includes("resolve-playwright"), true);
+  assert.equal(result.message, "Playwright package cannot be imported");
+});
+
+test("checkBinary attempts only version check command for missing ffmpeg/ffprobe", async () => {
+  const execCalls = [];
+  const result = await checkBinary("ffmpeg", {
+    execFileSync(binary, args) {
+      execCalls.push({ binary, args });
+      const error = new Error("missing");
+      error.code = "ENOENT";
+      throw error;
+    }
+  });
+
+  assert.equal(result.status, "fail");
+  assert.equal(execCalls.length, 1);
+  assert.deepEqual(execCalls[0], { binary: "ffmpeg", args: ["-version"] });
+  assert.equal(result.fix, "Install FFmpeg and ensure ffmpeg is available on PATH.");
+  assert.match(result.message, /missing from PATH/);
 });
 
 test("formatDoctorHuman prints pass/fail lines with fixes", () => {
@@ -131,4 +214,20 @@ test("doctor --json emits parseable JSON and exits non-zero when a dependency is
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.ok, false);
   assert.ok(payload.checks.some((check) => check.name === "ffmpeg" && check.status === "fail"));
+  assert.equal(result.stderr, "");
+  assert.equal(payload.exitCode, result.status);
+});
+
+test("doctor without --json emits human-readable output and summary", () => {
+  const result = spawnSync(process.execPath, [CLI, "doctor"], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: "" }
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /\[PASS\] node:/);
+  assert.match(result.stdout, /\[FAIL\]/);
+  assert.match(result.stdout, /summary: \d+ passed, \d+ failed, \d+ total/);
+  assert.equal(result.stderr, "");
+  assert.notEqual(result.stdout.trim()[0], "{");
 });
