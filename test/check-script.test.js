@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { existsSync, readFileSync } = require('node:fs');
+const { existsSync, readFileSync, statSync } = require('node:fs');
 const { resolve } = require('node:path');
 
 const REPO_ROOT = resolve(__dirname, '..');
@@ -22,9 +22,17 @@ test('package.json scripts target the canonical entry and run Node\'s test runne
   assert.strictEqual(pkg.scripts.start, `node ${CANONICAL_BIN}`);
   assert.match(pkg.scripts.check, /node --check \.\/src\/timelapse-capture\.mjs/);
   assert.match(pkg.scripts.check, /node --check \.\/src\/doctor\.mjs/);
+  assert.strictEqual(pkg.scripts['check:local'], 'bash ./scripts/local-check.sh');
   assert.match(pkg.scripts.test, /^node --test\b/);
   assert.strictEqual(pkg.scripts.typecheck, 'tsc --noEmit');
   assert.strictEqual(pkg.scripts.ci, 'npm run check && npm run typecheck && npm test');
+});
+
+test('local-check script exists and is executable', () => {
+  const scriptPath = resolve(REPO_ROOT, 'scripts', 'local-check.sh');
+  assert.strictEqual(existsSync(scriptPath), true);
+  const mode = statSync(scriptPath).mode;
+  assert.ok((mode & 0o111) !== 0, 'local-check.sh must be executable');
 });
 
 test('package.json installs the local TypeScript compiler used by typecheck', () => {

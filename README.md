@@ -150,6 +150,14 @@ timelapse-capture doctor [--json]
 Checks runtime dependencies. Run this first.
 
 ```bash
+npm run check:local
+```
+
+Runs repository checks and tests in sequence. If `ffmpeg` and `ffprobe` are not available on `PATH`,
+`npm run check:local` will emit explicit skip messages and still continue to run non-binary tests.
+`test/real-ffmpeg-check.test.mjs` is skipped when those binaries are missing.
+
+```bash
 timelapse-capture start <url> [--duration <duration>] [--interval <duration> | --video-length <duration>] [--fps <number>] [--viewport <width>x<height>] [--json]
 ```
 

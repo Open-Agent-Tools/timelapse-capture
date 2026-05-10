@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node ./src/timelapse-capture.mjs",
     "check": "node --check ./src/timelapse-capture.mjs && node --check ./src/doctor.mjs",
+    "check:local": "bash ./scripts/local-check.sh",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/**/*.test.js\" \"test/**/*.test.mjs\"",
     "ci": "npm run check && npm run typecheck && npm test"

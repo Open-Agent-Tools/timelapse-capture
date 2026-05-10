@@ -131,13 +131,15 @@ export async function checkBinary(binary, { execFileSync = nodeExecFileSync } = 
       details: parsed
     });
   } catch (error) {
+    const skipHint =
+      `${binary} is missing from PATH; real tests and captures that require ${binary} should be skipped until it is installed`;
     return checkResult({
       name: binary,
       status: "fail",
-      message: `${binary} is not available on PATH`,
+      message: skipHint,
       details: {},
       error: `${binary} was not found or could not run: ${error?.message || String(error)}`,
-      fix: "Install FFmpeg and ensure both ffmpeg and ffprobe are available on PATH."
+      fix: `Install FFmpeg and ensure ${binary} is available on PATH.`
     });
   }
 }
