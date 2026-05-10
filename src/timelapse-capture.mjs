@@ -6,6 +6,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { commandDoctor, formatDoctorHuman } from "./doctor.mjs";
+import { setTimeout as setTimeoutPromise } from "node:timers/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 export const VERSION = "0.1.0";
@@ -588,11 +589,16 @@ function computeWaitSchedule(targetTimestampMs, { now = Date.now, maxWaitMs = 10
 
 async function waitUntilFrameTime(
   targetTimestampMs,
-  { now = Date.now, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), maxWaitMs = 1000 } = {}
+  {
+    now = Date.now,
+    wait = (ms, options) => setTimeoutPromise(ms, undefined, options),
+    maxWaitMs = 1000,
+    signal
+  } = {}
 ) {
   const schedule = computeWaitSchedule(targetTimestampMs, { now, maxWaitMs });
   for (const chunkMs of schedule) {
-    await wait(chunkMs);
+    await wait(chunkMs, signal ? { signal } : undefined);
   }
 }
 
