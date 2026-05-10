@@ -1161,9 +1161,39 @@ export function getFramesDir(runDir) {
 
 export function getOutputPath(runDir, config) {
   if (config?.output?.path) {
-    return path.resolve(config.output.path);
+    return path.resolve(runDir, config.output.path);
   }
   return path.resolve(runDir, "output.mp4");
+}
+
+function getConfiguredOutputPath(runDir, options = {}) {
+  const configured = options?.output?.path ?? options?.config?.output?.path ?? options?.config?.outputPath ?? null;
+  if (!configured) return null;
+  return path.resolve(runDir, String(configured));
+}
+
+function getSummaryOutputPath(runDir, summary) {
+  const configured = summary?.render?.outputPath;
+  if (!configured) return null;
+  return path.resolve(runDir, String(configured));
+}
+
+function getDefaultOutputPath(runDir) {
+  return path.resolve(runDir, "output.mp4");
+}
+
+async function resolveCleanupOutputPath(runDir, options = {}) {
+  const [config, summary] = await Promise.all([
+    readJsonOptional(path.join(runDir, "config.json")),
+    readJsonOptional(getSummaryPath(runDir))
+  ]);
+
+  return (
+    getConfiguredOutputPath(runDir, options) ||
+    getConfiguredOutputPath(runDir, config) ||
+    getSummaryOutputPath(runDir, summary) ||
+    getDefaultOutputPath(runDir)
+  );
 }
 
 export function getSummaryPath(runDir) {
@@ -1575,9 +1605,14 @@ export async function commandCleanup({ runDir, options = {} }) {
     throw new Error("Run directory not found");
   }
 
-  const outputPath = path.join(resolved, "output.mp4");
-  if (!options.force && !fs.existsSync(outputPath)) {
-    throw new Error("Refusing to delete frames before output.mp4 exists. Pass --force to override.");
+  const outputPath = await resolveCleanupOutputPath(resolved, options);
+  if (!options.force) {
+    const validation = validateMP4(outputPath);
+    if (validation.error) {
+      throw new Error(
+        `Refusing to delete frames before a valid output file exists at ${outputPath}. Pass --force to override.`
+      );
+    }
   }
 
   const framesDir = path.join(resolved, "frames");

@@ -6,6 +6,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
+
 import { commandCleanup } from "../src/timelapse-capture.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +22,18 @@ function runCli(args, env = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
     encoding: "utf8",
     env: { ...process.env, ...env }
+  });
+}
+
+async function runWithFakeFFmpeg(callback) {
+  return withFakeFFmpeg(async (manager) => {
+    const originalPath = process.env.PATH;
+    process.env.PATH = manager.getPATHEnv();
+    try {
+      return await callback();
+    } finally {
+      process.env.PATH = originalPath;
+    }
   });
 }
 
@@ -44,7 +58,7 @@ async function makeRun({ frameCount = 3 } = {}) {
 test("cleanup default removes all frames and clears peek path", async () => {
   const runDir = await makeRun();
   try {
-    const result = await commandCleanup({ runDir, options: {} });
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: {} }));
     assert.equal(result.message, "Cleanup complete");
     assert.equal(result.removed, 3);
     assert.equal(await fs.stat(path.join(runDir, "frames")).then(() => true, () => false), false);
@@ -60,7 +74,7 @@ test("cleanup default removes all frames and clears peek path", async () => {
 test("cleanup --keep-frames retains all frames and keeps peek available", async () => {
   const runDir = await makeRun();
   try {
-    const result = await commandCleanup({ runDir, options: { "keep-frames": true } });
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { "keep-frames": true } }));
     assert.equal(result.message, "Frames preserved (--keep-frames)");
     assert.deepEqual((await fs.readdir(path.join(runDir, "frames"))).sort(), [
       "frame-0001.png",
@@ -81,7 +95,7 @@ test("cleanup --keep-frames retains all frames and keeps peek available", async 
 test("cleanup --keep-samples retains first and last frame", async () => {
   const runDir = await makeRun();
   try {
-    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { "keep-samples": true } }));
     assert.equal(result.message, "Frames cleaned up (kept first and last)");
     assert.equal(result.removed, 1);
     assert.equal(result.retained, 2);
@@ -101,7 +115,7 @@ test("cleanup --keep-samples retains first and last frame", async () => {
 test("cleanup --keep-latest retains only the latest frame", async () => {
   const runDir = await makeRun();
   try {
-    const result = await commandCleanup({ runDir, options: { "keep-latest": true } });
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { "keep-latest": true } }));
     assert.equal(result.message, "Frames cleaned up (kept latest)");
     assert.equal(result.removed, 2);
     assert.equal(result.retained, 1);
@@ -119,7 +133,7 @@ test("peek falls back to latest-retained.png when frames are cleaned up", async 
   const runDir = await makeRun();
   try {
     await fs.writeFile(path.join(runDir, "latest-retained.png"), FRAME_PNG_1x1);
-    await commandCleanup({ runDir, options: {} });
+    await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: {} }));
 
     const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
     assert.equal(peekResult.status, 0, peekResult.stderr);
@@ -135,7 +149,7 @@ test("peek falls back to poster.png when frames are cleaned up", async () => {
   const runDir = await makeRun();
   try {
     await fs.writeFile(path.join(runDir, "poster.png"), FRAME_PNG_1x1);
-    await commandCleanup({ runDir, options: {} });
+    await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: {} }));
 
     const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
     assert.equal(peekResult.status, 0, peekResult.stderr);

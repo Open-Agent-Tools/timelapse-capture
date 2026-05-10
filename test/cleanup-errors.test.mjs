@@ -5,6 +5,8 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
+
 import { cleanupFrames, commandCleanup, renderFrames, __test__ } from "../src/timelapse-capture.mjs";
 
 const FRAME_PNG_1x1 = Buffer.from(
@@ -21,6 +23,28 @@ async function makeRun({ frameCount = 1 } = {}) {
   }
   await fsp.writeFile(path.join(runDir, "output.mp4"), "placeholder");
   return { runDir, framesDir };
+}
+
+async function runWithFakeFFmpeg(callback) {
+  return withFakeFFmpeg(async (manager) => {
+    const originalPath = process.env.PATH;
+    process.env.PATH = manager.getPATHEnv();
+    try {
+      return await callback();
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+}
+
+async function exists(pathToCheck) {
+  try {
+    await fsp.stat(pathToCheck);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 test("writeJsonSync writes correct JSON and leaves no tmp file", async () => {
@@ -99,15 +123,59 @@ test("cleanupFrames removes render staging when no image files exist", async () 
 test("cleanup --keep-samples reports one retained frame for one-frame runs", async () => {
   const { runDir, framesDir } = await makeRun({ frameCount: 1 });
   try {
-    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
-    assert.equal(result.removed, 0);
-    assert.equal(result.retained, 1);
+    await runWithFakeFFmpeg(async () => {
+      const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+      assert.equal(result.removed, 0);
+      assert.equal(result.retained, 1);
 
-    const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
-    assert.equal(summary.cleanup.removed, 0);
-    assert.equal(summary.cleanup.retained, 1);
-    assert.equal(summary.cleanup.success, true);
-    assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png"]);
+      const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.cleanup.removed, 0);
+      assert.equal(summary.cleanup.retained, 1);
+      assert.equal(summary.cleanup.success, true);
+      assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png"]);
+    });
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup succeeds when configured output path is present", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 1 });
+  try {
+    await fsp.writeFile(path.join(runDir, "config.json"), JSON.stringify({ output: { path: "custom/output.mp4" } }));
+    await fsp.mkdir(path.join(runDir, "custom"), { recursive: true });
+    const outputPath = path.join(runDir, "custom", "output.mp4");
+    await fsp.writeFile(outputPath, "rendered");
+    await fsp.rm(path.join(runDir, "output.mp4"), { force: true });
+
+    await runWithFakeFFmpeg(async () => {
+      const result = await commandCleanup({ runDir, options: {} });
+      assert.equal(result.removed, 1);
+      const hasFramesDir = await exists(framesDir);
+      assert.equal(hasFramesDir, false);
+    });
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup succeeds when run-summary render output path is present", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 1 });
+  try {
+    const outputPath = path.join(runDir, "summary-output.mp4");
+    await fsp.writeFile(outputPath, "rendered");
+    await fsp.writeFile(
+      path.join(runDir, "run-summary.json"),
+      JSON.stringify({ render: { outputPath } }, null, 2)
+    );
+    await fsp.rm(path.join(runDir, "output.mp4"), { force: true });
+
+    await runWithFakeFFmpeg(async () => {
+      const result = await commandCleanup({ runDir, options: {} });
+      assert.equal(result.removed, 1);
+      const hasFramesDir = await exists(framesDir);
+      assert.equal(hasFramesDir, false);
+    });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
@@ -116,15 +184,17 @@ test("cleanup --keep-samples reports one retained frame for one-frame runs", asy
 test("cleanup --keep-samples keeps distinct first and last frames", async () => {
   const { runDir, framesDir } = await makeRun({ frameCount: 3 });
   try {
-    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
-    assert.equal(result.removed, 1);
-    assert.equal(result.retained, 2);
-    assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png", "frame-000003.png"]);
+    await runWithFakeFFmpeg(async () => {
+      const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+      assert.equal(result.removed, 1);
+      assert.equal(result.retained, 2);
+      assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png", "frame-000003.png"]);
 
-    const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
-    assert.equal(summary.cleanup.removed, 1);
-    assert.equal(summary.cleanup.retained, 2);
-    assert.equal(summary.cleanup.success, true);
+      const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.cleanup.removed, 1);
+      assert.equal(summary.cleanup.retained, 2);
+      assert.equal(summary.cleanup.success, true);
+    });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
@@ -135,9 +205,11 @@ test("cleanup --frames ignores a non-empty frames directory after deleting raw f
   try {
     await fsp.writeFile(path.join(framesDir, "notes.txt"), "retain me");
 
-    const result = await commandCleanup({ runDir, options: { frames: true } });
-    assert.equal(result.removed, 1);
-    assert.equal(await fsp.readFile(path.join(framesDir, "notes.txt"), "utf8"), "retain me");
+    await runWithFakeFFmpeg(async () => {
+      const result = await commandCleanup({ runDir, options: { frames: true } });
+      assert.equal(result.removed, 1);
+      assert.equal(await fsp.readFile(path.join(framesDir, "notes.txt"), "utf8"), "retain me");
+    });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
