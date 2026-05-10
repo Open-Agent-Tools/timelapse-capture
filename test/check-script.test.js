@@ -2,8 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { existsSync, readFileSync, statSync } = require('node:fs');
-const { resolve } = require('node:path');
+const { chmodSync, existsSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } = require('node:fs');
+const { sep, resolve } = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 
 const REPO_ROOT = resolve(__dirname, '..');
 const CANONICAL_BIN = './src/timelapse-capture.mjs';
@@ -52,6 +54,48 @@ test('package-lock.json root bin matches package.json', () => {
 
 test('the demoted src/cli directory has been removed', () => {
   assert.strictEqual(existsSync(resolve(REPO_ROOT, 'src/cli')), false);
+});
+
+test('local-check prints SKIP messages when ffmpeg and ffprobe are absent from PATH', () => {
+  const tempDir = mkdtempSync(`${os.tmpdir()}${sep}tlc-local-check-`);
+  const shimPath = resolve(tempDir, 'npm');
+  const logPath = resolve(tempDir, 'npm-invocations.log');
+
+  try {
+    const shim = `#!/bin/sh\nprintf '%s\n' \"$*\" >> '${logPath}'\n`;
+    writeFileSync(shimPath, shim);
+    chmodSync(shimPath, 0o755);
+
+    const result = spawnSync(
+      '/bin/bash',
+      [resolve(REPO_ROOT, 'scripts', 'local-check.sh')],
+      {
+        cwd: REPO_ROOT,
+        env: {
+          ...process.env,
+          PATH: tempDir,
+        },
+        encoding: 'utf8',
+      }
+    );
+
+    assert.strictEqual(result.status, 0, `local-check failed; stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+    assert.match(
+      result.stdout,
+      /SKIP: real binary checks requiring ffmpeg are disabled because ffmpeg is not available on PATH\./
+    );
+    assert.match(
+      result.stdout,
+      /SKIP: real binary checks requiring ffprobe are disabled because ffprobe is not available on PATH\./
+    );
+
+    const log = readFileSync(logPath, 'utf8');
+    const invocations = log.split('\n').filter(Boolean);
+    assert.ok(invocations.includes('run check'), 'npm shim should record npm run check');
+    assert.ok(invocations.includes('test'), 'npm shim should record npm test');
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('canonical entry uses real Playwright (not the scaffold 1x1 PNG fixture)', () => {
