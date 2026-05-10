@@ -995,6 +995,40 @@ test("status --json preserves latestFrame when subsequent frames failed", async 
   }
 });
 
+test("peek --latest returns poster.png after default cleanup removes raw frames", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const renderResult = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(renderResult.status, 0, renderResult.stderr);
+    }, "success");
+
+    // Write poster.png directly since fake-ffmpeg doesn't copy the poster in tests
+    const posterPath = path.join(runDir, "poster.png");
+    if (!(await fs.stat(posterPath).then(() => true, () => false))) {
+      await fs.writeFile(posterPath, Buffer.from(
+        "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
+        "hex"
+      ));
+    }
+
+    const cleanupResult = runCli(["cleanup", runDir]);
+    assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
+
+    assert.equal(await fs.stat(path.join(runDir, "frames")).then(() => true, () => false), false,
+      "frames/ directory should not exist after cleanup");
+    assert.ok(await fs.stat(posterPath).then(() => true, () => false), "poster.png should exist");
+
+    const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
+    assert.equal(peekResult.status, 0, peekResult.stderr);
+    const payload = JSON.parse(peekResult.stdout);
+    assert.equal(payload.exists, true);
+    assert.equal(payload.path, posterPath);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("status --json includes diskUsage with runDirBytes and framesBytes", async () => {
   const { runDir } = await makeRun({ frameCount: 2, state: "completed" });
   try {
@@ -1011,6 +1045,36 @@ test("status --json includes diskUsage with runDirBytes and framesBytes", async 
       payload.status.diskUsage.runDirBytes >= payload.status.diskUsage.framesBytes,
       `runDirBytes (${payload.status.diskUsage.runDirBytes}) should be >= framesBytes (${payload.status.diskUsage.framesBytes})`
     );
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("peek --latest returns latest-retained.png after cleanup --keep-latest", async () => {
+  const { runDir } = await makeRun();
+  // render auto-calls cleanupFrames internally; use --keep-frames to preserve frames for --keep-latest
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const renderResult = runCli(["render", runDir, "--json", "--keep-frames"], { PATH: manager.getPATHEnv() });
+      assert.equal(renderResult.status, 0, renderResult.stderr);
+    }, "success");
+
+    const cleanupResult = runCli(["cleanup", runDir, "--keep-latest"]);
+    assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
+
+    const retainedPath = path.join(runDir, "latest-retained.png");
+    assert.ok(await fs.stat(retainedPath).then(() => true, () => false),
+      "latest-retained.png should exist after cleanup --keep-latest");
+
+    // Remove poster.png if it exists so the latest-retained branch is exercised
+    const posterPath = path.join(runDir, "poster.png");
+    await fs.rm(posterPath, { force: true });
+
+    const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
+    assert.equal(peekResult.status, 0, peekResult.stderr);
+    const payload = JSON.parse(peekResult.stdout);
+    assert.equal(payload.exists, true);
+    assert.equal(payload.path, retainedPath);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -1034,6 +1098,23 @@ test("start with simulated navigation failure reports 'navigation failed:' error
     );
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /navigation failed:/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("peek --latest exits non-zero with a clear error when no frames or fallback artifacts exist", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await fs.rm(path.join(runDir, "frames"), { recursive: true, force: true });
+
+    const peekResult = runCli(["peek", runDir, "--latest"]);
+    assert.notEqual(peekResult.status, 0, "peek should exit non-zero when no frames or artifacts");
+    assert.match(peekResult.stderr, /Raw frames were cleaned up/);
+    assert.match(peekResult.stderr, /poster\.png/);
+    assert.match(peekResult.stderr, /latest-retained\.png/);
+    assert.ok(!peekResult.stdout.includes("frames/"),
+      "stdout should not mention a frames/ path");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
