@@ -206,6 +206,117 @@ test("status --json reports exact frame disk usage for nested directories", asyn
   }
 });
 
+test("status --json includes output path and cleanup metadata", async () => {
+  const { runDir } = await makeRun({ state: "completed" });
+  try {
+    const renderedOutputPath = path.join(runDir, "output.mp4");
+    const summary = {
+      render: {
+        outputPath: renderedOutputPath,
+        bytes: 1234,
+        frameCount: 3,
+        timestamp: new Date().toISOString()
+      },
+      cleanup: {
+        success: true,
+        removed: 3,
+        retained: 0,
+        timestamp: new Date().toISOString()
+      }
+    };
+    await fs.writeFile(path.join(runDir, "run-summary.json"), JSON.stringify(summary, null, 2));
+
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.outputPath, renderedOutputPath);
+    assert.equal(payload.status.cleanup.removed, 3);
+    assert.equal(payload.status.cleanup.retained, 0);
+    assert.equal(payload.status.cleanup.success, true);
+
+    const statusOnDisk = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+    assert.equal(Object.hasOwn(statusOnDisk, "outputPath"), false);
+    assert.equal(Object.hasOwn(statusOnDisk, "cleanup"), false);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --json defaults outputPath to runDir/output.mp4 when summary is absent", async () => {
+  const { runDir } = await makeRun({ state: "completed" });
+  try {
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.outputPath, path.resolve(runDir, "output.mp4"));
+    assert.equal(Object.hasOwn(payload.status, "cleanup"), false);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --human output includes stale warning when latest frame is stale", async () => {
+  const { runDir } = await makeRun({ state: "running" });
+  try {
+    const intervalMs = 5_000;
+    const staleAgeMs = 60_000;
+    const latestFrameTimestamp = new Date(Date.now() - staleAgeMs).toISOString();
+    const startedAt = new Date(Date.now() - 120_000).toISOString();
+    await fs.writeFile(
+      path.join(runDir, "status.json"),
+      JSON.stringify(
+        {
+          state: "running",
+          startedAt,
+          intervalMs,
+          frames: { captured: 1, failed: 0, totalExpected: 5 },
+          latestFrameTimestamp
+        },
+        null,
+        2
+      )
+    );
+
+    const result = runCli(["status", runDir]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^state: running$/m);
+    assert.match(result.stdout, /^eta: /m);
+    assert.match(result.stdout, /warning: latest successful frame is stale/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --human output omits eta line for non-running states", async () => {
+  const { runDir } = await makeRun({ state: "completed" });
+  try {
+    const result = runCli(["status", runDir]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^state: completed$/m);
+    assert.doesNotMatch(result.stdout, /^eta: /m);
+    assert.doesNotMatch(result.stdout, /warning: latest successful frame is stale/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --human output prints output and cleanup summary", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const renderResult = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(renderResult.status, 0, renderResult.stderr);
+
+      const statusResult = runCli(["status", runDir]);
+      assert.equal(statusResult.status, 0, statusResult.stderr);
+      assert.match(statusResult.stdout, new RegExp(`^output: .*output\\.mp4$`, "m"));
+      assert.match(statusResult.stdout, /^cleanup: removed \d+, retained \d+$/m);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("peek --latest --json returns the latest captured frame", async () => {
   const { runDir, captured } = await makeRun();
   try {
