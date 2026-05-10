@@ -782,3 +782,86 @@ test("help command prints usage banner with the canonical commands", () => {
   assert.match(result.stdout, /--fps/);
   assert.match(result.stdout, /doctor/);
 });
+
+test("status --json preserves latestFrame when subsequent frames failed", async () => {
+  const { runDir, captured } = await makeRun({ frameCount: 2, state: "failed" });
+  try {
+    const lastCaptured = captured.at(-1);
+    const status = {
+      state: "failed",
+      pid: 1234,
+      startedAt: captured[0].scheduledAt,
+      updatedAt: new Date().toISOString(),
+      frames: {
+        captured: 2,
+        failed: 1,
+        totalExpected: 3
+      },
+      latestFrame: lastCaptured.path,
+      latestFrameTimestamp: lastCaptured.capturedAt
+    };
+    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.state, "failed");
+    assert.equal(payload.status.frames.captured, 2);
+    assert.equal(payload.status.frames.failed, 1);
+    assert.equal(payload.status.latestFrame, lastCaptured.path);
+    assert.equal(payload.status.latestFrameTimestamp, lastCaptured.capturedAt);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --json includes diskUsage with runDirBytes and framesBytes", async () => {
+  const { runDir } = await makeRun({ frameCount: 2, state: "completed" });
+  try {
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(typeof payload.status.diskUsage, "object");
+    assert.notEqual(payload.status.diskUsage, null);
+    assert.equal(typeof payload.status.diskUsage.runDirBytes, "number");
+    assert.equal(typeof payload.status.diskUsage.framesBytes, "number");
+    assert.ok(payload.status.diskUsage.runDirBytes > 0);
+    assert.ok(payload.status.diskUsage.framesBytes >= 0);
+    assert.ok(
+      payload.status.diskUsage.runDirBytes >= payload.status.diskUsage.framesBytes,
+      `runDirBytes (${payload.status.diskUsage.runDirBytes}) should be >= framesBytes (${payload.status.diskUsage.framesBytes})`
+    );
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("start with simulated navigation failure reports 'navigation failed:' error", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-nav-fail-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "1s",
+        "--interval",
+        "1s",
+        "--out",
+        runDir
+      ],
+      { TIMELAPSE_SIMULATE_NAVIGATION_FAILURE: "1" }
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /navigation failed:/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status with missing run directory reports 'run directory not found'", async () => {
+  const missing = path.join(os.tmpdir(), `tlc-missing-${process.pid}-${Date.now()}`);
+  const result = runCli(["status", missing]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /run directory not found/);
+});
