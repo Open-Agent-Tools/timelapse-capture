@@ -54,6 +54,8 @@ test("checkBinary reports missing binaries with actionable fixes", async () => {
   assert.equal(result.status, "fail");
   assert.match(result.error, /ffprobe was not found/);
   assert.match(result.fix, /Install FFmpeg/);
+  assert.match(result.message, /ffprobe is missing from PATH/);
+  assert.match(result.message, /tests and captures that require ffprobe should be skipped/);
 });
 
 test("checkChromium reports browser close failures", async () => {
