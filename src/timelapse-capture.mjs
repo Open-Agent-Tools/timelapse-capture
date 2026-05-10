@@ -469,20 +469,8 @@ async function appendJsonLine(file, data) {
   await fsp.appendFile(file, `${JSON.stringify(data)}\n`);
 }
 
-async function readManifest(file) {
-  const text = await fsp.readFile(file, "utf8").catch((error) => {
-    if (error?.code === "ENOENT") return "";
-    throw error;
-  });
-  return text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
-}
-
 async function removeIfExists(file) {
   await fsp.rm(file, { force: true });
-}
-
-async function removeDirIfExists(dir) {
-  await fsp.rm(dir, { recursive: true, force: true });
 }
 
 function isBenignEmptyDirRemovalError(error) {
