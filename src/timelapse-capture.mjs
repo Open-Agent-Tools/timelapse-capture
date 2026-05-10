@@ -966,6 +966,7 @@ export async function commandStatus({ runDir }) {
 
   const config = await readJsonOptional(configPath);
   const latestFrame = await readJsonOptional(latestFramePath);
+  const summary = await readJsonOptional(getSummaryPath(resolved));
   const framesDiskUsageBytes = await directorySize(path.join(resolved, "frames"));
 
   const payload = buildStatusPayload({
@@ -973,6 +974,9 @@ export async function commandStatus({ runDir }) {
     state: migrateLegacyState(status.state || inferStateFromStatus(status)),
     runDir: resolved
   });
+
+  payload.outputPath = summary?.render?.outputPath ?? path.resolve(resolved, "output.mp4");
+  if (summary?.cleanup) payload.cleanup = summary.cleanup;
 
   return {
     status: payload,
