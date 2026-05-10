@@ -1472,6 +1472,8 @@ export function renderFrames(runDir, options = {}) {
       cleanup: null
     };
 
+    writeSummarySync(runDir, summary);
+
     if (!options["keep-frames"] && !options["keep-all"]) {
       const cleanup = cleanupFrames(framesDir);
       summary.cleanup = {

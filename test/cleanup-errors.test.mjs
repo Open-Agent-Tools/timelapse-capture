@@ -279,3 +279,27 @@ test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async 
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
+
+test("renderFrames refuses custom output path before cleanup", async () => {
+  const { runDir, framesDir } = await makeRun();
+  try {
+    const customOutputPath = path.join(runDir, "custom.mp4");
+    const expectedOutputPath = path.join(runDir, "output.mp4");
+    const result = renderFrames(runDir, {
+      config: { output: { path: customOutputPath } },
+      ffmpegPath: "definitely-not-ffmpeg"
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.error, new RegExp(expectedOutputPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+    const status = JSON.parse(await fsp.readFile(path.join(runDir, "status.json"), "utf8"));
+    assert.equal(status.state, "render_failed");
+
+    const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.removed, 0);
+    assert.equal(fs.existsSync(path.join(framesDir, "frame-000001.png")), true);
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});

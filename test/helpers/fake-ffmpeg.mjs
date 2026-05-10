@@ -18,7 +18,7 @@ class FakeBinaryManager {
   async createFakeFFmpeg(mode = "success") {
     const ffmpegPath = path.join(this.binDir, "ffmpeg");
     let script;
-    if (mode === "success") {
+    if (mode === "success" || mode === "zero-duration" || mode === "no-video-stream") {
       script =
         "#!/bin/sh\n" +
         "if [ \"$1\" = \"-version\" ]; then echo 'fake ffmpeg version 6.1'; exit 0; fi\n" +
@@ -51,6 +51,14 @@ class FakeBinaryManager {
         "process.exit(0);\n";
     } else if (mode === "fail") {
       script = "#!/bin/sh\nexit 1";
+    } else if (mode === "no-output") {
+      script = "#!/bin/sh\nexit 0";
+    } else if (mode === "empty-output") {
+      script =
+        "#!/bin/sh\n" +
+        "for arg do out_file=\"$arg\"; done\n" +
+        ": > \"$out_file\"\n" +
+        "exit 0";
     } else if (mode === "invalid-output") {
       script =
         "#!/bin/sh\n" +
@@ -64,23 +72,33 @@ class FakeBinaryManager {
   async createFakeFFprobe(mode = "success") {
     const ffprobePath = path.join(this.binDir, "ffprobe");
     let script;
-    if (mode === "success" || mode === "success-require-contiguous-input") {
+    if (
+      mode === "success" ||
+      mode === "success-require-contiguous-input" ||
+      mode === "zero-duration" ||
+      mode === "no-video-stream"
+    ) {
+      const streamBlock =
+        mode === "no-video-stream"
+          ? ""
+          : "    {\n" +
+            '      "index": 0,\n' +
+            '      "codec_type": "video",\n' +
+            '      "width": 1280,\n' +
+            '      "height": 720,\n' +
+            `      "duration": ${JSON.stringify(mode === "zero-duration" ? "0" : "10.0")}\n` +
+            "    }\n";
+      const duration = mode === "zero-duration" ? "0" : "10.0";
       script =
         "#!/bin/sh\n" +
         "if [ \"$1\" = \"-version\" ]; then echo 'fake ffprobe'; exit 0; fi\n" +
         "cat << 'EOF'\n" +
         "{\n" +
         '  "streams": [\n' +
-        "    {\n" +
-        '      "index": 0,\n' +
-        '      "codec_type": "video",\n' +
-        '      "width": 1280,\n' +
-        '      "height": 720,\n' +
-        '      "duration": "10.0"\n' +
-        "    }\n" +
+        streamBlock +
         "  ],\n" +
         '  "format": {\n' +
-        '    "duration": "10.0",\n' +
+        `    "duration": ${JSON.stringify(duration)},\n` +
         '    "size": "1000000"\n' +
         "  }\n" +
         "}\n" +
@@ -112,8 +130,12 @@ export async function withFakeFFmpeg(testFn, mode = "success") {
   const manager = new FakeBinaryManager(tempDir);
   try {
     await manager.setup();
-    await manager.createFakeFFmpeg(mode);
-    await manager.createFakeFFprobe(mode);
+    const modes =
+      typeof mode === "object"
+        ? { ffmpeg: mode.ffmpeg ?? "success", ffprobe: mode.ffprobe ?? mode.ffmpeg ?? "success" }
+        : { ffmpeg: mode, ffprobe: mode };
+    await manager.createFakeFFmpeg(modes.ffmpeg);
+    await manager.createFakeFFprobe(modes.ffprobe);
     return await testFn(manager);
   } finally {
     await manager.cleanup();

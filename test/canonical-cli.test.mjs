@@ -552,6 +552,42 @@ test("render with --keep-frames records retained cleanup summary", async () => {
   }
 });
 
+test("render records validation metadata before default cleanup", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+
+      const payload = JSON.parse(result.stdout);
+      const expectedOutputPath = path.join(runDir, "output.mp4");
+      assert.equal(payload.output, expectedOutputPath);
+
+      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, "rendered");
+
+      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.render.outputPath, expectedOutputPath);
+      assert.ok(summary.render.bytes > 0);
+      assert.ok(summary.render.duration > 0);
+      assert.ok(summary.render.dimensions.width > 0);
+      assert.ok(summary.render.dimensions.height > 0);
+      assert.equal(summary.render.sourceFrameCount, 3);
+      assert.equal(summary.cleanup.success, true);
+      assert.equal(summary.cleanup.removed, 3);
+
+      const framesDir = path.join(runDir, "frames");
+      const remainingFrames = await fs.readdir(framesDir).catch((error) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      });
+      assert.deepEqual(remainingFrames.filter((name) => name.endsWith(".png")), []);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render writes render_failed when ffmpeg exits non-zero", async () => {
   const { runDir } = await makeRun();
   try {
@@ -565,6 +601,41 @@ test("render writes render_failed when ffmpeg exits non-zero", async () => {
     }, "fail");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render preserves frames when MP4 validation fails", async () => {
+  const cases = [
+    ["ffmpeg exits non-zero", "fail", /ffmpeg failed/],
+    ["ffmpeg creates no output", "no-output", /Output file does not exist/],
+    ["ffmpeg creates empty output", "empty-output", /Output file is empty/],
+    ["ffprobe reports zero duration", "zero-duration", /duration is zero/],
+    ["ffprobe reports no video stream", "no-video-stream", /readable video stream/],
+    ["ffprobe cannot read output", "invalid-output", /ffprobe failed|valid MP4/]
+  ];
+
+  for (const [name, fakeMode, errorPattern] of cases) {
+    const { runDir } = await makeRun();
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+        assert.notEqual(result.status, 0, name);
+        assert.match(result.stderr, errorPattern, name);
+
+        const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+        assert.equal(status.state, "render_failed", name);
+
+        const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+        assert.equal(summary.cleanup.removed, 0, name);
+
+        const frameNames = (await fs.readdir(path.join(runDir, "frames"))).filter((frameName) =>
+          frameName.endsWith(".png")
+        );
+        assert.equal(frameNames.length, 3, name);
+      }, fakeMode);
+    } finally {
+      await fs.rm(runDir, { recursive: true, force: true });
+    }
   }
 });
 
