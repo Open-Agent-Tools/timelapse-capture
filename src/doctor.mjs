@@ -8,6 +8,18 @@ function checkResult({ name, status, message, details = {}, error = null, fix = 
   return { name, status, message, details, error, fix };
 }
 
+function normalizeCheckResult(check) {
+  const raw = check || {};
+  return {
+    name: raw.name,
+    status: raw.status,
+    message: raw.message,
+    details: raw.details ?? {},
+    error: Object.prototype.hasOwnProperty.call(raw, "error") ? raw.error : null,
+    fix: Object.prototype.hasOwnProperty.call(raw, "fix") ? raw.fix : null
+  };
+}
+
 export function compareVersions(actual, minimum) {
   const actualParts = String(actual).split(".").map((part) => Number.parseInt(part, 10) || 0);
   const minimumParts = String(minimum).split(".").map((part) => Number.parseInt(part, 10) || 0);
@@ -156,7 +168,7 @@ export async function runAllChecks({ checks } = {}) {
   const checkFns = checks || [checkNode, checkPlaywright, checkChromium, checkFfmpeg, checkFfprobe];
   const results = [];
   for (const check of checkFns) {
-    results.push(await check());
+    results.push(normalizeCheckResult(await check()));
   }
 
   const summary = {
