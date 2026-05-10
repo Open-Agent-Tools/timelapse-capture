@@ -23,6 +23,9 @@ template at the end of this document.
      `brew install ffmpeg`; on Debian or Ubuntu use
      `sudo apt-get install ffmpeg`.
 
+   **Expected:** Each command prints a version string and exits 0. No "command
+   not found" errors.
+
 2. Clone the repository and install dependencies from the repository root:
 
    ```bash
@@ -31,11 +34,17 @@ template at the end of this document.
    npm install
    ```
 
+   **Expected:** `npm install` completes without errors. A `node_modules/`
+   directory is created.
+
 3. Install the Playwright Chromium browser:
 
    ```bash
    npx playwright install chromium
    ```
+
+   **Expected:** Playwright downloads and installs the Chromium browser without
+   errors.
 
 4. Make the CLI runnable. Pick one of the two forms and use it consistently
    for every scenario:
@@ -49,13 +58,16 @@ template at the end of this document.
    npm start -- doctor
    ```
 
+   **Expected:** The command runs without "command not found" and prints
+   `doctor` output.
+
 5. Run `doctor` and confirm every check reports `[PASS]`:
 
    ```bash
    timelapse-capture doctor
    ```
 
-   Expected output ends with `summary: 5 passed, 0 failed, 5 total`.
+   **Expected:** Output ends with `summary: 5 passed, 0 failed, 5 total`.
    If anything fails, follow the printed `fix:` line and re-run `doctor` until
    it is clean. Do not start a scenario while `doctor` is failing.
 
@@ -66,6 +78,8 @@ template at the end of this document.
    npx http-server -p 3000
    ```
 
+   **Expected:** The server prints a listening message such as
+   `Available on: http://127.0.0.1:3000` and accepts connections.
    Leave it running in a separate terminal.
 
 ## Scenario 1: Default Capture, Peek, Render, Cleanup
@@ -82,8 +96,8 @@ directory understandable without raw frames.
      --viewport 1440x900
    ```
 
-   Record the printed `run-dir` value as `RUN_DIR`. Expect a path under
-   `./timelapse-runs/` or `./runs/`.
+   **Expected:** The command prints a `run-dir` value such as
+   `timelapse-runs/localhost-3000-<timestamp>`. Record this path as `RUN_DIR`.
 
 2. Within the first 5 seconds of the run, peek at the latest frame:
 
@@ -91,9 +105,9 @@ directory understandable without raw frames.
    timelapse-capture peek "$RUN_DIR" --latest
    ```
 
-   Open the returned image path. Confirm it is a real screenshot of the
-   target URL, not blank or all white. Capture the wall-clock time you
-   peeked.
+   **Expected:** A file path to a `.png` is printed. Opening that path shows a
+   real screenshot of the target URL — not blank or all white. Record the
+   wall-clock time you peeked.
 
 3. Wait for the capture to finish. Poll status until state is `completed`:
 
@@ -101,14 +115,17 @@ directory understandable without raw frames.
    timelapse-capture status "$RUN_DIR"
    ```
 
-   Note the captured frame count, failed count, elapsed time, and disk
-   usage.
+   **Expected:** `state` field reads `completed`. The output also shows a
+   non-zero captured frame count, an elapsed time, and a disk-usage figure.
 
 4. Render the MP4:
 
    ```bash
    timelapse-capture render "$RUN_DIR"
    ```
+
+   **Expected:** `output.mp4` is created inside `$RUN_DIR` and the command
+   exits 0.
 
 5. Open the rendered video and confirm it plays:
 
@@ -117,8 +134,8 @@ directory understandable without raw frames.
    # On Linux, use the desktop file opener or a video player.
    ```
 
-   Confirm the video has visible motion or change matching what you saw at
-   peek time.
+   **Expected:** The video plays without errors and shows visible motion or
+   page changes that match what was visible at peek time.
 
 6. Inspect the run directory after the default render cleanup:
 
@@ -126,7 +143,7 @@ directory understandable without raw frames.
    ls "$RUN_DIR"
    ```
 
-   Confirm that:
+   **Expected:**
    - `output.mp4` is present and non-empty.
    - `manifest.jsonl` (or `manifest.json`) is present.
    - `status.json` is present and reports a terminal state.
@@ -151,18 +168,25 @@ that `peek` still works on the kept frames.
      --viewport 1440x900
    ```
 
-   Record the new `RUN_DIR`.
+   **Expected:** A new `run-dir` is printed. Record it as `RUN_DIR`.
 
-2. Wait for `status` to report a terminal capture state.
-
-3. Render and explicitly keep frames. Use whichever form the CLI accepts; if
-   `render --keep-frames` is unsupported, use the cleanup command after
-   render to assert retention:
+2. Wait for `status` to report a terminal capture state:
 
    ```bash
-   timelapse-capture render "$RUN_DIR"
-   timelapse-capture cleanup "$RUN_DIR" --keep-frames
+   timelapse-capture status "$RUN_DIR"
    ```
+
+   **Expected:** `state` reads `completed` (or another terminal state). Frame
+   count is non-zero.
+
+3. Render and explicitly keep frames:
+
+   ```bash
+   timelapse-capture render "$RUN_DIR" --keep-frames
+   ```
+
+   **Expected:** `output.mp4` is created inside `$RUN_DIR`. The `frames/`
+   directory is not removed — raw PNGs are still present alongside the video.
 
 4. Confirm raw frames remain:
 
@@ -170,7 +194,8 @@ that `peek` still works on the kept frames.
    ls "$RUN_DIR/frames" | head
    ```
 
-   Expect at least one `frame-*.png` to be present.
+   **Expected:** At least one `frame-*.png` file is listed. The directory is
+   not empty.
 
 5. Peek at a specific index and at the latest frame to confirm both still
    resolve to a real file path:
@@ -180,10 +205,19 @@ that `peek` still works on the kept frames.
    timelapse-capture peek "$RUN_DIR" --latest
    ```
 
-   Open both returned paths. Confirm both are valid screenshots.
+   **Expected:** Both commands print a `.png` file path. Opening each path
+   shows a valid screenshot — not a missing-file error.
 
 6. Inspect `run-summary.json` and confirm it records that frames were
-   intentionally retained, not silently kept.
+   intentionally retained:
+
+   ```bash
+   cat "$RUN_DIR/run-summary.json"
+   ```
+
+   **Expected:** The JSON contains a field indicating frames were preserved
+   (e.g. `"reason": "keep-frames"` or `"cleanup": "never"`). The retention
+   should be explicit, not silently kept.
 
 ## Scenario 3: Bad URL Or Stopped Server
 
@@ -208,6 +242,10 @@ Run:
      --viewport 1440x900
    ```
 
+   **Expected:** The command starts and prints a `run-dir`. Errors or warnings
+   may appear immediately (failed frame attempts), but the tool should not
+   crash outright.
+
    Record `RUN_DIR`.
 
 2. While the run progresses, watch `status`:
@@ -216,11 +254,10 @@ Run:
    timelapse-capture status "$RUN_DIR"
    ```
 
-   Confirm that:
-   - State eventually reaches `failed`, `completed`, or another terminal
-     state without hanging.
-   - Failed frame count is non-zero, or the run reports a fatal startup
-     error.
+   **Expected:**
+   - `state` eventually reaches `failed`, `completed`, or another terminal
+     state without hanging indefinitely.
+   - `failedCount` is non-zero, or the run reports a fatal startup error.
    - The error message names the URL or backend problem; it should not be
      a bare stack trace.
 
@@ -231,25 +268,31 @@ Run:
      || cat "$RUN_DIR/manifest.json"
    ```
 
-   Confirm at least one record describes the failure with a non-null
-   `error` field. The error string should make the cause obvious to a
-   tester who did not write the code.
+   **Expected:** At least one record has a non-null `error` field. The error
+   string should make the cause obvious to a tester who did not write the code
+   (e.g. "net::ERR_CONNECTION_REFUSED" or a human-readable equivalent).
 
-4. Try to render. The behavior depends on whether any frame was captured.
-   Whichever happens, the outcome must be understandable:
+4. Try to render. The behavior depends on whether any frame was captured:
 
    ```bash
    timelapse-capture render "$RUN_DIR"
    ```
 
-   - If frames exist, render should succeed and produce `output.mp4`.
-   - If no frames exist, render should fail with a message that names the
-     problem (no frames, manifest empty, etc.) and should not delete
-     anything.
+   **Expected:**
+   - If frames exist: render succeeds and produces `output.mp4`.
+   - If no frames exist: render exits with a message that names the problem
+     (no frames, manifest empty, etc.) and does not delete any existing
+     artifacts.
 
-5. Confirm the run directory is safe to keep around for diagnosis:
-   `manifest`, `status.json`, capture logs (if present), and any retained
-   frames should still be there.
+5. Confirm the run directory is safe to keep for diagnosis:
+
+   ```bash
+   ls "$RUN_DIR"
+   ```
+
+   **Expected:** `manifest.jsonl` (or `manifest.json`), `status.json`, and
+   any captured frames or logs are still present. Nothing was silently wiped
+   by a failed render.
 
 ## Tester Feedback Template
 
