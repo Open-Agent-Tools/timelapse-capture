@@ -513,6 +513,24 @@ test("render writes render_failed when ffmpeg exits non-zero", async () => {
   }
 });
 
+test("render marks render_failed when output is not a valid MP4", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Rendered output is not a valid MP4|valid MP4/);
+
+      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, "render_failed");
+      assert.ok(status.error);
+      assert.equal((await fs.readdir(path.join(runDir, "frames"))).length, 3);
+    }, "invalid-output");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render succeeds when status.json is initially missing", async () => {
   const { runDir } = await makeRun();
   try {
