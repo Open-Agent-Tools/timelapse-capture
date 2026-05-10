@@ -88,6 +88,8 @@ timelapse-capture doctor --json
 
 This walkthrough starts from a local web app at `http://localhost:3000` and ends with a rendered MP4.
 
+For a full tester protocol with three scenarios (default cleanup, frame retention, and failure modes) and a feedback template, see [`docs/dogfood-protocol.md`](docs/dogfood-protocol.md).
+
 1. Confirm dependencies:
 
 ```bash
