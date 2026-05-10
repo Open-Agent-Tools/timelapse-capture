@@ -171,6 +171,13 @@ test('source does not use comment-only catch blocks', () => {
   }
 });
 
+test('local-check.sh exports only the consumed TIMELAPSE_HAS_REAL_FFMPEG_SUITE env var', () => {
+  const script = readFileSync(resolve(REPO_ROOT, 'scripts', 'local-check.sh'), 'utf8');
+  assert.ok(!script.includes('TIMELAPSE_HAS_REAL_FFMPEG_BINARIES'), 'TIMELAPSE_HAS_REAL_FFMPEG_BINARIES must not be exported');
+  assert.ok(!script.includes('TIMELAPSE_HAS_REAL_FFPROBE_BINARIES'), 'TIMELAPSE_HAS_REAL_FFPROBE_BINARIES must not be exported');
+  assert.ok(script.includes('TIMELAPSE_HAS_REAL_FFMPEG_SUITE'), 'TIMELAPSE_HAS_REAL_FFMPEG_SUITE must still be exported');
+});
+
 test('canonical CLI entrypoint decision is documented and wired', () => {
   const decisionPath = resolve(REPO_ROOT, 'docs/decisions/001-canonical-cli-entrypoint.md');
   const decision = readFileSync(decisionPath, 'utf8');

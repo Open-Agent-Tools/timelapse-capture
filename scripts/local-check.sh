@@ -15,8 +15,6 @@ else
   echo "SKIP: real binary checks requiring ffprobe are disabled because ffprobe is not available on PATH."
 fi
 
-export TIMELAPSE_HAS_REAL_FFMPEG_BINARIES="${HAS_FFMPEG}";
-export TIMELAPSE_HAS_REAL_FFPROBE_BINARIES="${HAS_FFPROBE}";
 export TIMELAPSE_HAS_REAL_FFMPEG_SUITE="$((HAS_FFMPEG * HAS_FFPROBE))";
 
 if [ "$TIMELAPSE_HAS_REAL_FFMPEG_SUITE" -ne 1 ]; then
