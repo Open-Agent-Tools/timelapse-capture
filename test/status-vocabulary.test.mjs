@@ -83,6 +83,42 @@ test("status command migrates legacy done to completed without rewriting status.
   }
 });
 
+test("status --json parity fields present with legacy done state and run-summary, no status.json rewrite", async () => {
+  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-status-vocab-parity-"));
+  try {
+    const statusPath = path.join(runDir, "status.json");
+    const legacyStatus = {
+      state: "done",
+      pid: 1234,
+      startedAt: "2026-04-30T14:00:00.000Z",
+      updatedAt: "2026-04-30T15:00:00.000Z",
+      framesCaptured: 2,
+      framesFailed: 0
+    };
+    const fakeOutputPath = path.join(runDir, "output.mp4");
+    const summary = {
+      render: { outputPath: fakeOutputPath, bytes: 1000, frameCount: 2, timestamp: new Date().toISOString() },
+      cleanup: { success: true, removed: 2, retained: 0, timestamp: new Date().toISOString() }
+    };
+    await fsp.writeFile(statusPath, `${JSON.stringify(legacyStatus, null, 2)}\n`);
+    await fsp.writeFile(path.join(runDir, "run-summary.json"), JSON.stringify(summary, null, 2));
+
+    const before = await fsp.readFile(statusPath, "utf8");
+    const result = spawnSync(process.execPath, [CLI, "status", runDir, "--json"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.state, "completed");
+    assert.equal(payload.status.outputPath, fakeOutputPath);
+    assert.equal(payload.status.cleanup.success, true);
+    assert.ok(typeof payload.status.diskUsage?.runDirBytes === "number");
+
+    const after = await fsp.readFile(statusPath, "utf8");
+    assert.equal(before, after, "status.json must not be rewritten when parity fields are populated");
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("source files do not write the legacy done state", async () => {
   const repoRoot = path.resolve(__dirname, "..");
   const targets = [

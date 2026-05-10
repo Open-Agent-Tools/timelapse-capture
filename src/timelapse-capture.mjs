@@ -970,9 +970,11 @@ export async function commandStatus({ runDir }) {
 
   const config = await readJsonOptional(configPath);
   const latestFrame = await readJsonOptional(latestFramePath);
-  const summary = await readJsonOptional(getSummaryPath(resolved));
-  const framesDiskUsageBytes = await directorySize(path.join(resolved, "frames"));
-  const runDirBytes = await directorySize(resolved);
+  const [framesDiskUsageBytes, runDirBytes, summary] = await Promise.all([
+    directorySize(path.join(resolved, "frames")),
+    directorySize(resolved),
+    readJsonOptional(getSummaryPath(resolved))
+  ]);
 
   const payload = buildStatusPayload({
     ...status,
@@ -980,9 +982,10 @@ export async function commandStatus({ runDir }) {
     runDir: resolved
   });
   payload.diskUsage = { runDirBytes, framesBytes: framesDiskUsageBytes };
-
-  payload.outputPath = summary?.render?.outputPath ?? path.resolve(resolved, "output.mp4");
-  if (summary?.cleanup) payload.cleanup = summary.cleanup;
+  payload.outputPath = summary?.render?.outputPath ?? null;
+  payload.cleanup = summary?.cleanup != null
+    ? { success: summary.cleanup.success ?? null, removed: summary.cleanup.removed ?? 0, retained: summary.cleanup.retained ?? null }
+    : null;
 
   return {
     status: payload,

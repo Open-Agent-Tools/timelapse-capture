@@ -206,15 +206,47 @@ test("status --json reports exact frame disk usage for nested directories", asyn
   }
 });
 
-test("status --json includes output path and cleanup metadata", async () => {
-  const { runDir } = await makeRun({ state: "completed" });
+test("status --json includes status.diskUsage with runDirBytes and framesBytes", async () => {
+  const { runDir } = await makeRun({ frameCount: 2 });
   try {
-    const renderedOutputPath = path.join(runDir, "output.mp4");
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.ok(typeof payload.status.diskUsage === "object" && payload.status.diskUsage !== null);
+    assert.ok(typeof payload.status.diskUsage.runDirBytes === "number");
+    assert.ok(typeof payload.status.diskUsage.framesBytes === "number");
+    assert.ok(payload.status.diskUsage.framesBytes > 0);
+    assert.ok(payload.status.diskUsage.runDirBytes >= payload.status.diskUsage.framesBytes);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --json has null outputPath and null cleanup when no run-summary exists", async () => {
+  const { runDir } = await makeRun();
+  try {
+    const result = runCli(["status", runDir, "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.outputPath, null);
+    assert.equal(payload.status.cleanup, null);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --json includes outputPath and cleanup from run-summary when present", async () => {
+  const { runDir } = await makeRun({ state: "rendered" });
+  try {
+    const fakeOutputPath = path.join(runDir, "output.mp4");
     const summary = {
       render: {
-        outputPath: renderedOutputPath,
-        bytes: 1234,
+        outputPath: fakeOutputPath,
+        bytes: 12345,
+        duration: 1.5,
+        dimensions: { width: 1280, height: 720 },
         frameCount: 3,
+        sourceFrameCount: 3,
         timestamp: new Date().toISOString()
       },
       cleanup: {
@@ -229,27 +261,11 @@ test("status --json includes output path and cleanup metadata", async () => {
     const result = runCli(["status", runDir, "--json"]);
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
-    assert.equal(payload.status.outputPath, renderedOutputPath);
+    assert.equal(payload.status.outputPath, fakeOutputPath);
+    assert.ok(payload.status.cleanup !== null && typeof payload.status.cleanup === "object");
+    assert.equal(payload.status.cleanup.success, true);
     assert.equal(payload.status.cleanup.removed, 3);
     assert.equal(payload.status.cleanup.retained, 0);
-    assert.equal(payload.status.cleanup.success, true);
-
-    const statusOnDisk = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
-    assert.equal(Object.hasOwn(statusOnDisk, "outputPath"), false);
-    assert.equal(Object.hasOwn(statusOnDisk, "cleanup"), false);
-  } finally {
-    await fs.rm(runDir, { recursive: true, force: true });
-  }
-});
-
-test("status --json defaults outputPath to runDir/output.mp4 when summary is absent", async () => {
-  const { runDir } = await makeRun({ state: "completed" });
-  try {
-    const result = runCli(["status", runDir, "--json"]);
-    assert.equal(result.status, 0, result.stderr);
-    const payload = JSON.parse(result.stdout);
-    assert.equal(payload.status.outputPath, path.resolve(runDir, "output.mp4"));
-    assert.equal(Object.hasOwn(payload.status, "cleanup"), false);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
