@@ -814,7 +814,30 @@ test("cleanup refuses to delete frames before output.mp4 exists without --force"
   try {
     const result = runCli(["cleanup", runDir]);
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Refusing to delete frames/);
+    assert.match(result.stderr, /Refusing to delete frames before a valid output file exists at/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup honors configured custom output path before output.mp4", async () => {
+  const { runDir } = await makeRun();
+  try {
+    const configuredOutput = path.join(runDir, "custom", "output.mp4");
+    await withFakeFFmpeg(async (manager) => {
+      await fs.rm(path.join(runDir, "output.mp4"), { force: true });
+      await fs.mkdir(path.join(runDir, "custom"), { recursive: true });
+      await fs.writeFile(configuredOutput, "rendered");
+      const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+      config.output = { path: "custom/output.mp4" };
+      await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
+
+      const result = runCli(["cleanup", runDir], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.cleanup.removed, 3);
+      assert.equal(summary.cleanup.retained, 0);
+    });
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -824,17 +847,24 @@ test("cleanup --keep-samples reports one retained frame for a one-frame run", as
   const { runDir } = await makeRun({ frameCount: 1 });
   try {
     await fs.writeFile(path.join(runDir, "output.mp4"), "rendered");
+    await withFakeFFmpeg(async (manager) => {
+      const originalPath = process.env.PATH;
+      process.env.PATH = manager.getPATHEnv();
+      try {
+        const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+        assert.equal(result.removed, 0);
+        assert.equal(result.retained, 1);
+        const frames = await fs.readdir(path.join(runDir, "frames"));
+        assert.deepEqual(frames.sort(), ["frame-000001.png"]);
 
-    const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
-    assert.equal(result.removed, 0);
-    assert.equal(result.retained, 1);
-    const frames = await fs.readdir(path.join(runDir, "frames"));
-    assert.deepEqual(frames.sort(), ["frame-000001.png"]);
-
-    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
-    assert.equal(summary.cleanup.success, true);
-    assert.equal(summary.cleanup.removed, 0);
-    assert.equal(summary.cleanup.retained, 1);
+        const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+        assert.equal(summary.cleanup.success, true);
+        assert.equal(summary.cleanup.removed, 0);
+        assert.equal(summary.cleanup.retained, 1);
+      } finally {
+        process.env.PATH = originalPath;
+      }
+    });
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
