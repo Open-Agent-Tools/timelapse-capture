@@ -246,7 +246,7 @@ test("renderFrames includes summary write failures in render failure diagnostics
       return originalWriteFileSync(target, data, options);
     };
 
-    const result = renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
+    const result = await renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
     assert.equal(result.success, false);
     assert.match(result.error, /ffmpeg failed/);
     assert.match(result.error, /failed to update render summary: summary volume is read-only/);
@@ -259,7 +259,7 @@ test("renderFrames includes summary write failures in render failure diagnostics
 test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async () => {
   const { runDir } = await makeRun({ frameCount: 1 });
   try {
-    const result = renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
+    const result = await renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
     assert.equal(result.success, false);
     assert.match(result.error, /ffmpeg failed/);
 
@@ -282,7 +282,7 @@ test("renderFrames refuses custom output path before cleanup", async () => {
   try {
     const customOutputPath = path.join(runDir, "custom.mp4");
     const expectedOutputPath = path.join(runDir, "output.mp4");
-    const result = renderFrames(runDir, {
+    const result = await renderFrames(runDir, {
       config: { output: { path: customOutputPath } },
       ffmpegPath: "definitely-not-ffmpeg"
     });
