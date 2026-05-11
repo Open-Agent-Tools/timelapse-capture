@@ -318,14 +318,42 @@ test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async 
   }
 });
 
-test("renderFrames writes to configured custom output path under runDir", async () => {
+test("renderFrames records configured output path on ffmpeg failure", async () => {
   const { runDir } = await makeRun({ frameCount: 1 });
   try {
     const customRelativePath = path.join("custom", "output.mp4");
     const expectedOutputPath = path.join(runDir, customRelativePath);
 
     await runWithFakeFFmpeg(async () => {
-      const result = renderFrames(runDir, {
+      const result = await renderFrames(runDir, {
+        ffmpegPath: "definitely-not-ffmpeg",
+        config: { output: { path: customRelativePath } }
+      });
+      assert.equal(result.success, false);
+      assert.match(result.error, /ffmpeg failed/);
+
+      const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.lastRenderAttempt.outputPath, expectedOutputPath);
+      assert.equal(summary.lastRenderAttempt.sourceFrameCount, 1);
+      assert.equal(summary.cleanup.success, false);
+      assert.equal(summary.cleanup.reason, "render-or-validation-failed");
+      assert.equal(summary.cleanup.removed, 0);
+    });
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("renderFrames renders configured custom output path before cleanup", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 1 });
+  try {
+    const customRelativePath = path.join("custom", "output.mp4");
+    const expectedOutputPath = path.join(runDir, customRelativePath);
+    const sourceFramePath = path.join(framesDir, "frame-000001.png");
+    await fsp.rm(path.join(runDir, "output.mp4"), { force: true });
+
+    await runWithFakeFFmpeg(async () => {
+      const result = await renderFrames(runDir, {
         config: { output: { path: customRelativePath } }
       });
 
@@ -335,6 +363,11 @@ test("renderFrames writes to configured custom output path under runDir", async 
 
       const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
       assert.equal(summary.render.outputPath, result.outputPath);
+      assert.equal(summary.render.sourceFrameCount, 1);
+      assert.equal(summary.cleanup.success, true);
+      assert.equal(summary.cleanup.removed, 1);
+      assert.equal(summary.cleanup.reason, "post-render-cleanup");
+      assert.equal(await exists(sourceFramePath), false, "Source frame should be removed by post-render cleanup");
     });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
