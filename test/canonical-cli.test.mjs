@@ -528,6 +528,40 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
   }
 });
 
+test("render with fake ffmpeg success mode does not create -version artifact", async () => {
+  const { runDir } = await makeRun();
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-ffmpeg-version-cwd-"));
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = spawnSync(process.execPath, [CLI, "render", runDir, "--json"], {
+        encoding: "utf8",
+        cwd,
+        env: { ...process.env, PATH: manager.getPATHEnv() }
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const summary = JSON.parse(result.stdout);
+      const outputPath = path.join(runDir, "output.mp4");
+      assert.equal(summary.output, outputPath);
+      assert.equal(await fs.stat(outputPath).then(() => true), true);
+
+      const versionArtifactExists = await fs
+        .stat(path.join(cwd, "-version"))
+        .then(
+          () => true,
+          (error) => {
+            if (error.code === "ENOENT") return false;
+            throw error;
+          }
+        );
+      assert.equal(versionArtifactExists, false);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("render with --keep-frames records retained cleanup summary", async () => {
   const { runDir } = await makeRun();
   try {
