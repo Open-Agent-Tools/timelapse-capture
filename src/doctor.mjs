@@ -11,9 +11,9 @@ function checkResult({ name, status, message, details = {}, error = null, fix = 
 function normalizeCheckResult(check) {
   const raw = check || {};
   return {
-    name: raw.name,
-    status: raw.status,
-    message: raw.message,
+    name: typeof raw.name === "string" && raw.name ? raw.name : "unknown",
+    status: raw.status === "pass" || raw.status === "fail" ? raw.status : "fail",
+    message: typeof raw.message === "string" && raw.message ? raw.message : "check returned no message",
     details: raw.details ?? {},
     error: raw.error ?? null,
     fix: raw.fix ?? null

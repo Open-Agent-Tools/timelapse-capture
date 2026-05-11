@@ -265,6 +265,37 @@ test("formatDoctorHuman prints pass/fail lines with fixes", () => {
   assert.match(output, /summary: 1 passed, 1 failed, 2 total/);
 });
 
+test("runAllChecks normalizes a check returning an empty object", async () => {
+  const result = await runAllChecks({ checks: [async () => ({})] });
+  assert.equal(result.checks[0].name, "unknown");
+  assert.equal(result.checks[0].status, "fail");
+  assert.equal(typeof result.checks[0].message, "string");
+  assert.ok(result.checks[0].message.length > 0);
+  assert.equal(result.summary.pass, 0);
+  assert.equal(result.summary.fail, 1);
+  assert.equal(result.summary.total, 1);
+  assert.equal(result.summary.pass + result.summary.fail, result.summary.total);
+  assert.equal(result.ok, false);
+  assert.equal(result.exitCode, 1);
+});
+
+test("runAllChecks coerces unknown status values to fail", async () => {
+  const result = await runAllChecks({
+    checks: [async () => ({ name: "x", status: "weird", message: "hi" })]
+  });
+  assert.equal(result.checks[0].status, "fail");
+  assert.equal(result.summary.fail, 1);
+  assert.equal(result.summary.pass, 0);
+  assert.equal(result.exitCode, 1);
+});
+
+test("formatDoctorHuman never prints \"undefined\" for malformed checks", async () => {
+  const result = await runAllChecks({ checks: [async () => ({})] });
+  const output = formatDoctorHuman(result);
+  assert.ok(output.includes("[FAIL] unknown:"), `Expected "[FAIL] unknown:" in output: ${output}`);
+  assert.ok(!output.includes("undefined"), `Expected no "undefined" in output: ${output}`);
+});
+
 test("doctor --json emits parseable JSON and exits non-zero when a dependency is missing", () => {
   const result = spawnSync(process.execPath, [CLI, "doctor", "--json"], {
     encoding: "utf8",
