@@ -267,7 +267,7 @@ test("renderFrames includes summary write failures in render failure diagnostics
     };
 
     await runWithFakeFFmpeg(async () => {
-      const result = await renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
+      const result = renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
       assert.equal(result.success, false);
       assert.match(result.error, /ffmpeg failed/);
       assert.match(result.error, /failed to update render summary: summary volume is read-only/);
@@ -282,7 +282,7 @@ test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async 
   const { runDir } = await makeRun({ frameCount: 1 });
   try {
     await runWithFakeFFmpeg(async () => {
-      const result = await renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
+      const result = renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
       assert.equal(result.success, false);
       assert.match(result.error, /ffmpeg failed/);
 
@@ -309,7 +309,7 @@ test("renderFrames writes to configured custom output path under runDir", async 
     const expectedOutputPath = path.join(runDir, customRelativePath);
 
     await runWithFakeFFmpeg(async () => {
-      const result = await renderFrames(runDir, {
+      const result = renderFrames(runDir, {
         config: { output: { path: customRelativePath } }
       });
 
@@ -329,7 +329,7 @@ test("renderFrames rejects configured output paths that escape runDir", async ()
   const { runDir } = await makeRun({ frameCount: 1 });
   try {
     const escapePath = path.join("..", "escape.mp4");
-    const result = await renderFrames(runDir, {
+    const result = renderFrames(runDir, {
       config: { output: { path: escapePath } }
     });
 
