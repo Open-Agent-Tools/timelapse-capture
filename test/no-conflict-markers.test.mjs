@@ -11,10 +11,10 @@ const SELF = fileURLToPath(import.meta.url);
 const SCAN_ROOTS = ['src', 'bin', 'test', 'scripts', 'docs'];
 const SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.mjs', '.sh', '.md']);
 const MARKER_PATTERNS = [
-  new RegExp(`^${'<'.repeat(7)} `),
+  new RegExp(`^${'<'.repeat(7)}(?:\\s|$)`),
   /^=======\r?$/,
-  /^\|\|\|\|\|\|\| /,
-  new RegExp(`^${'>'.repeat(7)} `)
+  /^\|\|\|\|\|\|\|(?:\s|$)/,
+  new RegExp(`^${'>'.repeat(7)}(?:\\s|$)`)
 ];
 
 function isConflictMarkerLine(line) {
@@ -57,6 +57,14 @@ test('conflict marker detection handles CRLF separators and diff3 markers', () =
   assert.equal(isConflictMarkerLine(`${'>'.repeat(7)} branch`), true);
   assert.equal(isConflictMarkerLine('## Section title'), false);
   assert.equal(isConflictMarkerLine('const separator = "=======";'), false);
+});
+
+test('conflict marker detection handles minimal/malformed markers without trailing labels', () => {
+  assert.equal(isConflictMarkerLine('<<<<<<<'), true);
+  assert.equal(isConflictMarkerLine('>>>>>>>'), true);
+  assert.equal(isConflictMarkerLine('|||||||'), true);
+  assert.equal(isConflictMarkerLine('const x = "<<<<<<<"'), false);
+  assert.equal(isConflictMarkerLine('  <<<<<<< Indented marker'), false);
 });
 
 test('conflict marker scan includes scripts and docs text files', async (t) => {
