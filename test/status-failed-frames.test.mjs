@@ -23,6 +23,7 @@ test("failed frame attempts preserve prior successful latestFrame", async () => 
       ["start", "http://example.test", "--duration", "3s", "--interval", "1s", "--out", outDir, "--json"],
       {
         TIMELAPSE_SIMULATE_FRAMES: "3",
+        // "1" enables the fixture mode that fails frame index 2, the second capture attempt.
         TIMELAPSE_SIMULATE_FRAME_FAILURE: "1"
       }
     );
@@ -52,8 +53,10 @@ test("failed frame attempts preserve prior successful latestFrame", async () => 
       .map((line) => JSON.parse(line));
     assert.equal(manifestLines.filter((record) => record.status === "captured").length, 2);
     assert.equal(manifestLines.filter((record) => record.status === "failed").length, 1);
-    assert.equal(manifestLines[1].index, 2);
-    assert.equal(manifestLines[1].status, "failed");
+    const failedRecord = manifestLines.find((record) => record.status === "failed");
+    assert.ok(failedRecord, "failed manifest record exists");
+    assert.equal(failedRecord.index, 2);
+    assert.equal(failedRecord.status, "failed");
   } finally {
     await fs.rm(outDir, { recursive: true, force: true });
   }
