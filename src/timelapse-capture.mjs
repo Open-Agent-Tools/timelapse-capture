@@ -1472,6 +1472,8 @@ export function renderFrames(runDir, options = {}) {
       cleanup: null
     };
 
+    writeSummarySync(runDir, summary);
+
     if (!options["keep-frames"] && !options["keep-all"]) {
       const cleanup = cleanupFrames(framesDir);
       summary.cleanup = {
@@ -1677,19 +1679,14 @@ export async function commandCleanup({ runDir, options = {} }) {
       return result;
     }
     const last = frameFiles[frameFiles.length - 1];
-    const lastBytes = await fsp.readFile(path.join(framesDir, last));
-    await fsp.writeFile(path.join(resolved, "latest-retained.png"), lastBytes);
-    await Promise.all(frameFiles.map((f) => fsp.rm(path.join(framesDir, f), { force: true })));
-    const removeResult = await removeEmptyDir(framesDir);
-    if (!removeResult.success) {
-      throw new Error(removeResult.error);
-    }
+    const toDelete = frameFiles.filter((f) => f !== last);
+    await Promise.all(toDelete.map((p) => fsp.rm(path.join(framesDir, p), { force: true })));
     const result = {
       message: "Frames cleaned up (kept latest)",
-      removed: frameFiles.length,
+      removed: toDelete.length,
       retained: 1
     };
-    await writeCleanupSummary(resolved, { success: true, removed: frameFiles.length, retained: 1 });
+    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained: 1 });
     return result;
   }
 

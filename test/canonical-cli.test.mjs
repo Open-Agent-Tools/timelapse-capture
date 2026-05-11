@@ -552,6 +552,42 @@ test("render with --keep-frames records retained cleanup summary", async () => {
   }
 });
 
+test("render records validation metadata before default cleanup", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      assert.equal(result.status, 0, result.stderr);
+
+      const payload = JSON.parse(result.stdout);
+      const expectedOutputPath = path.join(runDir, "output.mp4");
+      assert.equal(payload.output, expectedOutputPath);
+
+      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, "rendered");
+
+      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.render.outputPath, expectedOutputPath);
+      assert.ok(summary.render.bytes > 0);
+      assert.ok(summary.render.duration > 0);
+      assert.ok(summary.render.dimensions.width > 0);
+      assert.ok(summary.render.dimensions.height > 0);
+      assert.equal(summary.render.sourceFrameCount, 3);
+      assert.equal(summary.cleanup.success, true);
+      assert.equal(summary.cleanup.removed, 3);
+
+      const framesDir = path.join(runDir, "frames");
+      const remainingFrames = await fs.readdir(framesDir).catch((error) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      });
+      assert.deepEqual(remainingFrames.filter((name) => name.endsWith(".png")), []);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render writes render_failed when ffmpeg exits non-zero", async () => {
   const { runDir } = await makeRun();
   try {
@@ -565,6 +601,41 @@ test("render writes render_failed when ffmpeg exits non-zero", async () => {
     }, "fail");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render preserves frames when MP4 validation fails", async () => {
+  const cases = [
+    ["ffmpeg exits non-zero", "fail", /ffmpeg failed/],
+    ["ffmpeg creates no output", "no-output", /Output file does not exist/],
+    ["ffmpeg creates empty output", "empty-output", /Output file is empty/],
+    ["ffprobe reports zero duration", "zero-duration", /duration is zero/],
+    ["ffprobe reports no video stream", "no-video-stream", /readable video stream/],
+    ["ffprobe cannot read output", "invalid-output", /ffprobe failed|valid MP4/]
+  ];
+
+  for (const [name, fakeMode, errorPattern] of cases) {
+    const { runDir } = await makeRun();
+    try {
+      await withFakeFFmpeg(async (manager) => {
+        const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+        assert.notEqual(result.status, 0, name);
+        assert.match(result.stderr, errorPattern, name);
+
+        const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+        assert.equal(status.state, "render_failed", name);
+
+        const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+        assert.equal(summary.cleanup.removed, 0, name);
+
+        const frameNames = (await fs.readdir(path.join(runDir, "frames"))).filter((frameName) =>
+          frameName.endsWith(".png")
+        );
+        assert.equal(frameNames.length, 3, name);
+      }, fakeMode);
+    } finally {
+      await fs.rm(runDir, { recursive: true, force: true });
+    }
   }
 });
 
@@ -1086,29 +1157,29 @@ test("peek --latest returns poster.png after default cleanup removes raw frames"
     await withFakeFFmpeg(async (manager) => {
       const renderResult = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(renderResult.status, 0, renderResult.stderr);
+
+      // Write poster.png directly since fake-ffmpeg doesn't copy the poster in tests
+      const posterPath = path.join(runDir, "poster.png");
+      if (!(await fs.stat(posterPath).then(() => true, () => false))) {
+        await fs.writeFile(posterPath, Buffer.from(
+          "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
+          "hex"
+        ));
+      }
+
+      const cleanupResult = runCli(["cleanup", runDir], { PATH: manager.getPATHEnv() });
+      assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
+
+      assert.equal(await fs.stat(path.join(runDir, "frames")).then(() => true, () => false), false,
+        "frames/ directory should not exist after cleanup");
+      assert.ok(await fs.stat(posterPath).then(() => true, () => false), "poster.png should exist");
+
+      const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
+      assert.equal(peekResult.status, 0, peekResult.stderr);
+      const payload = JSON.parse(peekResult.stdout);
+      assert.equal(payload.exists, true);
+      assert.equal(payload.path, posterPath);
     }, "success");
-
-    // Write poster.png directly since fake-ffmpeg doesn't copy the poster in tests
-    const posterPath = path.join(runDir, "poster.png");
-    if (!(await fs.stat(posterPath).then(() => true, () => false))) {
-      await fs.writeFile(posterPath, Buffer.from(
-        "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
-        "hex"
-      ));
-    }
-
-    const cleanupResult = runCli(["cleanup", runDir]);
-    assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
-
-    assert.equal(await fs.stat(path.join(runDir, "frames")).then(() => true, () => false), false,
-      "frames/ directory should not exist after cleanup");
-    assert.ok(await fs.stat(posterPath).then(() => true, () => false), "poster.png should exist");
-
-    const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
-    assert.equal(peekResult.status, 0, peekResult.stderr);
-    const payload = JSON.parse(peekResult.stdout);
-    assert.equal(payload.exists, true);
-    assert.equal(payload.path, posterPath);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -1135,31 +1206,28 @@ test("status --json includes diskUsage with runDirBytes and framesBytes", async 
   }
 });
 
-test("peek --latest returns latest-retained.png after cleanup --keep-latest", async () => {
+test("peek --latest returns remaining frame after cleanup --keep-latest", async () => {
   const { runDir } = await makeRun();
   // render auto-calls cleanupFrames internally; use --keep-frames to preserve frames for --keep-latest
   try {
     await withFakeFFmpeg(async (manager) => {
       const renderResult = runCli(["render", runDir, "--json", "--keep-frames"], { PATH: manager.getPATHEnv() });
       assert.equal(renderResult.status, 0, renderResult.stderr);
+
+      // cleanup --keep-latest needs fake ffprobe to validate the rendered output.mp4
+      const cleanupResult = runCli(["cleanup", runDir, "--keep-latest"], { PATH: manager.getPATHEnv() });
+      assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
+
+      // With --keep-latest, the last frame remains in frames/ (no latest-retained.png)
+      const posterPath = path.join(runDir, "poster.png");
+      await fs.rm(posterPath, { force: true });
+
+      const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
+      assert.equal(peekResult.status, 0, peekResult.stderr);
+      const payload = JSON.parse(peekResult.stdout);
+      assert.equal(payload.exists, true);
+      assert.equal(payload.frame.index, 3);
     }, "success");
-
-    const cleanupResult = runCli(["cleanup", runDir, "--keep-latest"]);
-    assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
-
-    const retainedPath = path.join(runDir, "latest-retained.png");
-    assert.ok(await fs.stat(retainedPath).then(() => true, () => false),
-      "latest-retained.png should exist after cleanup --keep-latest");
-
-    // Remove poster.png if it exists so the latest-retained branch is exercised
-    const posterPath = path.join(runDir, "poster.png");
-    await fs.rm(posterPath, { force: true });
-
-    const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
-    assert.equal(peekResult.status, 0, peekResult.stderr);
-    const payload = JSON.parse(peekResult.stdout);
-    assert.equal(payload.exists, true);
-    assert.equal(payload.path, retainedPath);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
