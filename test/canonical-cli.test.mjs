@@ -245,7 +245,6 @@ test("status --json includes outputPath and cleanup from run-summary when presen
         bytes: 12345,
         duration: 1.5,
         dimensions: { width: 1280, height: 720 },
-        frameCount: 3,
         sourceFrameCount: 3,
         timestamp: new Date().toISOString()
       },
@@ -502,7 +501,7 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.ok(summary.output.endsWith("output.mp4"));
-      assert.equal(summary.frameCount, 3);
+      assert.equal(summary.sourceFrameCount, 3);
 
       const onDisk = JSON.parse(
         await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
@@ -744,7 +743,7 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.frameCount, 3);
+      assert.equal(summary.sourceFrameCount, 3);
       const ffmpegArgs = JSON.parse(
         await fs.readFile(path.join(manager.outputDir, "ffmpeg-args.json"), "utf8")
       );
@@ -813,7 +812,7 @@ test("render replaces stale sparse-frame staging before restaging", async () => 
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.frameCount, 3);
+      assert.equal(summary.sourceFrameCount, 3);
 
       const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(finalStatus.state, "rendered");
@@ -874,7 +873,7 @@ test("render with contiguous frames skips staging", async () => {
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.frameCount, 3);
+      assert.equal(summary.sourceFrameCount, 3);
 
       const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(finalStatus.state, "rendered");
