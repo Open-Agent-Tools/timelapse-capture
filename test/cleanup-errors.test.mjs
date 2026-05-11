@@ -6,8 +6,19 @@ import os from "node:os";
 import path from "node:path";
 
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
-
 import { cleanupFrames, commandCleanup, renderFrames, __test__ } from "../src/timelapse-capture.mjs";
+
+async function runWithFakeFFmpeg(callback) {
+  return withFakeFFmpeg(async (manager) => {
+    const originalPath = process.env.PATH;
+    process.env.PATH = manager.getPATHEnv();
+    try {
+      return await callback();
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+}
 
 const FRAME_PNG_1x1 = Buffer.from(
   "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
@@ -23,18 +34,6 @@ async function makeRun({ frameCount = 1 } = {}) {
   }
   await fsp.writeFile(path.join(runDir, "output.mp4"), "placeholder");
   return { runDir, framesDir };
-}
-
-async function runWithFakeFFmpeg(callback) {
-  return withFakeFFmpeg(async (manager) => {
-    const originalPath = process.env.PATH;
-    process.env.PATH = manager.getPATHEnv();
-    try {
-      return await callback();
-    } finally {
-      process.env.PATH = originalPath;
-    }
-  });
 }
 
 async function exists(pathToCheck) {
@@ -215,22 +214,20 @@ test("cleanup --frames ignores a non-empty frames directory after deleting raw f
   }
 });
 
-test("cleanup --keep-latest promotes the surviving frame to latest-retained.png", async () => {
+test("cleanup --keep-latest keeps the last frame in the frames directory", async () => {
   const { runDir, framesDir } = await makeRun({ frameCount: 2 });
-  await fsp.writeFile(path.join(runDir, "output.mp4"), "placeholder");
   try {
-    const lastFrameSrc = path.join(framesDir, "frame-000002.png");
-    const expectedBytes = await fsp.readFile(lastFrameSrc);
+    await runWithFakeFFmpeg(async () => {
+      const result = await commandCleanup({ runDir, options: { "keep-latest": true } });
+      assert.equal(result.message, "Frames cleaned up (kept latest)");
+      assert.equal(result.removed, 1);
+      assert.equal(result.retained, 1);
 
-    const result = await commandCleanup({ runDir, options: { "keep-latest": true } });
-    assert.equal(result.message, "Frames cleaned up (kept latest)");
-
-    const retainedPath = path.join(runDir, "latest-retained.png");
-    assert.ok(fs.existsSync(retainedPath), "latest-retained.png should exist");
-    const actualBytes = await fsp.readFile(retainedPath);
-    assert.deepEqual(actualBytes, expectedBytes, "latest-retained.png should match the last frame");
-
-    assert.equal(fs.existsSync(framesDir), false, "frames/ directory should be removed");
+      const remaining = await fsp.readdir(framesDir);
+      assert.deepEqual(remaining.sort(), ["frame-000002.png"], "only last frame should remain");
+      assert.equal(fs.existsSync(path.join(runDir, "latest-retained.png")), false,
+        "latest-retained.png should not be created");
+    });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
