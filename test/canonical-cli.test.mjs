@@ -962,7 +962,8 @@ test("cleanup refuses to delete frames before output.mp4 exists without --force"
   try {
     const result = runCli(["cleanup", runDir]);
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Refusing to delete frames before a valid output file exists at/);
+    assert.match(result.stderr, /Refusing to delete frames:/);
+    assert.match(result.stderr, /Pass --force to override/);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

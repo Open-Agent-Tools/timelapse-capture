@@ -138,6 +138,26 @@ test("cleanup --keep-samples reports one retained frame for one-frame runs", asy
   }
 });
 
+test("cleanup refusal surfaces validateMP4 error reason", async () => {
+  const { runDir } = await makeRun({ frameCount: 1 });
+  const outputPath = path.join(runDir, "output.mp4");
+  try {
+    await fsp.rm(outputPath, { force: true });
+
+    await runWithFakeFFmpeg(async () => {
+      await assert.rejects(
+        commandCleanup({ runDir, options: {} }),
+        (error) =>
+          error.message.includes("Refusing to delete frames: Output file does not exist") &&
+          error.message.includes(`(at ${outputPath})`) &&
+          error.message.includes("Pass --force to override.")
+      );
+    });
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("cleanup succeeds when configured output path is present", async () => {
   const { runDir, framesDir } = await makeRun({ frameCount: 1 });
   try {
