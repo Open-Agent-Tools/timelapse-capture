@@ -1278,7 +1278,11 @@ export function cleanupFrames(framesDir) {
     return { success: true, removed: 0 };
   }
   let removed = 0;
-  fs.rmSync(path.join(framesDir, ".render-staging"), { recursive: true, force: true });
+  try {
+    removeStagingDir(path.join(framesDir, ".render-staging"));
+  } catch (error) {
+    return { success: false, removed, error: error.message };
+  }
   const files = fs.readdirSync(framesDir);
   for (const file of files) {
     if (/\.(png|jpg|jpeg)$/i.test(file)) {
@@ -1362,7 +1366,8 @@ function stageContiguousFrames(framesDir) {
 function removeStagingDir(stagingDir) {
   try {
     fs.rmSync(stagingDir, { recursive: true, force: true });
-  } catch {
+  } catch (error) {
+    throw new Error(`failed to remove render staging directory ${stagingDir}: ${error.message}`);
   }
 }
 
