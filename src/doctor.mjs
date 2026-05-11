@@ -15,8 +15,8 @@ function normalizeCheckResult(check) {
     status: raw.status,
     message: raw.message,
     details: raw.details ?? {},
-    error: Object.prototype.hasOwnProperty.call(raw, "error") ? raw.error : null,
-    fix: Object.prototype.hasOwnProperty.call(raw, "fix") ? raw.fix : null
+    error: raw.error ?? null,
+    fix: raw.fix ?? null
   };
 }
 

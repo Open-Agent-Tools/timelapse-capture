@@ -180,6 +180,17 @@ test("commandDoctor normalizes custom check payloads to the stable contract", as
   });
 });
 
+test("normalizeCheckResult coerces explicit undefined error/fix to null", async () => {
+  const result = await commandDoctor({
+    checks: [
+      async () => ({ name: "check", status: "pass", message: "ok", error: undefined, fix: undefined })
+    ]
+  });
+
+  assert.strictEqual(result.checks[0].error, null);
+  assert.strictEqual(result.checks[0].fix, null);
+});
+
 test("checkPlaywright reports missing dependency with manual fix guidance", async () => {
   const error = new Error("Cannot find module 'playwright'");
   const calls = [];
