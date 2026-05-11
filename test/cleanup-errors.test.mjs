@@ -200,6 +200,22 @@ test("cleanup succeeds when run-summary render output path is present", async ()
   }
 });
 
+test("cleanup surfaces validateMP4 failure reason", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 1 });
+  try {
+    await fsp.rm(path.join(runDir, "output.mp4"), { force: true });
+
+    await assert.rejects(
+      () => commandCleanup({ runDir, options: {} }),
+      /Refusing to delete frames: Output file does not exist \(at .*output\.mp4\)\. Pass --force to override\./
+    );
+
+    assert.equal(await exists(path.join(framesDir, "frame-000001.png")), true);
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("cleanup --keep-samples keeps distinct first and last frames", async () => {
   const { runDir, framesDir } = await makeRun({ frameCount: 3 });
   try {
