@@ -1394,7 +1394,6 @@ export function renderFrames(runDir, options = {}) {
   let ffmpegCommand = ["ffmpeg"];
 
   try {
-    const expectedOutputPath = path.resolve(runDir, "output.mp4");
     const framesDir = getFramesDir(runDir);
     sourceFrameCount = countFrameFiles(framesDir);
     if (sourceFrameCount === 0) {
@@ -1403,10 +1402,12 @@ export function renderFrames(runDir, options = {}) {
     const outputPath = getOutputPath(runDir, options.config);
     const ffmpegPath = options.ffmpegPath || "ffmpeg";
     ffmpegCommand = [ffmpegPath];
-    if (outputPath !== expectedOutputPath) {
+
+    const resolvedRunDir = path.resolve(runDir);
+    if (outputPath !== resolvedRunDir && !outputPath.startsWith(resolvedRunDir + path.sep)) {
       throw new RenderError(
-        `Output path does not match expected path: ${expectedOutputPath}`,
-        "OUTPUT_PATH_MISMATCH"
+        `Configured output path resolves outside the run directory: ${outputPath}`,
+        "OUTPUT_PATH_OUTSIDE_RUNDIR"
       );
     }
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });

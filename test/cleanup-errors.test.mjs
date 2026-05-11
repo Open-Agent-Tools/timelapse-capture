@@ -281,25 +281,43 @@ test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async 
   }
 });
 
-test("renderFrames refuses custom output path before cleanup", async () => {
-  const { runDir, framesDir } = await makeRun();
+
+test("renderFrames writes to configured custom output path under runDir", async () => {
+  const { runDir } = await makeRun({ frameCount: 1 });
   try {
-    const customOutputPath = path.join(runDir, "custom.mp4");
-    const expectedOutputPath = path.join(runDir, "output.mp4");
+    const customRelativePath = path.join("custom", "output.mp4");
+    const expectedOutputPath = path.join(runDir, customRelativePath);
+
+    await runWithFakeFFmpeg(async () => {
+      const result = await renderFrames(runDir, {
+        config: { output: { path: customRelativePath } }
+      });
+
+      assert.equal(result.success, true, `Render should succeed, but failed with: ${result.error}`);
+      assert.equal(result.outputPath, expectedOutputPath);
+      assert.equal(fs.existsSync(result.outputPath), true, "Output file should exist");
+
+      const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.render.outputPath, result.outputPath);
+    });
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("renderFrames rejects configured output paths that escape runDir", async () => {
+  const { runDir } = await makeRun({ frameCount: 1 });
+  try {
+    const escapePath = path.join("..", "escape.mp4");
     const result = await renderFrames(runDir, {
-      config: { output: { path: customOutputPath } },
-      ffmpegPath: "definitely-not-ffmpeg"
+      config: { output: { path: escapePath } }
     });
 
     assert.equal(result.success, false);
-    assert.match(result.error, new RegExp(expectedOutputPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(result.error, /OUTPUT_PATH_OUTSIDE_RUNDIR|outside.*run directory/i);
 
-    const status = JSON.parse(await fsp.readFile(path.join(runDir, "status.json"), "utf8"));
-    assert.equal(status.state, "render_failed");
-
-    const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
-    assert.equal(summary.cleanup.removed, 0);
-    assert.equal(fs.existsSync(path.join(framesDir, "frame-000001.png")), true);
+    const escapedFile = path.resolve(runDir, escapePath);
+    assert.equal(fs.existsSync(escapedFile), false, "Escaped file should not exist");
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
