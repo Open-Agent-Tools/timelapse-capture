@@ -21,6 +21,7 @@ class FakeBinaryManager {
     if (mode === "success") {
       script =
         "#!/bin/sh\n" +
+        "if [ \"$1\" = \"-version\" ]; then echo 'fake ffmpeg version 6.1'; exit 0; fi\n" +
         "for arg do out_file=\"$arg\"; done\n" +
         "printf 'fake mp4 bytes' > \"$out_file\"\n" +
         "exit 0";
