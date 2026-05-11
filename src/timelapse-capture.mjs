@@ -1382,11 +1382,13 @@ export function renderFrames(runDir, options = {}) {
     outputPath: null,
     metadata: null,
     cleanupResult: null,
-    error: null
+    error: null,
+    errorCode: null
   };
 
   if (!fs.existsSync(runDir)) {
     result.error = `Run directory does not exist: ${runDir}`;
+    result.errorCode = "ENOENT";
     return result;
   }
 
@@ -1509,6 +1511,7 @@ export function renderFrames(runDir, options = {}) {
     return result;
   } catch (error) {
     result.error = error.message;
+    result.errorCode = error?.code ?? null;
 
     const status = readStatusSync(runDir) || {};
     status.state = "render_failed";
@@ -1568,7 +1571,7 @@ export async function commandRender({ runDir, options = {} }) {
   }
   const result = renderFrames(resolved, renderOptions);
   if (!result.success) {
-    if (result.error && result.error.includes("valid MP4")) {
+    if (result.errorCode === "VALIDATION_FAILED") {
       throw new Error(`Rendered output is not a valid MP4: ${result.error}`);
     }
     throw new Error(`ffmpeg render failed: ${result.error}`);

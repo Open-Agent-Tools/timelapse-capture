@@ -8,7 +8,7 @@ import path from "node:path";
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 import { cleanupFrames, commandCleanup, renderFrames, __test__ } from "../src/timelapse-capture.mjs";
 
-async function runWithFakeFFmpeg(callback) {
+async function runWithFakeFFmpeg(callback, mode = "success") {
   return withFakeFFmpeg(async (manager) => {
     const originalPath = process.env.PATH;
     process.env.PATH = manager.getPATHEnv();
@@ -17,7 +17,7 @@ async function runWithFakeFFmpeg(callback) {
     } finally {
       process.env.PATH = originalPath;
     }
-  });
+  }, mode);
 }
 
 const FRAME_PNG_1x1 = Buffer.from(
@@ -265,6 +265,7 @@ test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async 
       const result = await renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
       assert.equal(result.success, false);
       assert.match(result.error, /ffmpeg failed/);
+      assert.equal(result.errorCode, "FFMPEG_FAILED");
 
       const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
       assert.deepEqual(summary.lastRenderAttempt.outputPath, path.join(runDir, "output.mp4"));
@@ -303,4 +304,24 @@ test("renderFrames refuses custom output path before cleanup", async () => {
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
+});
+
+test("renderFrames sets errorCode to VALIDATION_FAILED when output is not a valid MP4", async () => {
+  const { runDir } = await makeRun({ frameCount: 1 });
+  try {
+    await runWithFakeFFmpeg(async () => {
+      const result = await renderFrames(runDir);
+      assert.equal(result.success, false);
+      assert.equal(result.errorCode, "VALIDATION_FAILED");
+      assert.match(result.error, /valid MP4/);
+    }, "invalid-output");
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("renderFrames sets errorCode to ENOENT when run directory does not exist", async () => {
+  const result = await renderFrames("non-existent-dir");
+  assert.equal(result.success, false);
+  assert.equal(result.errorCode, "ENOENT");
 });
