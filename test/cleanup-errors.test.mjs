@@ -302,7 +302,6 @@ test("renderFrames records lastRenderAttempt metadata on ffmpeg failure", async 
   }
 });
 
-
 test("renderFrames writes to configured custom output path under runDir", async () => {
   const { runDir } = await makeRun({ frameCount: 1 });
   try {
@@ -362,4 +361,44 @@ test("renderFrames sets errorCode to ENOENT when run directory does not exist", 
   const result = await renderFrames("non-existent-dir");
   assert.equal(result.success, false);
   assert.equal(result.errorCode, "ENOENT");
+});
+
+test("renderFrames reports render staging cleanup failures", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 2 });
+  await fsp.rename(
+    path.join(framesDir, "frame-000002.png"),
+    path.join(framesDir, "frame-000005.png")
+  );
+
+  const stagingDir = path.join(framesDir, ".render-staging");
+  const originalRmSync = fs.rmSync;
+
+  try {
+    fs.rmSync = (target, options) => {
+      if (String(target).includes(".render-staging")) {
+        const error = new Error("permission denied");
+        error.code = "EACCES";
+        throw error;
+      }
+      return originalRmSync(target, options);
+    };
+
+    await runWithFakeFFmpeg(async () => {
+      const result = await renderFrames(runDir, { ffmpegPath: "definitely-not-ffmpeg" });
+
+      assert.equal(result.success, false);
+      assert.match(result.error, /\.render-staging/);
+      assert.match(result.error, /permission denied/);
+
+      const status = JSON.parse(await fsp.readFile(path.join(runDir, "status.json"), "utf8"));
+      assert.equal(status.state, "render_failed");
+
+      const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.match(summary.lastRenderAttempt.error, /\.render-staging/);
+      assert.match(summary.lastRenderAttempt.error, /permission denied/);
+    });
+  } finally {
+    fs.rmSync = originalRmSync;
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
 });
