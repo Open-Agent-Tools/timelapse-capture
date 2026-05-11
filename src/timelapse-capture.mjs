@@ -1612,7 +1612,7 @@ export async function commandCleanup({ runDir, options = {} }) {
     const validation = validateMP4(outputPath);
     if (validation.error) {
       throw new Error(
-        `Refusing to delete frames before a valid output file exists at ${outputPath}. Pass --force to override.`
+        `Refusing to delete frames: ${validation.error} (at ${outputPath}). Pass --force to override.`
       );
     }
   }
