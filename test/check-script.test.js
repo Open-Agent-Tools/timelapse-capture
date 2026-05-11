@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { chmodSync, existsSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } = require('node:fs');
-const { sep, resolve } = require('node:path');
+const { join, resolve } = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 
@@ -57,7 +57,7 @@ test('the demoted src/cli directory has been removed', () => {
 });
 
 test('local-check prints SKIP messages when ffmpeg and ffprobe are absent from PATH', () => {
-  const tempDir = mkdtempSync(`${os.tmpdir()}${sep}tlc-local-check-`);
+  const tempDir = mkdtempSync(join(os.tmpdir(), 'tlc-local-check-'));
   const shimPath = resolve(tempDir, 'npm');
   const logPath = resolve(tempDir, 'npm-invocations.log');
 
