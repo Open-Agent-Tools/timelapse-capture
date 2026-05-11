@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,6 +66,20 @@ test("DEFAULT_CHECKS locks the canonical doctor check order", () => {
     DEFAULT_CHECKS.map((fn) => fn.name),
     ["checkNode", "checkPlaywright", "checkChromium", "checkFfmpeg", "checkFfprobe"]
   );
+});
+
+test("src/doctor.mjs is free of unresolved merge conflict markers", async () => {
+  const source = await readFile(new URL("../src/doctor.mjs", import.meta.url), "utf8");
+
+  assert.equal(source.includes("<<<<<<<"), false, "src/doctor.mjs must not contain a conflict start marker");
+  assert.equal(source.includes(">>>>>>>"), false, "src/doctor.mjs must not contain a conflict end marker");
+  assert.equal(/^=======\s*$/m.test(source), false, "src/doctor.mjs must not contain a bare conflict separator");
+});
+
+test("src/doctor.mjs imports cleanly as an ES module", async () => {
+  const mod = await import("../src/doctor.mjs");
+
+  assert.equal(typeof mod.commandDoctor, "function");
 });
 
 test("checkPlaywright passes when the package can be required", async () => {
