@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -7,13 +8,18 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const SELF = fileURLToPath(import.meta.url);
-const SCAN_ROOTS = ['src', 'bin', 'test'];
-const SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.mjs']);
+const SCAN_ROOTS = ['src', 'bin', 'test', 'scripts', 'docs'];
+const SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.mjs', '.sh', '.md']);
 const MARKER_PATTERNS = [
   new RegExp(`^${'<'.repeat(7)} `),
-  new RegExp(`^${'='.repeat(7)}$`),
+  /^=======\r?$/,
+  /^\|\|\|\|\|\|\| /,
   new RegExp(`^${'>'.repeat(7)} `)
 ];
+
+function isConflictMarkerLine(line) {
+  return MARKER_PATTERNS.some((pattern) => pattern.test(line));
+}
 
 async function collectSourceFiles(directory) {
   let entries;
@@ -39,16 +45,55 @@ async function collectSourceFiles(directory) {
   return files;
 }
 
+async function collectScannedFiles(root) {
+  const roots = SCAN_ROOTS.map((scanRoot) => path.join(root, scanRoot));
+  return (await Promise.all(roots.map(collectSourceFiles))).flat();
+}
+
+test('conflict marker detection handles CRLF separators and diff3 markers', () => {
+  assert.equal(isConflictMarkerLine(`${'='.repeat(7)}\r`), true);
+  assert.equal(isConflictMarkerLine(`${'|'.repeat(7)} base`), true);
+  assert.equal(isConflictMarkerLine(`${'<'.repeat(7)} HEAD`), true);
+  assert.equal(isConflictMarkerLine(`${'>'.repeat(7)} branch`), true);
+  assert.equal(isConflictMarkerLine('## Section title'), false);
+  assert.equal(isConflictMarkerLine('const separator = "=======";'), false);
+});
+
+test('conflict marker scan includes scripts and docs text files', async (t) => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'conflict-marker-scan-'));
+  t.after(() => fs.rm(tempRoot, { recursive: true, force: true }));
+
+  await fs.mkdir(path.join(tempRoot, 'scripts'), { recursive: true });
+  await fs.mkdir(path.join(tempRoot, 'docs', 'decisions'), { recursive: true });
+  await fs.mkdir(path.join(tempRoot, 'docs', '.ignored'), { recursive: true });
+  await fs.mkdir(path.join(tempRoot, 'test'), { recursive: true });
+
+  await fs.writeFile(path.join(tempRoot, 'scripts', 'local-check.sh'), '#!/usr/bin/env bash\n');
+  await fs.writeFile(path.join(tempRoot, 'docs', 'PRD.md'), '# PRD\n');
+  await fs.writeFile(path.join(tempRoot, 'docs', 'decisions', '001-canonical-cli-entrypoint.md'), '# Decision\n');
+  await fs.writeFile(path.join(tempRoot, 'docs', '.ignored', 'notes.md'), '# Ignored\n');
+  await fs.writeFile(path.join(tempRoot, 'test', 'guard.test.mjs'), 'import test from "node:test";\n');
+
+  const scannedFiles = await collectScannedFiles(tempRoot);
+  const relativeFiles = scannedFiles.map((file) => path.relative(tempRoot, file)).sort();
+
+  assert.deepEqual(relativeFiles, [
+    path.join('docs', 'PRD.md'),
+    path.join('docs', 'decisions', '001-canonical-cli-entrypoint.md'),
+    path.join('scripts', 'local-check.sh'),
+    path.join('test', 'guard.test.mjs')
+  ]);
+});
+
 test('source and test files do not contain merge conflict markers', async () => {
-  const roots = SCAN_ROOTS.map((root) => path.join(ROOT, root));
-  const sourceFiles = (await Promise.all(roots.map(collectSourceFiles))).flat();
+  const sourceFiles = await collectScannedFiles(ROOT);
   const offenders = [];
 
   for (const absolute of sourceFiles) {
     const content = await fs.readFile(absolute, 'utf8');
     const lines = content.split('\n');
     for (const [index, line] of lines.entries()) {
-      if (MARKER_PATTERNS.some((pattern) => pattern.test(line))) {
+      if (isConflictMarkerLine(line)) {
         offenders.push(`${path.relative(ROOT, absolute)}:${index + 1}`);
       }
     }
