@@ -14,6 +14,14 @@ const CLI = path.join(path.dirname(__filename), "..", "src", "timelapse-capture.
 let SKIP_SMOKE = false;
 let SKIP_REASON = "";
 
+const closeServer = (server) =>
+  new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (!error || error.code === "ERR_SERVER_NOT_RUNNING") resolve();
+      else reject(error);
+    });
+  });
+
 try {
   const playwright = await import("playwright");
   const executablePath = playwright.chromium.executablePath();
@@ -36,12 +44,12 @@ try {
       await page.goto(`http://127.0.0.1:${probePort}/`, { timeout: 10000 });
       await page.close();
       await browser.close();
-      probeServer.close();
+      await closeServer(probeServer);
     } catch (error) {
       SKIP_SMOKE = true;
       SKIP_REASON = `playwright runtime unavailable: ${error?.message || String(error)}`;
       try {
-        probeServer.close();
+        await closeServer(probeServer);
       } catch {
       }
     }
@@ -57,6 +65,21 @@ function runCli(args, env = {}) {
     env: { ...process.env, ...env }
   });
 }
+
+test("closeServer awaits the http.Server close callback", async () => {
+  const server = createServer((_, res) => res.end("ok"));
+  await new Promise((resolve) => server.listen(0, resolve));
+  let callbackFired = false;
+  const originalClose = server.close.bind(server);
+  server.close = (cb) => {
+    return originalClose(() => {
+      callbackFired = true;
+      if (cb) cb();
+    });
+  };
+  await closeServer(server);
+  assert.equal(callbackFired, true, "close callback must fire before closeServer resolves");
+});
 
 if (!SKIP_SMOKE) {
   test("CLI smoke start/status/peek with a local static page", async (context) => {
@@ -104,7 +127,7 @@ if (!SKIP_SMOKE) {
       assert.ok(fsSync.existsSync(peekPayload.path));
     } finally {
       await fs.rm(outDir, { recursive: true, force: true });
-      server.close();
+      await closeServer(server);
     }
   });
 } else {
