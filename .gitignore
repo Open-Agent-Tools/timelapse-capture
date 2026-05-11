@@ -68,3 +68,8 @@ captures/
 *.mp4
 *.webm
 *.gif
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
