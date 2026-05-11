@@ -552,6 +552,29 @@ test("render with --keep-frames records retained cleanup summary", async () => {
   }
 });
 
+
+test("render with --keep-all records retained cleanup summary", async () => {
+  const { runDir } = await makeRun();
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json", "--keep-all"], {
+        PATH: manager.getPATHEnv()
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.cleanup.success, true);
+      assert.equal(summary.cleanup.removed, 0);
+      assert.equal(summary.cleanup.retained, 3);
+      assert.equal(summary.cleanup.reason, "keep-all");
+
+      const frames = await fs.readdir(path.join(runDir, "frames"));
+      assert.equal(frames.length, 3);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
 test("render records validation metadata before default cleanup", async () => {
   const { runDir } = await makeRun();
   try {
