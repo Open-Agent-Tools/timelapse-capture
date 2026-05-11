@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const SELF = fileURLToPath(import.meta.url);
-const SCAN_ROOTS = ['src', 'bin', 'test', 'scripts', 'docs'];
+const SCAN_ROOTS = ['src', 'bin', 'test', 'scripts', 'docs', 'skill'];
 const SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.mjs', '.sh', '.md']);
 const MARKER_PATTERNS = [
   new RegExp(`^${'<'.repeat(7)}(?:\\s|$)`),
@@ -67,19 +67,21 @@ test('conflict marker detection handles minimal/malformed markers without traili
   assert.equal(isConflictMarkerLine('  <<<<<<< Indented marker'), false);
 });
 
-test('conflict marker scan includes scripts and docs text files', async (t) => {
+test('conflict marker scan includes scripts, docs, and skill text files', async (t) => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'conflict-marker-scan-'));
   t.after(() => fs.rm(tempRoot, { recursive: true, force: true }));
 
   await fs.mkdir(path.join(tempRoot, 'scripts'), { recursive: true });
   await fs.mkdir(path.join(tempRoot, 'docs', 'decisions'), { recursive: true });
   await fs.mkdir(path.join(tempRoot, 'docs', '.ignored'), { recursive: true });
+  await fs.mkdir(path.join(tempRoot, 'skill'), { recursive: true });
   await fs.mkdir(path.join(tempRoot, 'test'), { recursive: true });
 
   await fs.writeFile(path.join(tempRoot, 'scripts', 'local-check.sh'), '#!/usr/bin/env bash\n');
   await fs.writeFile(path.join(tempRoot, 'docs', 'PRD.md'), '# PRD\n');
   await fs.writeFile(path.join(tempRoot, 'docs', 'decisions', '001-canonical-cli-entrypoint.md'), '# Decision\n');
   await fs.writeFile(path.join(tempRoot, 'docs', '.ignored', 'notes.md'), '# Ignored\n');
+  await fs.writeFile(path.join(tempRoot, 'skill', 'SKILL.md'), '# Skill\n');
   await fs.writeFile(path.join(tempRoot, 'test', 'guard.test.mjs'), 'import test from "node:test";\n');
 
   const scannedFiles = await collectScannedFiles(tempRoot);
@@ -89,6 +91,7 @@ test('conflict marker scan includes scripts and docs text files', async (t) => {
     path.join('docs', 'PRD.md'),
     path.join('docs', 'decisions', '001-canonical-cli-entrypoint.md'),
     path.join('scripts', 'local-check.sh'),
+    path.join('skill', 'SKILL.md'),
     path.join('test', 'guard.test.mjs')
   ]);
 });
