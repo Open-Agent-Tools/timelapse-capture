@@ -76,8 +76,11 @@ test('local-check prints SKIP messages when ffmpeg and ffprobe are absent from P
           PATH: tempDir,
         },
         encoding: 'utf8',
+        timeout: 10000,
       }
     );
+
+    assert.ifError(result.error);
 
     assert.strictEqual(result.status, 0, `local-check failed; stdout: ${result.stdout}\nstderr: ${result.stderr}`);
     assert.match(
