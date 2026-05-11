@@ -97,7 +97,7 @@ test("status --json parity fields present with legacy done state and run-summary
     };
     const fakeOutputPath = path.join(runDir, "output.mp4");
     const summary = {
-      render: { outputPath: fakeOutputPath, bytes: 1000, frameCount: 2, timestamp: new Date().toISOString() },
+      render: { outputPath: fakeOutputPath, bytes: 1000, sourceFrameCount: 2, timestamp: new Date().toISOString() },
       cleanup: { success: true, removed: 2, retained: 0, timestamp: new Date().toISOString() }
     };
     await fsp.writeFile(statusPath, `${JSON.stringify(legacyStatus, null, 2)}\n`);

@@ -1437,7 +1437,6 @@ export function renderFrames(runDir, options = {}) {
       bytes: 0,
       duration: null,
       dimensions: null,
-      frameCount: sourceFrameCount,
       sourceFrameCount,
       ffmpegCommand,
       timestamp: nowIso()
@@ -1528,7 +1527,6 @@ export function renderFrames(runDir, options = {}) {
       lastRenderAttempt: {
         error: result.error,
         outputPath: getOutputPath(runDir, options.config),
-        frameCount: sourceFrameCount,
         sourceFrameCount,
         ffmpegCommand,
         timestamp: nowIso()
@@ -1577,7 +1575,7 @@ export async function commandRender({ runDir, options = {} }) {
   return {
     path: result.outputPath,
     output: result.outputPath,
-    frameCount: result.metadata?.frameCount,
+    sourceFrameCount: result.metadata?.sourceFrameCount,
     message: "Render successful"
   };
 }
