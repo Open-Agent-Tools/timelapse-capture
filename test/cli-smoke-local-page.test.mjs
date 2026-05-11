@@ -10,6 +10,15 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const CLI = path.join(path.dirname(__filename), "..", "src", "timelapse-capture.mjs");
+const closeServer = (server) => new Promise((resolve, reject) => {
+  server.close((error) => {
+    if (!error || error.code === "ERR_SERVER_NOT_RUNNING") {
+      resolve();
+      return;
+    }
+    reject(error);
+  });
+});
 
 let SKIP_SMOKE = false;
 let SKIP_REASON = "";
@@ -36,12 +45,12 @@ try {
       await page.goto(`http://127.0.0.1:${probePort}/`, { timeout: 10000 });
       await page.close();
       await browser.close();
-      probeServer.close();
+      await closeServer(probeServer);
     } catch (error) {
       SKIP_SMOKE = true;
       SKIP_REASON = `playwright runtime unavailable: ${error?.message || String(error)}`;
       try {
-        probeServer.close();
+        await closeServer(probeServer);
       } catch {
       }
     }
@@ -57,6 +66,21 @@ function runCli(args, env = {}) {
     env: { ...process.env, ...env }
   });
 }
+
+test("closeServer awaits the http.Server close callback", async () => {
+  const server = createServer((_, response) => response.end("ok"));
+  await new Promise((resolve) => server.listen(0, resolve));
+  let closed = false;
+
+  const closePromise = closeServer(server).then(() => {
+    closed = true;
+  });
+
+  assert.equal(closed, false);
+  await new Promise((resolve) => setImmediate(resolve));
+  await closePromise;
+  assert.equal(closed, true);
+});
 
 if (!SKIP_SMOKE) {
   test("CLI smoke start/status/peek with a local static page", async (context) => {
@@ -104,7 +128,7 @@ if (!SKIP_SMOKE) {
       assert.ok(fsSync.existsSync(peekPayload.path));
     } finally {
       await fs.rm(outDir, { recursive: true, force: true });
-      server.close();
+      await closeServer(server);
     }
   });
 } else {
