@@ -2054,7 +2054,6 @@ export async function commandCleanup({ runDir, options = {} }) {
     }
 
     const count = keepSamples === true ? 2 : Number(keepSamples);
-    const count = keepSamples === true ? 2 : Number(keepSamples);
     const bytesFreed = await sumFileSizes(frameFiles.map((file) => path.join(framesDir, file)));
     const samplePaths = copySamplesSync(framesDir, resolved, count);
 
@@ -2073,7 +2072,7 @@ export async function commandCleanup({ runDir, options = {} }) {
       removed: frameFiles.length,
       retained: samplePaths.length,
       bytesFreed,
-      samples: samplePaths
+      samples: samplePaths,
       reason: "keep-samples"
     });
     return result;
@@ -2112,7 +2111,7 @@ export async function commandCleanup({ runDir, options = {} }) {
     success: true,
     removed: frameFiles.length,
     retained: 0,
-    bytesFreed
+    bytesFreed,
     reason: "default"
   });
   return result;

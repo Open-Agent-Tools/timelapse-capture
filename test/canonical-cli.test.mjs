@@ -397,7 +397,7 @@ test("status --human output prints output and cleanup summary", async () => {
       );
       assert.match(
         statusResult.stdout,
-        /^cleanup: removed \d+, retained \d+$/m,
+        /^cleanup: removed \d+, retained \d+ \(freed .+\)$/m,
       );
     }, "success");
   } finally {
