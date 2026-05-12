@@ -1198,7 +1198,12 @@ export async function commandStatus({ runDir }) {
   payload.diskUsage = { runDirBytes, framesBytes: framesDiskUsageBytes };
   payload.outputPath = summary?.render?.outputPath ?? null;
   payload.cleanup = summary?.cleanup != null
-    ? { success: summary.cleanup.success ?? null, removed: summary.cleanup.removed ?? 0, retained: summary.cleanup.retained ?? null }
+    ? {
+        success: summary.cleanup.success ?? null,
+        removed: summary.cleanup.removed ?? 0,
+        retained: summary.cleanup.retained ?? null,
+        bytesFreed: summary.cleanup.bytesFreed ?? 0
+      }
     : null;
 
   return {
@@ -1229,8 +1234,12 @@ function printHumanStatus(status) {
   if (status.estimatedDiskBytes != null)
     lines.push(`estimated disk: ${formatBytes(status.estimatedDiskBytes)} (approximate)`);
   if (status.outputPath) lines.push(`output: ${status.outputPath}`);
-  if (status.cleanup)
-    lines.push(`cleanup: removed ${status.cleanup.removed ?? 0}, retained ${status.cleanup.retained ?? 0}`);
+  if (status.cleanup) {
+    const bytesFreed = status.cleanup.bytesFreed ?? 0;
+    lines.push(
+      `cleanup: removed ${status.cleanup.removed ?? 0}, retained ${status.cleanup.retained ?? 0} (freed ${formatBytes(bytesFreed)})`
+    );
+  }
   console.log(lines.join("\n"));
 }
 
@@ -1428,6 +1437,19 @@ function fileSize(filePath) {
   }
 }
 
+function safeFileSize(filePath) {
+  try {
+    return fs.statSync(filePath).size;
+  } catch {
+    return 0;
+  }
+}
+
+async function sumFileSizes(filePaths) {
+  const stats = await Promise.all(filePaths.map((filePath) => fsp.stat(filePath).catch(() => ({ size: 0 }))));
+  return stats.reduce((total, stat) => total + stat.size, 0);
+}
+
 export function validateMP4(outputPath) {
   const result = {
     exists: false,
@@ -1512,13 +1534,14 @@ function copySamplesSync(framesDir, runDir, count) {
 export function cleanupFrames(runDir, options = {}) {
   const framesDir = getFramesDir(runDir);
   if (!fs.existsSync(framesDir)) {
-    return { success: true, removed: 0, retained: 0 };
+    return { success: true, removed: 0, retained: 0, bytesFreed: 0 };
   }
   let removed = 0;
+  let bytesFreed = 0;
   try {
     removeStagingDir(path.join(framesDir, ".render-staging"));
   } catch (error) {
-    return { success: false, removed, error: error.message };
+    return { success: false, removed, bytesFreed, error: error.message };
   }
   const files = fs.readdirSync(framesDir)
     .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
@@ -1539,7 +1562,9 @@ export function cleanupFrames(runDir, options = {}) {
 
   for (const file of files) {
     if (!retained.has(file)) {
-      fs.unlinkSync(path.join(framesDir, file));
+      const filePath = path.join(framesDir, file);
+      bytesFreed += safeFileSize(filePath);
+      fs.unlinkSync(filePath);
       removed += 1;
     }
   }
@@ -1548,13 +1573,14 @@ export function cleanupFrames(runDir, options = {}) {
   if (remaining.length === 0 && files.length > 0) {
     const removeResult = removeEmptyDirSync(framesDir);
     if (!removeResult.success) {
-      return { success: false, removed, error: removeResult.error };
+      return { success: false, removed, bytesFreed, error: removeResult.error };
     }
   }
   return {
     success: true,
     removed,
     retained: samplePaths.length || retained.size,
+    bytesFreed,
     samples: samplePaths.length > 0 ? samplePaths : undefined
   };
 }
@@ -1793,6 +1819,7 @@ export function renderFrames(runDir, options = {}) {
         success: cleanup.success,
         removed: cleanup.removed,
         retained: cleanup.retained,
+        bytesFreed: cleanup.bytesFreed ?? 0,
         reason,
         source: options.cleanupSource || "default",
         samples: cleanup.samples,
@@ -1806,6 +1833,7 @@ export function renderFrames(runDir, options = {}) {
         reason: effectiveCleanup === "never" ? "never" : (options["keep-frames"] ? "keep-frames" : "keep-all"),
         source: options.cleanupSource || "default",
         removed: 0,
+        bytesFreed: 0,
         retained: sourceFrameCount,
         error: null,
         timestamp: nowIso()
@@ -1983,6 +2011,7 @@ export async function commandCleanup({ runDir, options = {} }) {
       success: true,
       removed: 0,
       retained: frameFiles.length,
+      bytesFreed: 0,
       reason: "keep-frames"
     });
     return result;
@@ -1992,12 +2021,20 @@ export async function commandCleanup({ runDir, options = {} }) {
     const toDelete = frameFiles.map((file) => path.join(framesDir, file));
     const latestPng = path.join(resolved, "latest.png");
     if (fs.existsSync(latestPng)) toDelete.push(latestPng);
+    const bytesFreed = await sumFileSizes(toDelete);
     await Promise.all(toDelete.map((p) => fsp.rm(p, { force: true })));
     const removeResult = await removeEmptyDir(framesDir);
     if (!removeResult.success) {
       throw new Error(removeResult.error);
     }
-    return { message: "Raw frames and latest.png cleaned up", removed: frameFiles.length };
+    const result = { message: "Raw frames and latest.png cleaned up", removed: frameFiles.length, bytesFreed };
+    await writeCleanupSummary(resolved, {
+      success: true,
+      removed: frameFiles.length,
+      retained: 0,
+      bytesFreed
+    });
+    return result;
   }
 
   if (options.all) {
@@ -2012,11 +2049,13 @@ export async function commandCleanup({ runDir, options = {} }) {
   if (keepSamples) {
     if (frameFiles.length === 0) {
       const result = { message: "No frames to sample", frameCount: 0 };
-      await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0 });
+      await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0, bytesFreed: 0 });
       return result;
     }
 
     const count = keepSamples === true ? 2 : Number(keepSamples);
+    const count = keepSamples === true ? 2 : Number(keepSamples);
+    const bytesFreed = await sumFileSizes(frameFiles.map((file) => path.join(framesDir, file)));
     const samplePaths = copySamplesSync(framesDir, resolved, count);
 
     // Entirely remove frames directory and its remaining contents
@@ -2026,13 +2065,15 @@ export async function commandCleanup({ runDir, options = {} }) {
       message: `Frames cleaned up (kept ${samplePaths.length} samples in samples/)`,
       removed: frameFiles.length,
       retained: samplePaths.length,
+      bytesFreed,
       samples: samplePaths
     };
     await writeCleanupSummary(resolved, {
       success: true,
       removed: frameFiles.length,
       retained: samplePaths.length,
-      samples: samplePaths,
+      bytesFreed,
+      samples: samplePaths
       reason: "keep-samples"
     });
     return result;
@@ -2042,38 +2083,36 @@ export async function commandCleanup({ runDir, options = {} }) {
   if (keepLatest) {
     if (frameFiles.length === 0) {
       const result = { message: "No frames to cleanup", frameCount: 0 };
-      await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0 });
+      await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0, bytesFreed: 0 });
       return result;
     }
     const last = frameFiles[frameFiles.length - 1];
     const toDelete = frameFiles.filter((f) => f !== last);
+    const bytesFreed = await sumFileSizes(toDelete.map((p) => path.join(framesDir, p)));
     await Promise.all(toDelete.map((p) => fsp.rm(path.join(framesDir, p), { force: true })));
     const result = {
       message: "Frames cleaned up (kept latest)",
       removed: toDelete.length,
+      bytesFreed,
       retained: 1
     };
-    await writeCleanupSummary(resolved, {
-      success: true,
-      removed: toDelete.length,
-      retained: 1,
-      reason: "keep-latest"
-    });
+    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained: 1, bytesFreed });
     return result;
   }
 
   const toDelete = frameFiles.map((f) => path.join(framesDir, f));
+  const bytesFreed = await sumFileSizes(toDelete);
   await Promise.all(toDelete.map((p) => fsp.rm(p, { force: true })));
   const removeResult = await removeEmptyDir(framesDir);
   if (!removeResult.success) {
     throw new Error(removeResult.error);
   }
-
-  const result = { message: "Cleanup complete", removed: frameFiles.length };
+  const result = { message: "Cleanup complete", removed: frameFiles.length, bytesFreed };
   await writeCleanupSummary(resolved, {
     success: true,
     removed: frameFiles.length,
     retained: 0,
+    bytesFreed
     reason: "default"
   });
   return result;
