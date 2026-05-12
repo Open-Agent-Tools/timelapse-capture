@@ -1452,36 +1452,38 @@ export function cleanupFrames(framesDir, options = {}) {
   } catch (error) {
     return { success: false, removed, error: error.message };
   }
-
-  const files = fs
-    .readdirSync(framesDir)
+  const files = fs.readdirSync(framesDir)
     .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
     .sort();
-  const m = files.length;
 
-  let retainedIndices = new Set();
+  const retained = new Set();
   if (options["keep-samples"]) {
-    const n = options["keep-samples"] === true ? 5 : Number(options["keep-samples"]);
-    retainedIndices = getSampleIndices(m, n);
+    const sampleCount = options["keep-samples"] === true ? 5 : Number(options["keep-samples"]);
+    const retainedIndices = getSampleIndices(files.length, sampleCount);
+    for (const index of retainedIndices) {
+      if (index >= 0 && index < files.length) retained.add(files[index]);
+    }
+  } else if (options["keep-latest"]) {
+    if (files.length > 0) {
+      retained.add(files[files.length - 1]);
+    }
   }
 
-  const retainedSamples = new Set([...retainedIndices].map((i) => files[i]));
-  const retained = retainedSamples.size;
-
   for (const file of files) {
-    if (!retainedSamples.has(file)) {
+    if (!retained.has(file)) {
       fs.unlinkSync(path.join(framesDir, file));
       removed += 1;
     }
   }
 
-  if (files.length === removed && removed > 0) {
+  const remaining = fs.readdirSync(framesDir);
+  if (remaining.length === 0 && files.length > 0) {
     const removeResult = removeEmptyDirSync(framesDir);
     if (!removeResult.success) {
       return { success: false, removed, error: removeResult.error };
     }
   }
-  return { success: true, removed, retained };
+  return { success: true, removed, retained: retained.size };
 }
 
 function readSummarySync(runDir) {
@@ -1734,27 +1736,36 @@ export function renderFrames(runDir, options = {}) {
 
     writeSummarySync(runDir, summary);
 
-    if (!options["keep-frames"] && !options["keep-all"]) {
-      const cleanupOptions = options["keep-samples"]
+    const effectiveCleanup = options.cleanup ?? "after-render";
+    const keepAll = options["keep-frames"] || options["keep-all"] || effectiveCleanup === "never";
+    const keepSamples = options["keep-samples"];
+    const keepLatest = options["keep-latest"];
+
+    if (!keepAll) {
+      const cleanupOptions = keepSamples
         ? { ...options, "keep-samples": false }
-        : options;
+        : { "keep-samples": keepSamples, "keep-latest": keepLatest };
       const cleanup = cleanupFrames(framesDir, cleanupOptions);
-      const retainedCount = options["keep-samples"] ? samplePaths.length : cleanup.retained;
+      const retainedCount = keepSamples ? samplePaths.length : cleanup.retained;
+      let reason = "post-render-cleanup";
+      if (keepSamples) reason = "keep-samples";
+      else if (keepLatest) reason = "keep-latest";
       summary.cleanup = {
         success: cleanup.success,
         removed: cleanup.removed,
         retained: retainedCount,
-        reason: options["keep-samples"] ? "keep-samples" : "post-render-cleanup",
+        reason,
+        source: options.cleanupSource || "default",
         samples: samplePaths.length > 0 ? samplePaths : undefined,
-        error: cleanup.error || null
+        error: cleanup.error || null,
+        timestamp: nowIso()
       };
-      summary.cleanup.timestamp = nowIso();
       result.cleanupResult = cleanup;
     } else {
-      const reason = options["keep-frames"] ? "keep-frames" : "keep-all";
       summary.cleanup = {
         success: true,
-        reason,
+        reason: effectiveCleanup === "never" ? "never" : (options["keep-frames"] ? "keep-frames" : "keep-all"),
+        source: options.cleanupSource || "default",
         removed: 0,
         retained: sourceFrameCount,
         error: null,
@@ -1823,17 +1834,42 @@ export function renderFrames(runDir, options = {}) {
 export async function commandRender({ runDir, options = {} }) {
   const resolved = path.resolve(runDir);
   const statusPath = path.join(resolved, "status.json");
-  const status = await readJsonOptional(statusPath);
-  const config = await readJsonOptional(path.join(resolved, "config.json"));
+  const configPath = path.join(resolved, "config.json");
+  const [status, config] = await Promise.all([
+    readJsonOptional(statusPath),
+    readJsonOptional(configPath)
+  ]);
 
   const currentState = status?.state || inferStateFromStatus(status || {});
   if (["starting", "running", "rendering"].includes(currentState) && !options.force) {
     throw new Error("Cannot render while capture is active. Use --force to override.");
   }
+
   const renderOptions = { ...options };
-  if (renderOptions["keep-samples"] === undefined && config?.keepSamples) {
-    renderOptions["keep-samples"] = config.keepSamples;
+
+  let cleanupSource = "cli";
+  const hasCliCleanup =
+    options.cleanup !== undefined ||
+    options["keep-frames"] ||
+    options["keep-all"] ||
+    options["keep-samples"] ||
+    options["keep-latest"];
+
+  if (!hasCliCleanup && config) {
+    if (config.cleanup !== undefined) {
+      renderOptions.cleanup = config.cleanup;
+      cleanupSource = "config";
+    }
+    if (config.keepSamples) {
+      renderOptions["keep-samples"] = config.keepSamples;
+      cleanupSource = "config";
+    }
+    if (config.keepLatest) {
+      renderOptions["keep-latest"] = config.keepLatest;
+      cleanupSource = "config";
+    }
   }
+  renderOptions.cleanupSource = cleanupSource;
   if (options.force && ["starting", "running", "rendering"].includes(currentState)) {
     const frames = await listFrameFiles(resolved);
     if (frames.length === 0) {
