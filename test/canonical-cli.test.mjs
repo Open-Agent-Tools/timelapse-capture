@@ -571,6 +571,10 @@ test("peek --near guard does not fire for matching manifest and frames", async (
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.exists, true);
     assert.match(payload.framePath, /\.png$/);
+    assert.ok(
+      path.isAbsolute(payload.framePath),
+      "peek framePath remains absolute even with relative manifest paths",
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

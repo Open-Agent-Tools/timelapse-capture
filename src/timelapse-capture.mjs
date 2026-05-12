@@ -902,6 +902,7 @@ async function recordCapturedFrame({
   index,
   scheduledAt,
   filename,
+  relativeFramePath,
   url,
   title,
 }) {
@@ -910,7 +911,7 @@ async function recordCapturedFrame({
     index,
     scheduledAt,
     capturedAt,
-    path: filename,
+    path: relativeFramePath,
     status: "captured",
     url,
     title: title ?? null,
@@ -918,7 +919,7 @@ async function recordCapturedFrame({
     error: null,
   };
   state.frameCount += 1;
-  state.latestFrame = filename;
+  state.latestFrame = relativeFramePath;
   state.latestFrameAt = capturedAt;
   state.latestFrameTimestamp = capturedAt;
   state.lastUpdatedAt = capturedAt;
@@ -1025,6 +1026,7 @@ async function captureWithPlaywright({
       });
 
       const filename = path.join(framesDir, frameName(index));
+      const relativeFramePath = `frames/${frameName(index)}`;
       const tempPath = path.join(
         framesDir,
         `.tmp-${process.pid}-${frameName(index)}`,
@@ -1041,6 +1043,7 @@ async function captureWithPlaywright({
           index,
           scheduledAt,
           filename,
+          relativeFramePath,
           url: page.url(),
           title,
         });
@@ -1128,6 +1131,7 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
       continue;
     }
     const filename = await writeFakeFrame(runDir, index);
+    const relativeFramePath = `frames/${frameName(index)}`;
     await recordCapturedFrame({
       state,
       runDir,
@@ -1135,6 +1139,7 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
       index,
       scheduledAt,
       filename,
+      relativeFramePath,
       url: state.target,
     });
   }
