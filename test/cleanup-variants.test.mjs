@@ -66,6 +66,8 @@ test("cleanup default removes all frames and clears peek path", async () => {
     const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
     assert.notEqual(peekResult.status, 0);
     assert.match(peekResult.stderr, /No frames available/);
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.bytesFreed, FRAME_PNG_1x1.length * 3);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -158,6 +160,8 @@ test("cleanup --keep-latest retains only the latest frame", async () => {
     const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
     assert.equal(peekResult.status, 0, peekResult.stderr);
     assert.equal(JSON.parse(peekResult.stdout).frame.index, 3);
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.bytesFreed, FRAME_PNG_1x1.length * 2);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
