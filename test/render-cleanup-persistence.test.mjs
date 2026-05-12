@@ -48,6 +48,9 @@ test("render respects cleanup: never from config.json", async () => {
       framesExist,
       "Frames should still exist when cleanup is 'never' in config.json",
     );
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.reason, "never");
+    assert.equal(summary.cleanup.bytesFreed, 0);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -76,6 +79,9 @@ test("render CLI flag overrides config.json", async () => {
       !framesExist,
       "Frames should be removed when CLI override is 'after-render'",
     );
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.reason, "post-render-cleanup");
+    assert.equal(summary.cleanup.bytesFreed, FRAME_PNG_1x1.length);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

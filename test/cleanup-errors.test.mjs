@@ -95,6 +95,7 @@ test("cleanupFrames removes leftover render staging before removing frames direc
     const result = cleanupFrames(runDir);
     assert.equal(result.success, true);
     assert.equal(result.removed, 1);
+    assert.equal(result.bytesFreed, FRAME_PNG_1x1.length);
     assert.equal(fs.existsSync(framesDir), false);
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
@@ -246,6 +247,9 @@ test("cleanup --frames ignores a non-empty frames directory after deleting raw f
       const result = await commandCleanup({ runDir, options: { frames: true } });
       assert.equal(result.removed, 1);
       assert.equal(await fsp.readFile(path.join(framesDir, "notes.txt"), "utf8"), "retain me");
+      const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      assert.equal(summary.cleanup.reason, "frames");
+      assert.equal(summary.cleanup.bytesFreed, FRAME_PNG_1x1.length);
     });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
@@ -464,7 +468,9 @@ test("cleanupFrames with keep-samples should move samples to samples/", async ()
     
     assert.equal(samplesExist, true, "Samples directory should exist");
     assert.equal(framesExist, false, "Frames directory should be removed");
+    assert.equal(result.removed, 10);
     assert.equal(result.retained, 3);
+    assert.equal(result.bytesFreed, FRAME_PNG_1x1.length * 10);
     assert.ok(result.samples && result.samples.length === 3);
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });

@@ -109,6 +109,9 @@ test("cleanup --keep-frames retains all frames and keeps peek available", async 
     const payload = JSON.parse(peekResult.stdout);
     assert.equal(payload.exists, true);
     assert.match(payload.path, /frame-0003\.png$/);
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.reason, "keep-frames");
+    assert.equal(summary.cleanup.bytesFreed, 0);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -137,6 +140,9 @@ test("cleanup --keep-samples moves retained frames to samples/ and removes frame
     // In this test, makeRun adds output.mp4 but not poster.png.
     // Actually makeRun does NOT add poster.png.
     // Let's see what happens.
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.reason, "keep-samples");
+    assert.equal(summary.cleanup.bytesFreed, FRAME_PNG_1x1.length * 3);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
