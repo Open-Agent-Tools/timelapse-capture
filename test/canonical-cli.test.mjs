@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 import {
+  commandStart,
   commandCleanup,
   commandRender,
   commandStart,
@@ -769,7 +770,6 @@ test("render uses fps persisted by start command", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-fps-"));
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
-    const { commandStart } = await import("../src/timelapse-capture.mjs");
     await commandStart({
       target: "http://example.com",
       options: {
@@ -1841,7 +1841,6 @@ test("commandStart saves keepSamples (explicit) to config.json", async () => {
   const runDir = path.join(os.tmpdir(), "tlc-test-start-samples-" + Date.now());
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
-    const { commandStart } = await import("../src/timelapse-capture.mjs");
     await commandStart({
       target: "http://example.com",
       options: {
@@ -1852,11 +1851,11 @@ test("commandStart saves keepSamples (explicit) to config.json", async () => {
       }
     });
 
-    const config = JSON.parse(await (await import("node:fs/promises")).readFile(path.join(runDir, "config.json"), "utf8"));
+    const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
     assert.equal(config.keepSamples, 7);
   } finally {
     delete process.env.TIMELAPSE_SIMULATE_FRAMES;
-    await (await import("node:fs/promises")).rm(runDir, { recursive: true, force: true });
+    await fs.rm(runDir, { recursive: true, force: true });
   }
 });
 
@@ -1864,7 +1863,6 @@ test("commandStart saves keepSamples (default) to config.json", async () => {
   const runDir = path.join(os.tmpdir(), "tlc-test-start-samples-default-" + Date.now());
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
-    const { commandStart } = await import("../src/timelapse-capture.mjs");
     await commandStart({
       target: "http://example.com",
       options: {
@@ -1875,11 +1873,11 @@ test("commandStart saves keepSamples (default) to config.json", async () => {
       }
     });
 
-    const config = JSON.parse(await (await import("node:fs/promises")).readFile(path.join(runDir, "config.json"), "utf8"));
+    const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
     assert.equal(config.keepSamples, 5);
   } finally {
     delete process.env.TIMELAPSE_SIMULATE_FRAMES;
-    await (await import("node:fs/promises")).rm(runDir, { recursive: true, force: true });
+    await fs.rm(runDir, { recursive: true, force: true });
   }
 });
 
