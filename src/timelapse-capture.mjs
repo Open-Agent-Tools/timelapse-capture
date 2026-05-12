@@ -1638,9 +1638,9 @@ async function readCapturedFrameRecords(runDir, frameNames) {
   return records;
 }
 
-function pickRecordByFrameName(records, frameName) {
+function pickRecordByFrameName(records, targetFrameName) {
   if (!Array.isArray(records) || records.length === 0) return null;
-  return records.find((record) => record.name === frameName) ?? null;
+  return records.find((record) => record.name === targetFrameName) ?? null;
 }
 
 function buildPeekFallbackPayload(resolvedRunDir, source, absolutePath) {
