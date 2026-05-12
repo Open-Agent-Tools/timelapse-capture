@@ -1085,6 +1085,45 @@ test("render with --keep-all records retained cleanup summary", async () => {
     await fs.rm(runDir, { recursive: true, force: true });
   }
 });
+
+test("render with --keep-latest records latest-frame cleanup summary", async () => {
+  const { runDir, config } = await makeRun();
+  try {
+    await fs.writeFile(
+      path.join(runDir, "config.json"),
+      JSON.stringify(
+        { ...config, cleanup: "never", keepLatest: false },
+        null,
+        2,
+      ),
+    );
+
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json", "--keep-latest"], {
+        PATH: manager.getPATHEnv(),
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
+      assert.equal(summary.cleanup.success, true);
+      assert.equal(summary.cleanup.reason, "keep-latest");
+      assert.equal(summary.cleanup.source, "cli");
+      assert.equal(summary.cleanup.retained, 1);
+      assert.equal(summary.cleanup.removed, 2);
+      assert.ok(
+        summary.cleanup.bytesFreed > 0,
+        `expected bytesFreed > 0, got ${summary.cleanup.bytesFreed}`,
+      );
+
+      const frames = await fs.readdir(path.join(runDir, "frames"));
+      assert.deepEqual(frames.sort(), ["frame-0003.png"]);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
 test("render records validation metadata before default cleanup", async () => {
   const { runDir } = await makeRun();
   try {

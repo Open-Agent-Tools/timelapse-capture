@@ -61,6 +61,13 @@ test("parseArgs maps positional arguments for core run-dir commands", () => {
   assert.equal(renderParsed.runDir, "/tmp/run");
 });
 
+test("parseArgs accepts render --keep-latest as a boolean flag", () => {
+  const parsed = parseArgs(["render", "/tmp/run", "--keep-latest"]);
+  assert.equal(parsed.command, "render");
+  assert.equal(parsed.runDir, "/tmp/run");
+  assert.equal(parsed.options["keep-latest"], true);
+});
+
 test("parseArgs maps capture --run for the internal child entrypoint", () => {
   const parsed = parseArgs(["capture", "--run", "/tmp/run"]);
   assert.equal(parsed.command, "capture");

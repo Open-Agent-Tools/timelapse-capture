@@ -101,7 +101,14 @@ const COMMAND_SCHEMAS = {
   render: {
     positional: ["runDir"],
     valueFlags: ["output", "keep-samples"],
-    boolFlags: ["json", "force", "help", "keep-frames", "keep-all"],
+    boolFlags: [
+      "json",
+      "force",
+      "help",
+      "keep-frames",
+      "keep-all",
+      "keep-latest",
+    ],
   },
   peek: {
     positional: ["runDir"],
