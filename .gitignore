@@ -55,6 +55,7 @@ Desktop.ini
 .history/
 
 # Local agent/tooling state
+.agents/
 .claude/
 .codex/
 .foreman/
