@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 import {
   commandCleanup,
+  commandRender,
   parseArgs,
   ParseError,
   resolveStartTiming,
@@ -726,6 +727,100 @@ test("render with fake ffmpeg success mode does not create -version artifact", a
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
     await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("render uses fps from run config for ffmpeg framerate", async () => {
+  const { runDir, config } = await makeRun();
+  try {
+    await fs.writeFile(
+      path.join(runDir, "config.json"),
+      JSON.stringify({ ...config, fps: 12 }, null, 2),
+    );
+
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const ffmpegArgs = JSON.parse(
+        await fs.readFile(
+          path.join(manager.outputDir, "ffmpeg-args.json"),
+          "utf8",
+        ),
+      );
+      const framerateIdx = ffmpegArgs.indexOf("-framerate");
+      assert.notEqual(framerateIdx, -1);
+      assert.equal(ffmpegArgs[framerateIdx + 1], "12");
+
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
+      assert.equal(summary.render.framerate, 12);
+    }, "success-require-contiguous-input");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("commandRender framerate option overrides config fps", async () => {
+  const { runDir, config } = await makeRun();
+  try {
+    await fs.writeFile(
+      path.join(runDir, "config.json"),
+      JSON.stringify({ ...config, fps: 12 }, null, 2),
+    );
+
+    await withFakeFFmpeg(async (manager) => {
+      const originalPath = process.env.PATH;
+      process.env.PATH = manager.getPATHEnv();
+      try {
+        await commandRender({ runDir, options: { framerate: 30 } });
+      } finally {
+        process.env.PATH = originalPath;
+      }
+
+      const ffmpegArgs = JSON.parse(
+        await fs.readFile(
+          path.join(manager.outputDir, "ffmpeg-args.json"),
+          "utf8",
+        ),
+      );
+      const framerateIdx = ffmpegArgs.indexOf("-framerate");
+      assert.equal(ffmpegArgs[framerateIdx + 1], "30");
+
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
+      assert.equal(summary.render.framerate, 30);
+    }, "success-require-contiguous-input");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render failure records effective framerate", async () => {
+  const { runDir, config } = await makeRun();
+  try {
+    await fs.writeFile(
+      path.join(runDir, "config.json"),
+      JSON.stringify({ ...config, fps: 12 }, null, 2),
+    );
+
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
+      assert.notEqual(result.status, 0);
+
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
+      assert.equal(summary.lastRenderAttempt.framerate, 12);
+    }, "fail");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
   }
 });
 

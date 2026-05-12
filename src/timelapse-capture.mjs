@@ -1610,6 +1610,14 @@ function copySamplesSync(framesDir, runDir, count) {
   return samplePaths;
 }
 
+function resolveRenderFramerate(...values) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return 10;
+}
+
 export function renderFrames(runDir, options = {}) {
   const result = {
     success: false,
@@ -1628,6 +1636,7 @@ export function renderFrames(runDir, options = {}) {
 
   let sourceFrameCount = 0;
   let ffmpegCommand = ["ffmpeg"];
+  const effectiveFramerate = resolveRenderFramerate(options.framerate);
 
   try {
     appendRenderLog(runDir, "render attempt started");
@@ -1657,7 +1666,7 @@ export function renderFrames(runDir, options = {}) {
     const framePattern = path.join(staging.dir, "frame-%04d.png");
     const ffmpegArgs = [
       "-framerate",
-      String(options.framerate || 10),
+      String(effectiveFramerate),
       "-i",
       framePattern,
       "-c:v",
@@ -1674,6 +1683,7 @@ export function renderFrames(runDir, options = {}) {
       bytes: 0,
       duration: null,
       dimensions: null,
+      framerate: effectiveFramerate,
       sourceFrameCount,
       ffmpegCommand,
       timestamp: nowIso()
@@ -1810,6 +1820,7 @@ export function renderFrames(runDir, options = {}) {
         error: result.error,
         outputPath: getOutputPath(runDir, options.config),
         sourceFrameCount,
+        framerate: effectiveFramerate,
         ffmpegCommand,
         timestamp: nowIso()
       },
@@ -1845,7 +1856,11 @@ export async function commandRender({ runDir, options = {} }) {
     throw new Error("Cannot render while capture is active. Use --force to override.");
   }
 
-  const renderOptions = { ...options };
+  const renderOptions = {
+    ...options,
+    config: options.config ?? config ?? undefined,
+    framerate: resolveRenderFramerate(options.framerate, options.fps, config?.fps, config?.framerate)
+  };
 
   let cleanupSource = "cli";
   const hasCliCleanup =
