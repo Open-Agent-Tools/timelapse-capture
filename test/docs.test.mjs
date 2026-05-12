@@ -125,3 +125,28 @@ test("dogfood-protocol.md covers install checklist, all three scenarios, feedbac
     /render "\$RUN_DIR"\s*\ntimelapse-capture cleanup "\$RUN_DIR" --keep-frames/,
   );
 });
+
+test("CLAUDE.md contains concrete project guidance instead of template placeholders", async () => {
+  const claudeMd = await readProjectFile("CLAUDE.md");
+
+  // Must NOT contain any template placeholder text
+  assert.doesNotMatch(claudeMd, /_Add your build and test commands here_/);
+  assert.doesNotMatch(claudeMd, /_Add a brief overview of your project architecture_/);
+  assert.doesNotMatch(claudeMd, /_Add your project-specific conventions here_/);
+  assert.doesNotMatch(claudeMd, /# Example:/);
+
+  // Must document real build and validation commands
+  assert.match(claudeMd, /npm run check/);
+  assert.match(claudeMd, /npm run typecheck/);
+  assert.match(claudeMd, /npm test/);
+  assert.match(claudeMd, /npm run check:local/);
+
+  // Must reference canonical source files
+  assert.match(claudeMd, /src\/timelapse-capture\.mjs/);
+  assert.match(claudeMd, /src\/doctor\.mjs/);
+  assert.match(claudeMd, /test\//);
+
+  // Must mention bd workflow
+  assert.match(claudeMd, /bd prime/);
+  assert.match(claudeMd, /bd/);
+});

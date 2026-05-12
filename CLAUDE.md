@@ -54,18 +54,28 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+npm install                 # Install dependencies (requires Node.js 20+)
+npm run check               # Syntax-check src/timelapse-capture.mjs and src/doctor.mjs
+npm run typecheck           # TypeScript type-check (tsc --noEmit)
+npm test                    # Run the full Node test suite (test/**/*.test.mjs)
+npm run check:local         # Local integration check; skips ffmpeg/ffprobe checks if absent
+npm run ci                  # check + typecheck + test (what CI runs)
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+- `src/timelapse-capture.mjs` — canonical CLI entry point; all commands (`start`, `status`, `peek`, `render`, `cleanup`, `report`) are handled here
+- `src/doctor.mjs` — dependency doctor that checks Node.js, Playwright/Chromium, ffmpeg, and ffprobe versions before any capture work
+- `test/` — Node built-in test runner (`node --test`); unit and integration tests live here
+- `docs/` — user-facing documentation including the dogfood protocol
+- `skill/SKILL.md` — agent-facing skill guide describing the capture workflow and frame inspection discipline
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- Use `bd` for ALL task tracking — no TodoWrite, no markdown TODO files
+- Run `bd prime` at session start for the full workflow context and session-close protocol
+- Use `bd remember "insight"` for persistent knowledge across sessions — not MEMORY.md files
+- Always use non-interactive flags for shell file operations (`cp -f`, `mv -f`, `rm -f`) to avoid agent hangs
+- Write run artifacts (manifest, frames) through the existing helpers in the CLI; do not write them ad-hoc
+- When inspecting captured frames, use `peek` to get a single image path — do not load the full `frames/` directory
