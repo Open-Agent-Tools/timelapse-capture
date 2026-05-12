@@ -79,6 +79,36 @@ test("parseArgs parses start target and required duration", () => {
   assert.equal(parsed.options.duration.ms, 30000);
 });
 
+test("parseArgs parses start --url target and required duration", () => {
+  const parsed = parseArgs([
+    "start",
+    "--url",
+    "http://example.test",
+    "--duration",
+    "30s",
+  ]);
+  assert.equal(parsed.command, "start");
+  assert.equal(parsed.target, "http://example.test");
+  assert.equal(parsed.options.duration.ms, 30000);
+});
+
+test("parseArgs rejects conflicting positional and --url start targets", () => {
+  assert.throws(
+    () =>
+      parseArgs([
+        "start",
+        "http://one.test",
+        "--url",
+        "http://two.test",
+        "--duration",
+        "30s",
+      ]),
+    (error) =>
+      error instanceof ParseError &&
+      /conflicting start targets/i.test(error.message),
+  );
+});
+
 test("parseArgs handles json boolean flags and short aliases", () => {
   const enabled = parseArgs([
     "start",

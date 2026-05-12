@@ -227,6 +227,40 @@ test("start writes config.json with canonical field names only", async () => {
   }
 });
 
+test("start command accepts --url target", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-url-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "--url",
+        "http://example.test/",
+        "--duration",
+        "2s",
+        "--interval",
+        "1s",
+        "--out",
+        runDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "2" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.target, "http://example.test/");
+
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
+    assert.equal(config.target, "http://example.test/");
+    assert.equal(Object.hasOwn(config, "url"), false);
+    await waitForTerminalStatus(runDir);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("status --json reports exact frame disk usage for nested directories", async () => {
   const { runDir } = await makeRun({ frameCount: 0, state: "completed" });
   try {
