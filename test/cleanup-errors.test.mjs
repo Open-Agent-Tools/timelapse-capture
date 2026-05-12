@@ -424,6 +424,36 @@ test("renderFrames records configured output path on ffmpeg failure", async () =
   }
 });
 
+test("renderFrames records CLI output path on ffmpeg failure", async () => {
+  const { runDir } = await makeRun({ frameCount: 1 });
+  try {
+    const configuredOutput = path.join("configured", "output.mp4");
+    const cliOutput = path.join("exports", "custom.mp4");
+    const expectedOutputPath = path.join(runDir, cliOutput);
+
+    await runWithFakeFFmpeg(async () => {
+      const result = await renderFrames(runDir, {
+        ffmpegPath: "definitely-not-ffmpeg",
+        output: cliOutput,
+        config: { output: { path: configuredOutput } },
+      });
+      assert.equal(result.success, false);
+      assert.match(result.error, /ffmpeg failed/);
+
+      const summary = JSON.parse(
+        await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
+      assert.equal(summary.lastRenderAttempt.outputPath, expectedOutputPath);
+      assert.equal(summary.lastRenderAttempt.sourceFrameCount, 1);
+      assert.equal(summary.cleanup.success, false);
+      assert.equal(summary.cleanup.reason, "render-or-validation-failed");
+      assert.equal(summary.cleanup.removed, 0);
+    });
+  } finally {
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("renderFrames renders configured custom output path before cleanup", async () => {
   const { runDir, framesDir } = await makeRun({ frameCount: 1 });
   try {
