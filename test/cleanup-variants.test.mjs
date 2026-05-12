@@ -109,7 +109,9 @@ test("cleanup --keep-frames retains all frames and keeps peek available", async 
     const payload = JSON.parse(peekResult.stdout);
     assert.equal(payload.exists, true);
     assert.match(payload.path, /frame-0003\.png$/);
-    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
     assert.equal(summary.cleanup.reason, "keep-frames");
     assert.equal(summary.cleanup.bytesFreed, 0);
   } finally {
