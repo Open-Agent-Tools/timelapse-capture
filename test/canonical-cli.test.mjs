@@ -11,7 +11,6 @@ import {
   commandStart,
   commandCleanup,
   commandRender,
-  commandStart,
   parseArgs,
   ParseError,
   resolveStartTiming,
@@ -1576,20 +1575,61 @@ test("start timing derives interval from target video length", () => {
   assert.equal(timing.computedFromVideoLength, true);
 });
 
-test("start timing keeps explicit interval behavior unchanged", () => {
+test("start timing clamps explicit interval below backend minimum", () => {
   const timing = resolveStartTiming({
     duration: { ms: 10_000 },
     interval: 250,
     fps: 12,
   });
 
-  assert.equal(timing.intervalMs, 250);
-  assert.equal(timing.targetFrames, 40);
+  assert.equal(timing.requestedIntervalMs, 250);
+  assert.equal(timing.intervalMs, 1000);
+  assert.equal(timing.backendMinIntervalMs, 1000);
+  assert.equal(timing.intervalClamped, true);
+  assert.equal(timing.targetFrames, 10);
   assert.equal(timing.fps, 12);
   assert.equal(timing.computedFromVideoLength, false);
 });
 
-test("start command warns when computed video length interval is below one second", async () => {
+test("start command clamps direct interval below backend minimum and persists clamp metadata", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-direct-interval-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test",
+        "--duration",
+        "10s",
+        "--interval",
+        "250ms",
+        "--out",
+        runDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "1" },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /warning: requested interval 250ms/);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.intervalMs, 1000);
+    assert.equal(payload.status.requestedIntervalMs, 250);
+    assert.equal(payload.status.backendMinIntervalMs, 1000);
+    assert.equal(payload.status.intervalClamped, true);
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
+    assert.equal(config.intervalMs, 1000);
+    assert.equal(config.requestedIntervalMs, 250);
+    assert.equal(config.backendMinIntervalMs, 1000);
+    assert.equal(config.intervalClamped, true);
+    await waitForTerminalStatus(runDir);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("start command clamps computed video-length interval below backend minimum", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-video-length-"));
   try {
     const result = runCli(
@@ -1610,15 +1650,36 @@ test("start command warns when computed video length interval is below one secon
     );
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      /warning: computed interval 250ms is below 1000ms/,
-    );
-    assert.equal(JSON.parse(result.stdout).status.intervalMs, 250);
+    assert.match(result.stderr, /warning: requested interval 250ms/);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.intervalMs, 1000);
+    assert.equal(payload.status.requestedIntervalMs, 250);
+    assert.equal(payload.status.backendMinIntervalMs, 1000);
+    assert.equal(payload.status.intervalClamped, true);
     await waitForTerminalStatus(runDir);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
+});
+
+test("start timing keeps boundary-at-minimum and above-minimum intervals unchanged", () => {
+  const atMinimum = resolveStartTiming({
+    duration: { ms: 10_000 },
+    interval: 1000,
+    fps: 12,
+  });
+  assert.equal(atMinimum.intervalMs, 1000);
+  assert.equal(atMinimum.requestedIntervalMs, 1000);
+  assert.equal(atMinimum.intervalClamped, false);
+
+  const aboveMinimum = resolveStartTiming({
+    duration: { ms: 10_000 },
+    interval: 2000,
+    fps: 12,
+  });
+  assert.equal(aboveMinimum.intervalMs, 2000);
+  assert.equal(aboveMinimum.requestedIntervalMs, 2000);
+  assert.equal(aboveMinimum.intervalClamped, false);
 });
 
 test("help command prints usage banner with the canonical commands", () => {

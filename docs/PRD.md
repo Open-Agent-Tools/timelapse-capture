@@ -366,6 +366,9 @@ The product should be backend-agnostic. Playwright is a strong MVP backend, but 
 Initial backend:
 
 - `playwright-url`: launches a browser, opens a URL, captures page screenshots.
+  For this backend, enforce a 1000ms minimum capture interval because page navigation,
+  script execution, and screenshot encoding are not reliably schedulable below 1 second
+  across typical local and CI environments.
 
 Future backends:
 
