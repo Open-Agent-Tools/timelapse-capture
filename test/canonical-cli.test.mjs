@@ -516,6 +516,8 @@ test("peek --near selects first, middle, and last frame by timestamp proximity",
 test("render writes rendering then rendered states with fake ffmpeg", async () => {
   const { runDir } = await makeRun();
   try {
+    await fs.writeFile(path.join(runDir, "render.log"), "[prior] previous render\n");
+
     await withFakeFFmpeg(async (manager) => {
       const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
       assert.equal(result.status, 0, result.stderr);
@@ -542,6 +544,22 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
       const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(status.state, "rendered");
       assert.ok(status.renderedAt);
+
+      const renderLog = await fs.readFile(path.join(runDir, "render.log"), "utf8");
+      assert.match(renderLog, /^\[prior\] previous render\n\[/);
+      assert.match(renderLog, /^\[[^\]]+\] render attempt started/m);
+      assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stdout: render started/m);
+      assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stderr: render details/m);
+      assert.match(renderLog, /^\[[^\]]+\] render attempt succeeded/m);
+
+      const framesDirExists = await fs.stat(path.join(runDir, "frames")).then(
+        () => true,
+        (error) => {
+          if (error.code === "ENOENT") return false;
+          throw error;
+        }
+      );
+      assert.equal(framesDirExists, false);
     }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -674,6 +692,12 @@ test("render writes render_failed when ffmpeg exits non-zero", async () => {
       const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
       assert.equal(status.state, "render_failed");
       assert.ok(status.error);
+
+      const renderLog = await fs.readFile(path.join(runDir, "render.log"), "utf8");
+      assert.match(renderLog, /^\[[^\]]+\] render attempt started/m);
+      assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stdout: render failed/m);
+      assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stderr: encoder failed/m);
+      assert.match(renderLog, /^\[[^\]]+\] render attempt failed errorCode=FFMPEG_FAILED/m);
     }, "fail");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -463,6 +463,19 @@ async function readJsonOptional(file) {
 
 async function appendLog(runDir, message) {
   await fsp.appendFile(path.join(runDir, "capture.log"), `[${nowIso()}] ${message}\n`);
+}
+
+function appendLogSync(runDir, filename, message) {
+  const lines = String(message).split(/\r?\n|\r/);
+  while (lines.length > 0 && lines.at(-1) === "") lines.pop();
+  if (lines.length === 0) return;
+
+  const payload = lines.map((line) => `[${nowIso()}] ${line}`).join("\n") + "\n";
+  fs.appendFileSync(path.join(runDir, filename), payload, "utf8");
+}
+
+function appendRenderLog(runDir, message) {
+  appendLogSync(runDir, "render.log", message);
 }
 
 async function appendJsonLine(file, data) {
@@ -1519,6 +1532,18 @@ function copyPosterSync(framesDir, runDir) {
   return "poster.png";
 }
 
+function processOutputToString(output) {
+  if (output == null) return "";
+  if (Buffer.isBuffer(output)) return output.toString("utf8");
+  return String(output);
+}
+
+function combinedProcessOutput(result) {
+  return [processOutputToString(result.stdout), processOutputToString(result.stderr)]
+    .filter((output) => output.length > 0)
+    .join("\n");
+}
+
 export function renderFrames(runDir, options = {}) {
   const result = {
     success: false,
@@ -1539,6 +1564,7 @@ export function renderFrames(runDir, options = {}) {
   let ffmpegCommand = ["ffmpeg"];
 
   try {
+    appendRenderLog(runDir, "render attempt started");
     const framesDir = getFramesDir(runDir);
     sourceFrameCount = countFrameFiles(framesDir);
     if (sourceFrameCount === 0) {
@@ -1588,8 +1614,24 @@ export function renderFrames(runDir, options = {}) {
     };
 
     try {
-      execFileSync(ffmpegPath, ffmpegArgs, { stdio: "pipe", encoding: "utf8" });
+      appendRenderLog(runDir, `ffmpeg command=${JSON.stringify(ffmpegCommand)}`);
+      const ffmpegResult = spawnSync(ffmpegPath, ffmpegArgs, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      const ffmpegOutput = combinedProcessOutput(ffmpegResult);
+      if (ffmpegOutput) appendRenderLog(runDir, ffmpegOutput);
+
+      if (ffmpegResult.error) {
+        throw new RenderError(`ffmpeg failed: ${ffmpegResult.error.message}`, "FFMPEG_FAILED");
+      }
+      if (ffmpegResult.status !== 0) {
+        const status = ffmpegResult.status == null ? "unknown" : ffmpegResult.status;
+        const signal = ffmpegResult.signal ? ` signal=${ffmpegResult.signal}` : "";
+        throw new RenderError(`ffmpeg failed: exit code ${status}${signal}`, "FFMPEG_FAILED");
+      }
     } catch (error) {
+      if (error instanceof RenderError) throw error;
       throw new RenderError(`ffmpeg failed: ${error.message}`, "FFMPEG_FAILED");
     } finally {
       if (staging.staged) removeStagingDir(staging.dir);
@@ -1647,6 +1689,7 @@ export function renderFrames(runDir, options = {}) {
     status.state = "rendered";
     status.renderedAt = nowIso();
     writeStatusSync(runDir, status);
+    appendRenderLog(runDir, "render attempt succeeded");
 
     result.success = true;
     result.outputPath = outputPath;
@@ -1655,6 +1698,10 @@ export function renderFrames(runDir, options = {}) {
   } catch (error) {
     result.error = error.message;
     result.errorCode = error?.code ?? null;
+    appendRenderLog(
+      runDir,
+      `render attempt failed errorCode=${result.errorCode ?? "UNKNOWN"} error=${result.error}`
+    );
 
     const status = readStatusSync(runDir) || {};
     status.state = "render_failed";
