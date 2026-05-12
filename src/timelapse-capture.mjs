@@ -900,7 +900,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     viewport,
     estimatedDiskBytes,
     cleanup,
-    keepSamples: options["keep-samples"] === true ? 2 : Number(options["keep-samples"] ?? 0),
+    keepSamples: options["keep-samples"] === true ? 5 : Number(options["keep-samples"] ?? 0),
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
     headed: Boolean(options.headed),
