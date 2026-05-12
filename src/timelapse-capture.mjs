@@ -2145,156 +2145,165 @@ function resolveRenderFramerate(...values) {
   return 10;
 }
 
-export function renderFrames(runDir, options = {}) {
-  const result = {
-    success: false,
-    outputPath: null,
-    metadata: null,
-    cleanupResult: null,
-    error: null,
-    errorCode: null,
-  };
-
-  if (!fs.existsSync(runDir)) {
-    result.error = `Run directory does not exist: ${runDir}`;
-    result.errorCode = "ENOENT";
-    return result;
+function resolveValidatedOutputPath(runDir, options) {
+  const outputPath = getOutputPath(runDir, options);
+  const resolvedRunDir = path.resolve(runDir);
+  if (
+    outputPath !== resolvedRunDir &&
+    !outputPath.startsWith(resolvedRunDir + path.sep)
+  ) {
+    throw new RenderError(
+      `Configured output path resolves outside the run directory: ${outputPath}`,
+      "OUTPUT_PATH_OUTSIDE_RUNDIR",
+    );
   }
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  return outputPath;
+}
 
-  let sourceFrameCount = 0;
-  let ffmpegCommand = ["ffmpeg"];
-  const effectiveFramerate = resolveRenderFramerate(options.framerate);
+function countOrThrowFrames(framesDir) {
+  const count = countFrameFiles(framesDir);
+  if (count === 0) {
+    throw new RenderError("No frames found to render", "NO_FRAMES");
+  }
+  return count;
+}
 
+function validateRenderOutput(outputPath) {
+  const validation = validateMP4(outputPath);
+  if (validation.error) {
+    throw new RenderError(
+      `Output is not a valid MP4: ${validation.error}`,
+      "VALIDATION_FAILED",
+    );
+  }
+  return validation;
+}
+
+function buildRenderMetadata({
+  outputPath,
+  validation,
+  framerate,
+  sourceFrameCount,
+  ffmpegCommand,
+}) {
+  return {
+    outputPath,
+    bytes: validation.bytes,
+    duration: validation.duration,
+    dimensions: validation.dimensions,
+    framerate,
+    sourceFrameCount,
+    ffmpegCommand,
+    timestamp: nowIso(),
+  };
+}
+
+function finalizeRenderSuccess(runDir, status, summary, outputPath, result) {
+  writeSummarySync(runDir, summary);
+  status.state = "rendered";
+  status.renderedAt = nowIso();
+  writeStatusSync(runDir, status);
+  appendRenderLog(runDir, "render attempt succeeded");
+  result.success = true;
+  result.outputPath = outputPath;
+  result.metadata = summary.render;
+  return result;
+}
+
+function runFfmpeg({ framesDir, framerate, outputPath, ffmpegPath, runDir }) {
+  const staging = stageContiguousFrames(framesDir);
+  const framePattern = path.join(staging.dir, "frame-%04d.png");
+  const ffmpegArgs = [
+    "-framerate",
+    String(framerate),
+    "-i",
+    framePattern,
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-crf",
+    "23",
+    outputPath,
+  ];
+  const ffmpegCommand = [ffmpegPath, ...ffmpegArgs];
+  let pendingError = null;
   try {
-    appendRenderLog(runDir, "render attempt started");
-    const framesDir = getFramesDir(runDir);
-    sourceFrameCount = countFrameFiles(framesDir);
-    if (sourceFrameCount === 0) {
-      throw new RenderError("No frames found to render", "NO_FRAMES");
-    }
-    const outputPath = getOutputPath(runDir, options);
-    const ffmpegPath = options.ffmpegPath || "ffmpeg";
-    ffmpegCommand = [ffmpegPath];
-
-    const resolvedRunDir = path.resolve(runDir);
-    if (
-      outputPath !== resolvedRunDir &&
-      !outputPath.startsWith(resolvedRunDir + path.sep)
-    ) {
-      throw new RenderError(
-        `Configured output path resolves outside the run directory: ${outputPath}`,
-        "OUTPUT_PATH_OUTSIDE_RUNDIR",
+    appendRenderLog(runDir, `ffmpeg command=${JSON.stringify(ffmpegCommand)}`);
+    const ffmpegResult = spawnSync(ffmpegPath, ffmpegArgs, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const ffmpegOutput = combinedProcessOutput(ffmpegResult);
+    if (ffmpegOutput) appendRenderLog(runDir, ffmpegOutput);
+    if (ffmpegResult.error) {
+      pendingError = new RenderError(
+        `ffmpeg failed: ${ffmpegResult.error.message}`,
+        "FFMPEG_FAILED",
+      );
+    } else if (ffmpegResult.status !== 0) {
+      const exitStatus =
+        ffmpegResult.status == null ? "unknown" : ffmpegResult.status;
+      const signal = ffmpegResult.signal
+        ? ` signal=${ffmpegResult.signal}`
+        : "";
+      pendingError = new RenderError(
+        `ffmpeg failed: exit code ${exitStatus}${signal}`,
+        "FFMPEG_FAILED",
       );
     }
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-
-    const status = readStatusSync(runDir) || {};
-    status.state = "rendering";
-    writeStatusSync(runDir, status);
-
-    const staging = stageContiguousFrames(framesDir);
-    const framePattern = path.join(staging.dir, "frame-%04d.png");
-    const ffmpegArgs = [
-      "-framerate",
-      String(effectiveFramerate),
-      "-i",
-      framePattern,
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-crf",
-      "23",
-      outputPath,
-    ];
-    ffmpegCommand = [ffmpegPath, ...ffmpegArgs];
-    const renderMetadata = {
-      outputPath,
-      bytes: 0,
-      duration: null,
-      dimensions: null,
-      framerate: effectiveFramerate,
-      sourceFrameCount,
-      ffmpegCommand,
-      timestamp: nowIso(),
-    };
-
+  } catch (error) {
+    pendingError =
+      error instanceof RenderError
+        ? error
+        : new RenderError(`ffmpeg failed: ${error.message}`, "FFMPEG_FAILED");
+  }
+  if (staging.staged) {
     try {
-      appendRenderLog(
-        runDir,
-        `ffmpeg command=${JSON.stringify(ffmpegCommand)}`,
-      );
-      const ffmpegResult = spawnSync(ffmpegPath, ffmpegArgs, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      const ffmpegOutput = combinedProcessOutput(ffmpegResult);
-      if (ffmpegOutput) appendRenderLog(runDir, ffmpegOutput);
-
-      if (ffmpegResult.error) {
-        throw new RenderError(
-          `ffmpeg failed: ${ffmpegResult.error.message}`,
-          "FFMPEG_FAILED",
-        );
-      }
-      if (ffmpegResult.status !== 0) {
-        const status =
-          ffmpegResult.status == null ? "unknown" : ffmpegResult.status;
-        const signal = ffmpegResult.signal
-          ? ` signal=${ffmpegResult.signal}`
-          : "";
-        throw new RenderError(
-          `ffmpeg failed: exit code ${status}${signal}`,
-          "FFMPEG_FAILED",
-        );
-      }
-    } catch (error) {
-      if (error instanceof RenderError) throw error;
-      throw new RenderError(`ffmpeg failed: ${error.message}`, "FFMPEG_FAILED");
-    } finally {
-      if (staging.staged) removeStagingDir(staging.dir);
+      removeStagingDir(staging.dir);
+    } catch (stagingError) {
+      stagingError.ffmpegCommand = ffmpegCommand;
+      throw stagingError;
     }
+  }
+  if (pendingError) {
+    pendingError.ffmpegCommand = ffmpegCommand;
+    throw pendingError;
+  }
+  return { ffmpegCommand };
+}
 
-    const validation = validateMP4(outputPath);
-    if (validation.error) {
-      throw new RenderError(
-        `Output is not a valid MP4: ${validation.error}`,
-        "VALIDATION_FAILED",
-      );
-    }
+function buildRenderSummary(
+  existing,
+  validation,
+  posterRelPath,
+  renderMetadata,
+) {
+  return {
+    ...existing,
+    duration: validation.duration,
+    dimensions: validation.dimensions,
+    ffmpegCommand: renderMetadata.ffmpegCommand,
+    poster: posterRelPath,
+    render: renderMetadata,
+    cleanup: null,
+  };
+}
 
-    renderMetadata.bytes = validation.bytes;
-    renderMetadata.duration = validation.duration;
-    renderMetadata.dimensions = validation.dimensions;
-
-    const posterRelPath = copyPosterSync(framesDir, runDir);
-
-    const existing = readSummarySync(runDir);
-    const summary = {
-      ...existing,
-      duration: validation.duration,
-      dimensions: validation.dimensions,
-      ffmpegCommand,
-      poster: posterRelPath,
-      render: renderMetadata,
-      cleanup: null,
-    };
-
-    writeSummarySync(runDir, summary);
-
-    const effectiveCleanup = options.cleanup ?? "after-render";
-    const keepAll =
-      options["keep-frames"] ||
-      options["keep-all"] ||
-      effectiveCleanup === "never";
-
-    if (!keepAll) {
-      const cleanup = cleanupFrames(runDir, options);
-      let reason = "post-render-cleanup";
-      if (options["keep-samples"]) reason = "keep-samples";
-      else if (options["keep-latest"]) reason = "keep-latest";
-
-      summary.cleanup = {
+function applyPostRenderCleanup(runDir, options, sourceFrameCount) {
+  const effectiveCleanup = options.cleanup ?? "after-render";
+  const keepAll =
+    options["keep-frames"] ||
+    options["keep-all"] ||
+    effectiveCleanup === "never";
+  if (!keepAll) {
+    const cleanup = cleanupFrames(runDir, options);
+    let reason = "post-render-cleanup";
+    if (options["keep-samples"]) reason = "keep-samples";
+    else if (options["keep-latest"]) reason = "keep-latest";
+    return {
+      cleanupBlock: {
         success: cleanup.success,
         removed: cleanup.removed,
         retained: cleanup.retained,
@@ -2304,82 +2313,153 @@ export function renderFrames(runDir, options = {}) {
         samples: cleanup.samples,
         error: cleanup.error || null,
         timestamp: nowIso(),
-      };
-      result.cleanupResult = cleanup;
-    } else {
-      summary.cleanup = {
-        success: true,
-        reason:
-          effectiveCleanup === "never"
-            ? "never"
-            : options["keep-frames"]
-              ? "keep-frames"
-              : "keep-all",
-        source: options.cleanupSource || "default",
-        removed: 0,
-        bytesFreed: 0,
-        retained: sourceFrameCount,
-        error: null,
-        timestamp: nowIso(),
-      };
-    }
-
-    writeSummarySync(runDir, summary);
-
-    status.state = "rendered";
-    status.renderedAt = nowIso();
-    writeStatusSync(runDir, status);
-    appendRenderLog(runDir, "render attempt succeeded");
-
-    result.success = true;
-    result.outputPath = outputPath;
-    result.metadata = summary.render;
-    return result;
-  } catch (error) {
-    result.error = error.message;
-    result.errorCode = error?.code ?? null;
-    appendRenderLog(
-      runDir,
-      `render attempt failed errorCode=${result.errorCode ?? "UNKNOWN"} error=${result.error}`,
-    );
-
-    const status = readStatusSync(runDir) || {};
-    status.state = "render_failed";
-    status.error = result.error;
-    writeStatusSync(runDir, status);
-
-    let summary;
-    try {
-      summary = readSummarySync(runDir) || {};
-    } catch (summaryError) {
-      result.error = `${result.error}; failed to update summary: ${summaryError.message}`;
-      return result;
-    }
-    const updated = {
-      ...summary,
-      lastRenderAttempt: {
-        error: result.error,
-        outputPath: getOutputPath(runDir, options),
-        sourceFrameCount,
-        framerate: effectiveFramerate,
-        ffmpegCommand,
-        timestamp: nowIso(),
       },
-      cleanup: {
-        success: false,
-        reason: "render-or-validation-failed",
-        removed: 0,
-        retained: 0,
-        error: null,
-        timestamp: nowIso(),
-      },
+      cleanupResult: cleanup,
     };
-    try {
-      writeSummarySync(runDir, updated);
-    } catch (summaryWriteError) {
-      result.error = `${result.error}; failed to update render summary: ${summaryWriteError.message}`;
-    }
+  }
+  return {
+    cleanupBlock: {
+      success: true,
+      reason:
+        effectiveCleanup === "never"
+          ? "never"
+          : options["keep-frames"]
+            ? "keep-frames"
+            : "keep-all",
+      source: options.cleanupSource || "default",
+      removed: 0,
+      bytesFreed: 0,
+      retained: sourceFrameCount,
+      error: null,
+      timestamp: nowIso(),
+    },
+    cleanupResult: null,
+  };
+}
+
+function handleRenderFailure(
+  runDir,
+  options,
+  error,
+  sourceFrameCount,
+  ffmpegCommand,
+  framerate,
+  result,
+) {
+  result.error = error.message;
+  result.errorCode = error?.code ?? null;
+  appendRenderLog(
+    runDir,
+    `render attempt failed errorCode=${result.errorCode ?? "UNKNOWN"} error=${result.error}`,
+  );
+  const status = readStatusSync(runDir) || {};
+  status.state = "render_failed";
+  status.error = result.error;
+  writeStatusSync(runDir, status);
+  let summary;
+  try {
+    summary = readSummarySync(runDir) || {};
+  } catch (summaryError) {
+    result.error = `${result.error}; failed to update summary: ${summaryError.message}`;
     return result;
+  }
+  const updated = {
+    ...summary,
+    lastRenderAttempt: {
+      error: result.error,
+      outputPath: getOutputPath(runDir, options),
+      sourceFrameCount,
+      framerate,
+      ffmpegCommand,
+      timestamp: nowIso(),
+    },
+    cleanup: {
+      success: false,
+      reason: "render-or-validation-failed",
+      removed: 0,
+      retained: 0,
+      error: null,
+      timestamp: nowIso(),
+    },
+  };
+  try {
+    writeSummarySync(runDir, updated);
+  } catch (summaryWriteError) {
+    result.error = `${result.error}; failed to update render summary: ${summaryWriteError.message}`;
+  }
+  return result;
+}
+
+export function renderFrames(runDir, options = {}) {
+  const result = {
+    success: false,
+    outputPath: null,
+    metadata: null,
+    cleanupResult: null,
+    error: null,
+    errorCode: null,
+  };
+  if (!fs.existsSync(runDir)) {
+    result.error = `Run directory does not exist: ${runDir}`;
+    result.errorCode = "ENOENT";
+    return result;
+  }
+  let sourceFrameCount = 0;
+  let ffmpegCommand = ["ffmpeg"];
+  const framerate = resolveRenderFramerate(options.framerate);
+  try {
+    appendRenderLog(runDir, "render attempt started");
+    const framesDir = getFramesDir(runDir);
+    sourceFrameCount = countOrThrowFrames(framesDir);
+    const ffmpegPath = options.ffmpegPath || "ffmpeg";
+    ffmpegCommand = [ffmpegPath];
+    const outputPath = resolveValidatedOutputPath(runDir, options);
+    const status = readStatusSync(runDir) || {};
+    status.state = "rendering";
+    writeStatusSync(runDir, status);
+    const { ffmpegCommand: cmd } = runFfmpeg({
+      framesDir,
+      framerate,
+      outputPath,
+      ffmpegPath,
+      runDir,
+    });
+    ffmpegCommand = cmd;
+    const validation = validateRenderOutput(outputPath);
+    const renderMetadata = buildRenderMetadata({
+      outputPath,
+      validation,
+      framerate,
+      sourceFrameCount,
+      ffmpegCommand: cmd,
+    });
+    const posterRelPath = copyPosterSync(framesDir, runDir);
+    const summary = buildRenderSummary(
+      readSummarySync(runDir),
+      validation,
+      posterRelPath,
+      renderMetadata,
+    );
+    writeSummarySync(runDir, summary);
+    const { cleanupBlock, cleanupResult } = applyPostRenderCleanup(
+      runDir,
+      options,
+      sourceFrameCount,
+    );
+    summary.cleanup = cleanupBlock;
+    if (cleanupResult) result.cleanupResult = cleanupResult;
+    return finalizeRenderSuccess(runDir, status, summary, outputPath, result);
+  } catch (error) {
+    if (error.ffmpegCommand) ffmpegCommand = error.ffmpegCommand;
+    return handleRenderFailure(
+      runDir,
+      options,
+      error,
+      sourceFrameCount,
+      ffmpegCommand,
+      framerate,
+      result,
+    );
   }
 }
 
