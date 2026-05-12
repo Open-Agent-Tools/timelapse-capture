@@ -314,6 +314,10 @@ Important paths:
 - `run-summary.json`: render and cleanup metadata.
 - `poster.png` or `latest-retained.png`: retained single-frame artifacts when available.
 
+## Contributing
+
+This project tracks issues with [beads](https://github.com/gastownhall/beads). The local `.beads/` directory is gitignored — after cloning, run `bd init` once to bootstrap it with the git hooks and config that aren't checked in. See `CLAUDE.md` for the full contributor workflow.
+
 ## Project Layout
 
 ```text
