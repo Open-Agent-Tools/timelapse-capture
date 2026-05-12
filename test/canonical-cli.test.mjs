@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
+import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
 import {
   commandStart,
   commandCleanup,
@@ -33,29 +34,28 @@ function runCli(args, env = {}) {
   });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function waitForTerminalStatus(runDir, { timeoutMs = 5000 } = {}) {
-  const started = Date.now();
-  let status;
-  while (Date.now() - started < timeoutMs) {
-    status = JSON.parse(
-      await fs.readFile(path.join(runDir, "status.json"), "utf8"),
-    );
-    const job = JSON.parse(
-      await fs.readFile(path.join(runDir, "job.json"), "utf8"),
-    );
-    if (
+  return pollUntil(
+    async () => {
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
+      const job = JSON.parse(
+        await fs.readFile(path.join(runDir, "job.json"), "utf8"),
+      );
+      return { status, job };
+    },
+    ({ status, job }) =>
       (status.state === "completed" || status.state === "failed") &&
-      (job.state === "completed" || job.state === "failed")
-    ) {
-      return status;
-    }
-    await sleep(25);
-  }
-  assert.fail(
-    `Timed out waiting for terminal status. Last status: ${JSON.stringify(status)}`,
-  );
+      (job.state === "completed" || job.state === "failed"),
+    {
+      timeoutMs,
+      intervalMs: 25,
+      onError: isTransientReadError,
+      timeoutMessage: "Timed out waiting for terminal status",
+      describeLastValue: ({ status }) => JSON.stringify(status),
+    },
+  ).then(({ status }) => status);
 }
 
 async function makeRun({ frameCount = 3, state = "completed" } = {}) {

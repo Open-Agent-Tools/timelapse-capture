@@ -5,6 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const CLI = path.join(
@@ -21,26 +22,27 @@ function runCli(args, env = {}) {
   });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function waitForCompletedStatus(runDir, { timeoutMs = 5000 } = {}) {
-  const started = Date.now();
-  let status;
-  while (Date.now() - started < timeoutMs) {
-    status = JSON.parse(
-      await fs.readFile(path.join(runDir, "status.json"), "utf8"),
-    );
-    const job = JSON.parse(
-      await fs.readFile(path.join(runDir, "job.json"), "utf8"),
-    );
-    if (status.state === "completed" && job.state === "completed") {
-      return status;
-    }
-    await sleep(25);
-  }
-  assert.fail(
-    `Timed out waiting for completed status. Last status: ${JSON.stringify(status)}`,
-  );
+  return pollUntil(
+    async () => {
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
+      const job = JSON.parse(
+        await fs.readFile(path.join(runDir, "job.json"), "utf8"),
+      );
+      return { status, job };
+    },
+    ({ status, job }) =>
+      status.state === "completed" && job.state === "completed",
+    {
+      timeoutMs,
+      intervalMs: 25,
+      onError: isTransientReadError,
+      timeoutMessage: "Timed out waiting for completed status",
+      describeLastValue: ({ status }) => JSON.stringify(status),
+    },
+  ).then(({ status }) => status);
 }
 
 test("failed frame attempts preserve prior successful latestFrame", async () => {
