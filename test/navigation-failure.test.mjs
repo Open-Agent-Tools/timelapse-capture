@@ -2,40 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
-import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
-
-const __filename = fileURLToPath(import.meta.url);
-const CLI = path.join(
-  path.dirname(__filename),
-  "..",
-  "src",
-  "timelapse-capture.mjs",
-);
-
-function runCli(args, env = {}) {
-  return spawnSync(process.execPath, [CLI, ...args], {
-    encoding: "utf8",
-    env: { ...process.env, ...env },
-  });
-}
-
-async function waitForFailedStatus(runDir, { timeoutMs = 5000 } = {}) {
-  return pollUntil(
-    async () =>
-      JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8")),
-    (status) => status.state === "failed",
-    {
-      timeoutMs,
-      intervalMs: 50,
-      onError: isTransientReadError,
-      timeoutMessage: "Timed out waiting for failed status",
-      describeLastValue: (status) => JSON.stringify(status),
-    },
-  );
-}
+import { runCli } from "./helpers/cli.mjs";
+import { waitForFailedStatus } from "./helpers/status-waiters.mjs";
 
 test("initial navigation failure should leave diagnostic manifest record", async () => {
   const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-repro-298-"));

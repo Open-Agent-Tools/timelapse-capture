@@ -4,10 +4,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
-import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
+import { CLI, runCli } from "./helpers/cli.mjs";
+import { waitForTerminalStatus } from "./helpers/status-waiters.mjs";
 import {
   commandStart,
   commandCleanup,
@@ -18,45 +18,11 @@ import {
   resolveStartTiming,
 } from "../src/timelapse-capture.mjs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const CLI = path.join(__dirname, "..", "src", "timelapse-capture.mjs");
-
 const FRAME_PNG_1x1 = Buffer.from(
   "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
   "hex",
 );
 
-function runCli(args, env = {}) {
-  return spawnSync(process.execPath, [CLI, ...args], {
-    encoding: "utf8",
-    env: { ...process.env, ...env },
-  });
-}
-
-async function waitForTerminalStatus(runDir, { timeoutMs = 5000 } = {}) {
-  return pollUntil(
-    async () => {
-      const status = JSON.parse(
-        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
-      );
-      const job = JSON.parse(
-        await fs.readFile(path.join(runDir, "job.json"), "utf8"),
-      );
-      return { status, job };
-    },
-    ({ status, job }) =>
-      (status.state === "completed" || status.state === "failed") &&
-      (job.state === "completed" || job.state === "failed"),
-    {
-      timeoutMs,
-      intervalMs: 25,
-      onError: isTransientReadError,
-      timeoutMessage: "Timed out waiting for terminal status",
-      describeLastValue: ({ status }) => JSON.stringify(status),
-    },
-  ).then(({ status }) => status);
-}
 
 async function makeRun({ frameCount = 3, state = "completed" } = {}) {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-canonical-"));
