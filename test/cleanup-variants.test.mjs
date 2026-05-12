@@ -404,3 +404,37 @@ test("render picks up keepSamples from config.json", async () => {
     await fs.rm(runDir, { recursive: true, force: true });
   }
 });
+
+test("cleanup default records reason=default in summary", async () => {
+  const runDir = await makeRun();
+  try {
+    await runWithFakeFFmpeg(() =>
+      commandCleanup({ runDir, options: {} }),
+    );
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
+    assert.equal(summary.cleanup.reason, "default");
+    assert.equal(summary.cleanup.success, true);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --keep-samples on empty frames records reason=keep-samples", async () => {
+  const runDir = await makeRun({ frameCount: 0 });
+  try {
+    const result = await runWithFakeFFmpeg(() =>
+      commandCleanup({ runDir, options: { "keep-samples": true } }),
+    );
+    assert.equal(result.message, "No frames to sample");
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
+    assert.equal(summary.cleanup.reason, "keep-samples");
+    assert.equal(summary.cleanup.removed, 0);
+    assert.equal(summary.cleanup.success, true);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
