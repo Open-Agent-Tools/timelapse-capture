@@ -40,6 +40,9 @@ const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set(["ENOENT", "ENOTEMPTY", "EEXIST"]
 const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
 const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
 const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
+const BACKEND_MIN_INTERVAL_MS = Object.freeze({
+  "playwright-url": 1000
+});
 
 export class ParseError extends Error {
   constructor(code, message) {
@@ -650,6 +653,9 @@ async function writeStartArtifacts(runDir, state) {
     backend: state.backend,
     target: state.target,
     intervalMs: state.intervalMs,
+    requestedIntervalMs: state.requestedIntervalMs,
+    backendMinIntervalMs: state.backendMinIntervalMs,
+    intervalClamped: state.intervalClamped,
     durationMs: state.durationMs,
     targetFrames: state.targetFrames,
     fps: state.fps,
@@ -731,6 +737,9 @@ function buildStatusPayload(state) {
     startedAt: state.startedAt,
     lastUpdatedAt: state.lastUpdatedAt,
     intervalMs: state.intervalMs,
+    requestedIntervalMs: state.requestedIntervalMs ?? state.intervalMs,
+    backendMinIntervalMs: state.backendMinIntervalMs ?? null,
+    intervalClamped: Boolean(state.intervalClamped),
     estimatedDiskBytes: state.estimatedDiskBytes ?? null,
     error: state.error || null
   };
@@ -898,14 +907,19 @@ function validateStartTarget(target) {
   }
 }
 
+function backendMinIntervalMs(backend) {
+  return BACKEND_MIN_INTERVAL_MS[backend] ?? 1;
+}
+
 function buildInitialCaptureState({ target, options = {} }) {
+  const backend = options.backend ?? "playwright-url";
   const timing = resolveStartTiming(options);
-  if (
-    timing.computedFromVideoLength
-    && timing.intervalMs < MIN_COMPUTED_INTERVAL_WARNING_MS
-  ) {
+  if (timing.intervalClamped) {
+    const source = timing.computedFromVideoLength
+      ? "computed from --video-length"
+      : "provided by --interval";
     console.error(
-      `warning: computed interval ${timing.intervalMs}ms is below 1000ms; capture may miss the requested cadence`
+      `warning: requested interval ${timing.requestedIntervalMs}ms (${source}) is below ${backend} minimum ${timing.backendMinIntervalMs}ms; clamped to ${timing.intervalMs}ms`
     );
   }
   const intervalMs = timing.intervalMs;
@@ -927,7 +941,7 @@ function buildInitialCaptureState({ target, options = {} }) {
   return {
     runDir,
     target,
-    backend: options.backend ?? "playwright-url",
+    backend,
     state: "starting",
     startedAt,
     targetFrames,
@@ -938,6 +952,9 @@ function buildInitialCaptureState({ target, options = {} }) {
     latestFrameAt: null,
     latestFrameTimestamp: null,
     intervalMs,
+    requestedIntervalMs: timing.requestedIntervalMs,
+    backendMinIntervalMs: timing.backendMinIntervalMs,
+    intervalClamped: timing.intervalClamped,
     durationMs,
     fps,
     viewport,
@@ -1010,6 +1027,9 @@ function stateFromConfig({ runDir, config, status }) {
     latestFrameAt: status?.latestFrameTimestamp ?? null,
     latestFrameTimestamp: status?.latestFrameTimestamp ?? null,
     intervalMs: config.intervalMs,
+    requestedIntervalMs: config.requestedIntervalMs ?? config.intervalMs,
+    backendMinIntervalMs: config.backendMinIntervalMs ?? backendMinIntervalMs(config.backend),
+    intervalClamped: Boolean(config.intervalClamped),
     durationMs: config.durationMs,
     fps: config.fps,
     viewport: config.viewport,
@@ -1132,6 +1152,8 @@ export async function commandStart({ target, options = {} } = {}) {
 export function resolveStartTiming(options = {}) {
   const durationMs = options.duration?.ms ?? 0;
   const fps = Number(options.fps ?? 24);
+  const backend = options.backend ?? "playwright-url";
+  const minimumIntervalMs = backendMinIntervalMs(backend);
   const explicitIntervalMs = typeof options.interval === "number"
     ? options.interval
     : options.interval?.ms;
@@ -1139,22 +1161,31 @@ export function resolveStartTiming(options = {}) {
 
   if (videoLengthMs !== null) {
     const targetFrames = Math.max(1, Math.round((videoLengthMs / 1000) * fps));
+    const requestedIntervalMs = Math.max(1, Math.round(durationMs / targetFrames));
+    const intervalMs = Math.max(minimumIntervalMs, requestedIntervalMs);
     return {
       durationMs,
       videoLengthMs,
       fps,
       targetFrames,
-      intervalMs: Math.max(1, Math.round(durationMs / targetFrames)),
+      requestedIntervalMs,
+      intervalMs,
+      backendMinIntervalMs: minimumIntervalMs,
+      intervalClamped: intervalMs !== requestedIntervalMs,
       computedFromVideoLength: true
     };
   }
 
-  const intervalMs = explicitIntervalMs ?? 200;
+  const requestedIntervalMs = explicitIntervalMs ?? 200;
+  const intervalMs = Math.max(minimumIntervalMs, requestedIntervalMs);
   return {
     durationMs,
     videoLengthMs,
     fps,
+    requestedIntervalMs,
     intervalMs,
+    backendMinIntervalMs: minimumIntervalMs,
+    intervalClamped: intervalMs !== requestedIntervalMs,
     targetFrames: durationMs > 0 && intervalMs > 0
       ? Math.max(1, Math.ceil(durationMs / intervalMs))
       : 3,
