@@ -287,7 +287,9 @@ export function parseArgs(argv) {
   }
 
   const expected = schema.positional.length;
-  if (positional.length < expected) {
+  const startTarget =
+    command === "start" ? resolveStartTarget(positional[0], options.url) : null;
+  if (positional.length < expected && startTarget === null) {
     const msg =
       command === "start"
         ? "Missing URL. Pass it positionally (start <url>) or via --url."
@@ -303,7 +305,7 @@ export function parseArgs(argv) {
 
   const result = { command, options, positionals: positional };
   if (schema.positional[0] === "target") {
-    result.target = positional[0];
+    result.target = startTarget;
   }
 
   if (command === "start" && !options.duration) {
@@ -324,6 +326,16 @@ export function parseArgs(argv) {
     result.runDir = positional[0];
   }
   return result;
+}
+
+function resolveStartTarget(positionalTarget, flagTarget) {
+  if (positionalTarget && flagTarget && positionalTarget !== flagTarget) {
+    throw new ParseError(
+      "E_CONFLICTING_ARGUMENT",
+      "Conflicting start targets: positional target and --url differ."
+    );
+  }
+  return positionalTarget ?? flagTarget ?? null;
 }
 
 function assertBoolFlag(command, schema, key, token) {
@@ -798,6 +810,7 @@ function buildStatusPayload(state) {
   }
   return {
     runDir: state.runDir,
+    target: state.target ?? null,
     state: stateName,
     frames: {
       captured: frameCount,
