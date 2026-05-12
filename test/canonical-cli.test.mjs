@@ -1881,6 +1881,21 @@ test("start timing clamps explicit interval below backend minimum", () => {
   assert.equal(timing.computedFromVideoLength, false);
 });
 
+test("start timing rejects unsupported backend values", () => {
+  assert.throws(
+    () =>
+      resolveStartTiming({
+        duration: { ms: 10_000 },
+        interval: 250,
+        backend: "command-frame",
+      }),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_UNSUPPORTED_BACKEND" &&
+      /command-frame/.test(error.message),
+  );
+});
+
 test("start command clamps direct interval below backend minimum and persists clamp metadata", async () => {
   const runDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "tlc-direct-interval-"),
@@ -1916,6 +1931,62 @@ test("start command clamps direct interval below backend minimum and persists cl
     assert.equal(config.backendMinIntervalMs, 1000);
     assert.equal(config.intervalClamped, true);
     await waitForTerminalStatus(runDir);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("start command rejects unsupported backend before writing artifacts", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-bad-backend-"));
+  await fs.rm(runDir, { recursive: true, force: true });
+  const result = runCli([
+    "start",
+    "http://example.test",
+    "--duration",
+    "10s",
+    "--backend",
+    "command-frame",
+    "--out",
+    runDir,
+    "--json",
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /E_UNSUPPORTED_BACKEND/);
+  assert.match(result.stderr, /command-frame/);
+  await assert.rejects(fs.stat(runDir), { code: "ENOENT" });
+});
+
+test("start command persists explicit playwright-url backend", async () => {
+  const runDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-explicit-backend-"),
+  );
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test",
+        "--duration",
+        "2s",
+        "--backend",
+        "playwright-url",
+        "--out",
+        runDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "1" },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status.target, "http://example.test");
+    assert.equal(payload.status.backend, "playwright-url");
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
+    assert.equal(config.backend, "playwright-url");
+    const terminalStatus = await waitForTerminalStatus(runDir);
+    assert.equal(terminalStatus.backend, "playwright-url");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

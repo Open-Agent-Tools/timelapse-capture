@@ -194,3 +194,58 @@ test("parseArgs validates required arguments and arity", () => {
     (error) => error instanceof ParseError && error.code === "E_EXTRA_ARGUMENT",
   );
 });
+
+test("parseArgs accepts default and explicit playwright-url backend", () => {
+  const defaultBackend = parseArgs([
+    "start",
+    "http://example.test",
+    "--duration",
+    "10s",
+  ]);
+  assert.equal(defaultBackend.options.backend, undefined);
+
+  const explicitBackend = parseArgs([
+    "start",
+    "http://example.test",
+    "--duration",
+    "10s",
+    "--backend",
+    "playwright-url",
+  ]);
+  assert.equal(explicitBackend.options.backend, "playwright-url");
+});
+
+test("parseArgs rejects unsupported backend values", () => {
+  assert.throws(
+    () =>
+      parseArgs([
+        "start",
+        "http://example.test",
+        "--duration",
+        "30s",
+        "--backend",
+        "command-frame",
+      ]),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_UNSUPPORTED_BACKEND" &&
+      /command-frame/.test(error.message) &&
+      /playwright-url/.test(error.message),
+  );
+  assert.throws(
+    () =>
+      parseArgs([
+        "start",
+        "http://example.test",
+        "--duration",
+        "30s",
+        "--backend",
+        "playwrite-url",
+      ]),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_UNSUPPORTED_BACKEND" &&
+      /playwrite-url/.test(error.message) &&
+      /playwright-url/.test(error.message),
+  );
+});
