@@ -47,6 +47,7 @@ async function makeRun({ frameCount = 3 } = {}) {
       FRAME_PNG_1x1
     );
   }
+  await fs.writeFile(path.join(runDir, "latest.png"), FRAME_PNG_1x1);
   await fs.writeFile(path.join(runDir, "output.mp4"), "placeholder");
   await fs.writeFile(
     path.join(runDir, "status.json"),
@@ -194,6 +195,32 @@ test("peek falls back to poster.png when frames are cleaned up", async () => {
     const payload = JSON.parse(peekResult.stdout);
     assert.equal(payload.exists, true);
     assert.match(payload.path, /poster\.png$/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --frames removes frames and latest.png and records in summary", async () => {
+  const runDir = await makeRun();
+  try {
+    const summaryPath = path.join(runDir, "run-summary.json");
+    await fs.writeFile(summaryPath, JSON.stringify({ existing: "data" }));
+
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { frames: true } }));
+    assert.equal(result.message, "Raw frames and latest.png cleaned up");
+    assert.equal(result.removed, 3);
+    assert.equal(await fs.stat(path.join(runDir, "frames")).then(() => true, () => false), false);
+    assert.equal(await fs.stat(path.join(runDir, "latest.png")).then(() => true, () => false), false);
+
+    const summary = JSON.parse(await fs.readFile(summaryPath, "utf8"));
+    assert.ok(summary.cleanup, "Summary should have cleanup information");
+    assert.equal(summary.cleanup.success, true);
+    assert.equal(summary.cleanup.removed, 3);
+    assert.equal(summary.cleanup.retained, 0);
+    assert.equal(summary.cleanup.reason, "frames");
+    assert.ok(summary.cleanup.bytesFreed > 0, "bytesFreed should be recorded");
+    assert.equal(summary.cleanup.latestPngRemoved, true, "latestPngRemoved should be true");
+    assert.ok(summary.cleanup.timestamp, "Cleanup should have a timestamp");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

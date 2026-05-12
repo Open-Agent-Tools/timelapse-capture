@@ -2021,9 +2021,10 @@ export async function commandCleanup({ runDir, options = {} }) {
   }
 
   if (options.frames) {
-    const toDelete = frameFiles.map((file) => path.join(framesDir, file));
     const latestPng = path.join(resolved, "latest.png");
-    if (fs.existsSync(latestPng)) toDelete.push(latestPng);
+    const latestPngExists = fs.existsSync(latestPng);
+    const toDelete = frameFiles.map((file) => path.join(framesDir, file));
+    if (latestPngExists) toDelete.push(latestPng);
     const bytesFreed = await sumFileSizes(toDelete);
     await Promise.all(toDelete.map((p) => fsp.rm(p, { force: true })));
     const removeResult = await removeEmptyDir(framesDir);
@@ -2035,7 +2036,9 @@ export async function commandCleanup({ runDir, options = {} }) {
       success: true,
       removed: frameFiles.length,
       retained: 0,
-      bytesFreed
+      bytesFreed,
+      latestPngRemoved: latestPngExists,
+      reason: "frames"
     });
     return result;
   }
