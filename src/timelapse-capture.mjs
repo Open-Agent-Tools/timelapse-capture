@@ -10,7 +10,6 @@ import { setTimeout as setTimeoutPromise } from "node:timers/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 export const VERSION = "0.1.0";
-export const MIN_NODE_VERSION = "20.0.0";
 
 export const CANONICAL_STATES = Object.freeze([
   "starting",
