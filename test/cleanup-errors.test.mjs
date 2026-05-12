@@ -220,7 +220,7 @@ test("cleanup --keep-samples keeps distinct first and last frames", async () => 
   const { runDir, framesDir } = await makeRun({ frameCount: 3 });
   try {
     await runWithFakeFFmpeg(async () => {
-      const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+      const result = await commandCleanup({ runDir, options: { "keep-samples": 2 } });
       assert.equal(result.removed, 1);
       assert.equal(result.retained, 2);
       assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png", "frame-000003.png"]);

@@ -1338,3 +1338,49 @@ test("status with missing run directory reports 'run directory not found'", asyn
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /run directory not found/);
 });
+
+test("commandStart saves keepSamples (explicit) to config.json", async () => {
+  const runDir = path.join(os.tmpdir(), "tlc-test-start-samples-" + Date.now());
+  try {
+    process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
+    const { commandStart } = await import("../src/timelapse-capture.mjs");
+    await commandStart({
+      target: "http://example.com",
+      options: {
+        out: runDir,
+        duration: { ms: 1000 },
+        "keep-samples": "7",
+        cleanup: "never"
+      }
+    });
+
+    const config = JSON.parse(await (await import("node:fs/promises")).readFile(path.join(runDir, "config.json"), "utf8"));
+    assert.equal(config.keepSamples, 7);
+  } finally {
+    delete process.env.TIMELAPSE_SIMULATE_FRAMES;
+    await (await import("node:fs/promises")).rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("commandStart saves keepSamples (default) to config.json", async () => {
+  const runDir = path.join(os.tmpdir(), "tlc-test-start-samples-default-" + Date.now());
+  try {
+    process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
+    const { commandStart } = await import("../src/timelapse-capture.mjs");
+    await commandStart({
+      target: "http://example.com",
+      options: {
+        out: runDir,
+        duration: { ms: 1000 },
+        "keep-samples": true,
+        cleanup: "never"
+      }
+    });
+
+    const config = JSON.parse(await (await import("node:fs/promises")).readFile(path.join(runDir, "config.json"), "utf8"));
+    assert.equal(config.keepSamples, 5);
+  } finally {
+    delete process.env.TIMELAPSE_SIMULATE_FRAMES;
+    await (await import("node:fs/promises")).rm(runDir, { recursive: true, force: true });
+  }
+});
