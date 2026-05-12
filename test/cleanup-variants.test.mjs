@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 
-import { commandCleanup } from "../src/timelapse-capture.mjs";
+import { commandCleanup, commandRender } from "../src/timelapse-capture.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const CLI = path.join(path.dirname(__filename), "..", "src", "timelapse-capture.mjs");
@@ -95,7 +95,7 @@ test("cleanup --keep-frames retains all frames and keeps peek available", async 
 test("cleanup --keep-samples retains first and last frame", async () => {
   const runDir = await makeRun();
   try {
-    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { "keep-samples": true } }));
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { "keep-samples": 2 } }));
     assert.equal(result.message, "Frames cleaned up (kept first and last)");
     assert.equal(result.removed, 1);
     assert.equal(result.retained, 2);
@@ -107,6 +107,38 @@ test("cleanup --keep-samples retains first and last frame", async () => {
     const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
     assert.equal(peekResult.status, 0, peekResult.stderr);
     assert.equal(JSON.parse(peekResult.stdout).frame.index, 3);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --keep-samples 3 retains evenly distributed frames", async () => {
+  const runDir = await makeRun({ frameCount: 10 });
+  try {
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { "keep-samples": 3 } }));
+    assert.equal(result.retained, 3);
+    assert.deepEqual((await fs.readdir(path.join(runDir, "frames"))).sort(), [
+      "frame-0001.png",
+      "frame-0006.png",
+      "frame-0010.png"
+    ]);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --keep-samples (default) retains 5 frames", async () => {
+  const runDir = await makeRun({ frameCount: 10 });
+  try {
+    const result = await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: { "keep-samples": true } }));
+    assert.equal(result.retained, 5);
+    assert.deepEqual((await fs.readdir(path.join(runDir, "frames"))).sort(), [
+      "frame-0001.png",
+      "frame-0003.png",
+      "frame-0006.png",
+      "frame-0008.png",
+      "frame-0010.png"
+    ]);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -156,6 +188,41 @@ test("peek falls back to poster.png when frames are cleaned up", async () => {
     const payload = JSON.parse(peekResult.stdout);
     assert.equal(payload.exists, true);
     assert.match(payload.path, /poster\.png$/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render --keep-samples 3 retains 3 frames", async () => {
+  const runDir = await makeRun({ frameCount: 10 });
+  try {
+    await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify({}));
+    await runWithFakeFFmpeg(async () => {
+      await commandRender({ runDir, options: { "keep-samples": "3" } });
+    });
+
+    const retainedFiles = await fs.readdir(path.join(runDir, "frames"));
+    assert.equal(retainedFiles.length, 3);
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.retained, 3);
+    assert.equal(summary.cleanup.reason, "keep-samples");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render picks up keepSamples from config.json", async () => {
+  const runDir = await makeRun({ frameCount: 10 });
+  try {
+    await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify({ keepSamples: 4 }));
+    await runWithFakeFFmpeg(async () => {
+      await commandRender({ runDir, options: {} });
+    });
+
+    const retainedFiles = await fs.readdir(path.join(runDir, "frames"));
+    assert.equal(retainedFiles.length, 4);
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.retained, 4);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

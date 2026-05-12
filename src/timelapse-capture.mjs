@@ -77,7 +77,7 @@ const COMMAND_SCHEMAS = {
   },
   render: {
     positional: ["runDir"],
-    valueFlags: ["output"],
+    valueFlags: ["output", "keep-samples"],
     boolFlags: ["json", "force", "help", "keep-frames", "keep-all"]
   },
   peek: {
@@ -87,14 +87,13 @@ const COMMAND_SCHEMAS = {
   },
   cleanup: {
     positional: ["runDir"],
-    valueFlags: [],
+    valueFlags: ["keep-samples"],
     boolFlags: [
       "frames",
       "all",
       "force",
       "help",
       "keep-frames",
-      "keep-samples",
       "keep-latest"
     ]
   },
@@ -228,6 +227,10 @@ export function parseArgs(argv) {
         if (value === undefined) {
           const next = tokens[i + 1];
           if (next === undefined || (next.startsWith("-") && next !== "-")) {
+            if (key === "keep-samples") {
+              options[key] = true;
+              continue;
+            }
             throw new ParseError("E_MISSING_VALUE", `Missing value for --${key}`);
           }
           value = next;
@@ -329,10 +332,10 @@ function parseValueFlag(flag, value) {
     }
     return parsed;
   }
-  if (flag === "fps") {
+  if (flag === "fps" || flag === "keep-samples") {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      throw new ParseError("E_BAD_FPS", `Invalid fps: ${value}`);
+      throw new ParseError(`E_BAD_${flag.toUpperCase().replace(/-/g, "_")}`, `Invalid ${flag}: ${value}`);
     }
     return parsed;
   }
@@ -480,6 +483,21 @@ function isBenignEmptyDirRemovalError(error) {
 function formatFsError(action, target, error) {
   const code = error?.code ? `${error.code}: ` : "";
   return `${action} ${target}: ${code}${error.message}`;
+}
+
+function getSampleIndices(m, n) {
+  const indices = new Set();
+  if (m === 0) return indices;
+  if (m <= n) {
+    for (let i = 0; i < m; i++) indices.add(i);
+  } else if (n === 1) {
+    indices.add(m - 1);
+  } else {
+    for (let i = 0; i < n; i++) {
+      indices.add(Math.round((i * (m - 1)) / (n - 1)));
+    }
+  }
+  return indices;
 }
 
 function removeEmptyDirSync(dir) {
@@ -869,7 +887,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     viewport,
     estimatedDiskBytes,
     cleanup,
-    keepSamples: Number(options["keep-samples"] ?? 0),
+    keepSamples: options["keep-samples"] === true ? 5 : Number(options["keep-samples"] ?? 0),
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
     headed: Boolean(options.headed),
@@ -1411,9 +1429,9 @@ export function validateMP4(outputPath) {
   return result;
 }
 
-export function cleanupFrames(framesDir) {
+export function cleanupFrames(framesDir, options = {}) {
   if (!fs.existsSync(framesDir)) {
-    return { success: true, removed: 0 };
+    return { success: true, removed: 0, retained: 0 };
   }
   let removed = 0;
   try {
@@ -1421,20 +1439,36 @@ export function cleanupFrames(framesDir) {
   } catch (error) {
     return { success: false, removed, error: error.message };
   }
-  const files = fs.readdirSync(framesDir);
+
+  const files = fs
+    .readdirSync(framesDir)
+    .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
+    .sort();
+  const m = files.length;
+
+  let retainedIndices = new Set();
+  if (options["keep-samples"]) {
+    const n = options["keep-samples"] === true ? 5 : Number(options["keep-samples"]);
+    retainedIndices = getSampleIndices(m, n);
+  }
+
+  const retainedSamples = new Set([...retainedIndices].map((i) => files[i]));
+  const retained = retainedSamples.size;
+
   for (const file of files) {
-    if (/\.(png|jpg|jpeg)$/i.test(file)) {
+    if (!retainedSamples.has(file)) {
       fs.unlinkSync(path.join(framesDir, file));
       removed += 1;
     }
   }
+
   if (files.length === removed && removed > 0) {
     const removeResult = removeEmptyDirSync(framesDir);
     if (!removeResult.success) {
       return { success: false, removed, error: removeResult.error };
     }
   }
-  return { success: true, removed };
+  return { success: true, removed, retained };
 }
 
 function readSummarySync(runDir) {
@@ -1620,12 +1654,12 @@ export function renderFrames(runDir, options = {}) {
     writeSummarySync(runDir, summary);
 
     if (!options["keep-frames"] && !options["keep-all"]) {
-      const cleanup = cleanupFrames(framesDir);
+      const cleanup = cleanupFrames(framesDir, options);
       summary.cleanup = {
         success: cleanup.success,
         removed: cleanup.removed,
-        retained: 0,
-        reason: "post-render-cleanup",
+        retained: cleanup.retained,
+        reason: options["keep-samples"] ? "keep-samples" : "post-render-cleanup",
         error: cleanup.error || null
       };
       summary.cleanup.timestamp = nowIso();
@@ -1699,11 +1733,16 @@ export async function commandRender({ runDir, options = {} }) {
   const resolved = path.resolve(runDir);
   const statusPath = path.join(resolved, "status.json");
   const status = await readJsonOptional(statusPath);
+  const config = await readJsonOptional(path.join(resolved, "config.json"));
+
   const currentState = status?.state || inferStateFromStatus(status || {});
   if (["starting", "running", "rendering"].includes(currentState) && !options.force) {
     throw new Error("Cannot render while capture is active. Use --force to override.");
   }
   const renderOptions = { ...options };
+  if (renderOptions["keep-samples"] === undefined && config?.keepSamples) {
+    renderOptions["keep-samples"] = config.keepSamples;
+  }
   if (options.force && ["starting", "running", "rendering"].includes(currentState)) {
     const frames = await listFrameFiles(resolved);
     if (frames.length === 0) {
@@ -1802,18 +1841,31 @@ export async function commandCleanup({ runDir, options = {} }) {
       await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0 });
       return result;
     }
-    const first = frameFiles[0];
-    const last = frameFiles[frameFiles.length - 1];
-    const retainedSamples = new Set([first, last]);
+
+    const n = options["keep-samples"] === true ? 5 : Number(options["keep-samples"]);
+    const m = frameFiles.length;
+    const retainedIndices = getSampleIndices(m, n);
+
+    const retainedSamples = new Set([...retainedIndices].map((i) => frameFiles[i]));
     const retained = retainedSamples.size;
     const toDelete = frameFiles.filter((f) => !retainedSamples.has(f));
     await Promise.all(toDelete.map((p) => fsp.rm(path.join(framesDir, p), { force: true })));
+
+    const msg =
+      n === 2
+        ? "Frames cleaned up (kept first and last)"
+        : `Frames cleaned up (kept ${retained} representative samples)`;
     const result = {
-      message: "Frames cleaned up (kept first and last)",
+      message: msg,
       removed: toDelete.length,
       retained
     };
-    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained });
+    await writeCleanupSummary(resolved, {
+      success: true,
+      removed: toDelete.length,
+      retained,
+      reason: "keep-samples"
+    });
     return result;
   }
 
