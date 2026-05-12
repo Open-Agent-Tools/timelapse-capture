@@ -783,8 +783,21 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
   try {
     page = await browser.newPage({ viewport: state.viewport });
     try {
+      if (process.env.TIMELAPSE_SIMULATE_INITIAL_NAVIGATION_FAILURE === "1") {
+        throw new Error("simulated initial navigation failure");
+      }
       await page.goto(state.target, { waitUntil: state.waitUntil, timeout: 60_000 });
     } catch (error) {
+      const scheduledAt = new Date(state.startedAt).toISOString();
+      await recordFailedFrame({
+        state,
+        runDir,
+        manifestPath,
+        index: 1,
+        scheduledAt,
+        url: state.target,
+        error: `navigation failed: ${error?.message || error}`
+      });
       throw new Error(`navigation failed: ${error?.message || error}`);
     }
 
@@ -821,6 +834,19 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
 }
 
 async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
+  if (process.env.TIMELAPSE_SIMULATE_INITIAL_NAVIGATION_FAILURE === "1") {
+    const scheduledAt = new Date(state.startedAt).toISOString();
+    await recordFailedFrame({
+      state,
+      runDir,
+      manifestPath,
+      index: 1,
+      scheduledAt,
+      url: state.target,
+      error: "navigation failed: simulated initial navigation failure"
+    });
+    throw new Error("navigation failed: simulated initial navigation failure");
+  }
   const failIndex =
     process.env.TIMELAPSE_SIMULATE_FRAME_FAILURE === "1" ? 2 : null;
   const delayMs = Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAME_DELAY_MS || "", 10);
