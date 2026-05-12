@@ -1752,19 +1752,11 @@ export async function commandPeek({ runDir, options = {} }) {
 
   if (!names.length) {
     const posterPath = path.join(resolved, "poster.png");
-    const retainedPath = path.join(resolved, "latest-retained.png");
     if (fs.existsSync(posterPath)) {
       return buildPeekFallbackPayload(resolved, "poster", posterPath);
     }
-    if (fs.existsSync(retainedPath)) {
-      return buildPeekFallbackPayload(
-        resolved,
-        "latest-retained",
-        retainedPath,
-      );
-    }
     throw new Error(
-      "No frames available. Raw frames were cleaned up. Use poster.png or latest-retained.png from the run directory.",
+      "No frames available. Raw frames were cleaned up. Use poster.png or output.mp4 from the run directory.",
     );
   }
 
@@ -2686,7 +2678,7 @@ Usage:
     [--latest | --index <n> | --near <iso>] [--json]
   timelapse-capture render <run-dir>
     [--output <file>] [--keep-samples [N]]
-    [--json] [--force] [--keep-frames] [--keep-all]
+    [--json] [--force] [--keep-frames] [--keep-latest] [--keep-all]
   timelapse-capture cleanup <run-dir>
     [--keep-samples [N]] [--frames] [--all] [--force] [--keep-frames] [--keep-latest]
   timelapse-capture doctor [--json]

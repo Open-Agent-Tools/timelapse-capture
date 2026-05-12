@@ -259,7 +259,7 @@ Render failures preserve raw frames so you can retry after fixing the dependency
 
 ### `peek` says no frames are available
 
-If render already succeeded, raw frames may have been cleaned up. Inspect `poster.png`, `latest-retained.png`, or `output.mp4` in the run directory if present.
+If render already succeeded, raw frames may have been cleaned up. Inspect `poster.png` or `output.mp4` in the run directory if present.
 
 ## Retention Examples
 
@@ -312,7 +312,7 @@ Important paths:
 - `status.json`: current or final run status.
 - `output.mp4`: rendered video.
 - `run-summary.json`: render and cleanup metadata.
-- `poster.png` or `latest-retained.png`: retained single-frame artifacts when available.
+- `poster.png`: retained single-frame artifact when render completed after at least one captured frame.
 
 ## Project Layout
 

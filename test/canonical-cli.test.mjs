@@ -2443,7 +2443,7 @@ test("peek --latest exits non-zero with a clear error when no frames or fallback
     );
     assert.match(peekResult.stderr, /Raw frames were cleaned up/);
     assert.match(peekResult.stderr, /poster\.png/);
-    assert.match(peekResult.stderr, /latest-retained\.png/);
+    assert.doesNotMatch(peekResult.stderr, /latest-retained\.png/);
     assert.ok(
       !peekResult.stdout.includes("frames/"),
       "stdout should not mention a frames/ path",

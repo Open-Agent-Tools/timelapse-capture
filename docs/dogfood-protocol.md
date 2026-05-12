@@ -148,8 +148,7 @@ directory understandable without raw frames.
    - `manifest.jsonl` (or `manifest.json`) is present.
    - `status.json` is present and reports a terminal state.
    - `run-summary.json` is present and records the cleanup action.
-   - `poster.png` or `latest-retained.png` is present if the run produced
-     at least one frame.
+   - `poster.png` is present if the run produced at least one frame.
    - `frames/` is removed or empty.
 
    If any of those are missing, record the gap in the feedback template.

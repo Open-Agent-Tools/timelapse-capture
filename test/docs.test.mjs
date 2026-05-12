@@ -50,6 +50,7 @@ test("README documents dogfood tester setup and capture workflow", async () => {
   assert.match(readme, /manifest\.jsonl[\s\S]{0,400}per-frame/i);
   // manifest.json must be described as start-time metadata near its filename
   assert.match(readme, /manifest\.json[^l][\s\S]{0,400}(start-time|run metadata|capture start)/i);
+  assert.doesNotMatch(readme, /latest-retained\.png/);
 });
 
 test("skill requires doctor before capture and describes the agent workflow", async () => {
@@ -123,6 +124,11 @@ test("dogfood-protocol.md covers install checklist, all three scenarios, feedbac
   assert.doesNotMatch(
     doc,
     /render "\$RUN_DIR"\s*\ntimelapse-capture cleanup "\$RUN_DIR" --keep-frames/,
+  );
+  assert.doesNotMatch(doc, /latest-retained\.png/);
+  assert.match(
+    doc,
+    /poster\.png.*run produced[\s\S]*at least one frame\./,
   );
 });
 
