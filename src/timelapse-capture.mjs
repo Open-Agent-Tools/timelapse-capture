@@ -53,6 +53,7 @@ const BACKEND_MIN_INTERVAL_MS = Object.freeze({
   [DEFAULT_BACKEND]: 1000,
 });
 const SUPPORTED_BACKENDS = Object.freeze(Object.keys(BACKEND_MIN_INTERVAL_MS));
+const SUPPORTED_CLEANUP_POLICIES = Object.freeze(["after-render", "never"]);
 
 export class ParseError extends Error {
   constructor(code, message) {
@@ -409,6 +410,15 @@ function parseValueFlag(flag, value) {
   }
   if (flag === "backend") {
     return normalizeBackend(value);
+  }
+  if (flag === "cleanup") {
+    if (!SUPPORTED_CLEANUP_POLICIES.includes(value)) {
+      throw new ParseError(
+        "E_BAD_CLEANUP",
+        `Invalid cleanup policy: ${value}. Supported values: ${SUPPORTED_CLEANUP_POLICIES.join(", ")}.`,
+      );
+    }
+    return value;
   }
   return value;
 }
