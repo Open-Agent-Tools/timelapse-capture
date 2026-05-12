@@ -226,7 +226,33 @@ test("cleanup --keep-latest retains only the latest frame", async () => {
     const summary = JSON.parse(
       await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
     );
+    assert.equal(summary.cleanup.success, true);
+    assert.equal(summary.cleanup.removed, 2);
+    assert.equal(summary.cleanup.retained, 1);
     assert.equal(summary.cleanup.bytesFreed, FRAME_PNG_1x1.length * 2);
+    assert.equal(summary.cleanup.reason, "keep-latest");
+    assert.equal(typeof summary.cleanup.timestamp, "string");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --keep-latest with no frames records reason in summary", async () => {
+  const runDir = await makeRun({ frameCount: 0 });
+  try {
+    const result = await runWithFakeFFmpeg(() =>
+      commandCleanup({ runDir, options: { "keep-latest": true } }),
+    );
+    assert.equal(result.message, "No frames to cleanup");
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
+    assert.equal(summary.cleanup.success, true);
+    assert.equal(summary.cleanup.removed, 0);
+    assert.equal(summary.cleanup.retained, 0);
+    assert.equal(summary.cleanup.bytesFreed, 0);
+    assert.equal(summary.cleanup.reason, "keep-latest");
+    assert.equal(typeof summary.cleanup.timestamp, "string");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
