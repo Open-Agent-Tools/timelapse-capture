@@ -564,7 +564,7 @@ const directorySize = (dir) => reduceDir(dir, async (sum, file) => {
   try {
     return sum + (await fsp.stat(file)).size;
   } catch (error) {
-    if (error?.code === "ENOENT") return sum;
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return sum;
     throw error;
   }
 }, 0);

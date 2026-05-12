@@ -66,6 +66,34 @@ test("commandStatus ignores ENOENT from frame stat during traversal", async () =
   }
 });
 
+test("commandStatus ignores ENOTDIR from frame stat during traversal", async () => {
+  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
+  const framesDir = path.join(runDir, "frames");
+  const framePath = path.join(framesDir, "frame-0001.png");
+  const originalStat = fsp.stat;
+
+  try {
+    await writeStatusRunDir(runDir);
+    await fsp.mkdir(framesDir, { recursive: true });
+    await fsp.writeFile(framePath, "frame");
+
+    mock.method(fsp, "stat", async (target) => {
+      if (target === framePath) {
+        const error = new Error("parent path is no longer a directory");
+        error.code = "ENOTDIR";
+        throw error;
+      }
+      return originalStat(target);
+    });
+
+    const result = await commandStatus({ runDir });
+    assert.equal(result.framesDiskUsageBytes, 0);
+  } finally {
+    mock.restoreAll();
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("commandStatus treats ENOTDIR from nested traversal as a benign race", async () => {
   const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
   const framesDir = path.join(runDir, "frames");
