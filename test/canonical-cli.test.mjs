@@ -764,6 +764,46 @@ test("render uses fps from run config for ffmpeg framerate", async () => {
   }
 });
 
+test("render uses fps persisted by start command", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-fps-"));
+  try {
+    process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
+    const { commandStart } = await import("../src/timelapse-capture.mjs");
+    await commandStart({
+      target: "http://example.com",
+      options: {
+        out: runDir,
+        duration: { ms: 1000 },
+        fps: 18,
+        cleanup: "never"
+      }
+    });
+    await waitForTerminalStatus(runDir);
+
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv()
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const ffmpegArgs = JSON.parse(
+        await fs.readFile(path.join(manager.outputDir, "ffmpeg-args.json"), "utf8")
+      );
+      const framerateIdx = ffmpegArgs.indexOf("-framerate");
+      assert.notEqual(framerateIdx, -1);
+      assert.equal(ffmpegArgs[framerateIdx + 1], "18");
+
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+      );
+      assert.equal(summary.render.framerate, 18);
+    }, "success-require-contiguous-input");
+  } finally {
+    delete process.env.TIMELAPSE_SIMULATE_FRAMES;
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("commandRender framerate option overrides config fps", async () => {
   const { runDir, config } = await makeRun();
   try {
