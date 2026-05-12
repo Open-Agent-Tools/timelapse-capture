@@ -1735,11 +1735,15 @@ export function renderFrames(runDir, options = {}) {
     writeSummarySync(runDir, summary);
 
     if (!options["keep-frames"] && !options["keep-all"]) {
-      const cleanup = cleanupFrames(framesDir, options);
+      const cleanupOptions = options["keep-samples"]
+        ? { ...options, "keep-samples": false }
+        : options;
+      const cleanup = cleanupFrames(framesDir, cleanupOptions);
+      const retainedCount = options["keep-samples"] ? samplePaths.length : cleanup.retained;
       summary.cleanup = {
         success: cleanup.success,
         removed: cleanup.removed,
-        retained: cleanup.retained,
+        retained: retainedCount,
         reason: options["keep-samples"] ? "keep-samples" : "post-render-cleanup",
         samples: samplePaths.length > 0 ? samplePaths : undefined,
         error: cleanup.error || null
