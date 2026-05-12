@@ -245,6 +245,8 @@ test("peek falls back to latest-retained.png when frames are cleaned up", async 
     assert.equal(payload.selection.metadataAvailable, false);
     assert.equal(payload.frame, null);
     assert.equal(payload.fallback.source, "latest-retained");
+    assert.equal(payload.fallback.path, path.join(runDir, "latest-retained.png"));
+    assert.equal(path.isAbsolute(payload.fallback.path), true);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -265,6 +267,8 @@ test("peek falls back to poster.png when frames are cleaned up", async () => {
     assert.equal(payload.selection.metadataAvailable, false);
     assert.equal(payload.frame, null);
     assert.equal(payload.fallback.source, "poster");
+    assert.equal(payload.fallback.path, path.join(runDir, "poster.png"));
+    assert.equal(path.isAbsolute(payload.fallback.path), true);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

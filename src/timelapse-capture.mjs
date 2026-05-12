@@ -1599,7 +1599,6 @@ function pickRecordByFrameName(records, frameName) {
 }
 
 function buildPeekFallbackPayload(resolvedRunDir, source, absolutePath) {
-  const relativePath = path.relative(resolvedRunDir, absolutePath);
   return {
     exists: true,
     path: absolutePath,
@@ -1612,16 +1611,57 @@ function buildPeekFallbackPayload(resolvedRunDir, source, absolutePath) {
     },
     fallback: {
       source,
-      path: relativePath || path.basename(absolutePath),
+      path: absolutePath,
     },
   };
 }
 
 function buildPeekFramePayload(runDir, frameName, pathCount, record) {
   const framePath = path.join(runDir, "frames", frameName);
+  const relativeFramePath = path.join("frames", frameName);
   const fallbackIndex = Number.parseInt(frameName.match(/\d+/)?.[0] || "0", 10);
   const frameIndex =
     Number.isInteger(record?.index) && record.index > 0 ? record.index : fallbackIndex;
+  const capturedAt = record?.capturedAt ?? null;
+  const scheduledAt = record?.scheduledAt ?? null;
+  const status = record?.status ?? null;
+  const url = record?.url ?? null;
+  const title = Object.prototype.hasOwnProperty.call(record ?? {}, "title")
+    ? record.title
+    : null;
+  const viewport = record?.viewport ?? null;
+  const error = Object.prototype.hasOwnProperty.call(record ?? {}, "error")
+    ? record.error
+    : null;
+
+  const selection = record
+    ? {
+        source: "frames",
+        metadataAvailable: true,
+        index: frameIndex,
+        path: relativeFramePath,
+        capturedAt,
+        scheduledAt,
+        url,
+        title,
+        viewport,
+        status,
+        error,
+      }
+    : {
+        source: "frames",
+        metadataAvailable: false,
+        reason: "no-manifest-record",
+        index: frameIndex,
+        path: relativeFramePath,
+        capturedAt: null,
+        scheduledAt: null,
+        url: null,
+        title: null,
+        viewport: null,
+        status: null,
+        error: null,
+      };
 
   return {
     exists: true,
@@ -1630,23 +1670,16 @@ function buildPeekFramePayload(runDir, frameName, pathCount, record) {
     pathCount,
     frame: {
       index: frameIndex,
-      path: path.join("frames", frameName),
-      capturedAt: record?.capturedAt ?? null,
-      scheduledAt: record?.scheduledAt ?? null,
-      status: record?.status ?? null,
-      url: record?.url ?? null,
-      title: Object.prototype.hasOwnProperty.call(record ?? {}, "title")
-        ? record.title
-        : null,
-      viewport: record?.viewport ?? null,
-      error: Object.prototype.hasOwnProperty.call(record ?? {}, "error")
-        ? record.error
-        : null,
+      path: relativeFramePath,
+      capturedAt,
+      scheduledAt,
+      status,
+      url,
+      title,
+      viewport,
+      error,
     },
-    selection: {
-      source: "frames",
-      metadataAvailable: Boolean(record),
-    },
+    selection,
   };
 }
 
