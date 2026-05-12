@@ -384,9 +384,7 @@ test("render picks up keepSamples from config.json", async () => {
 test("cleanup default records reason=default in summary", async () => {
   const runDir = await makeRun();
   try {
-    await runWithFakeFFmpeg(() =>
-      commandCleanup({ runDir, options: {} }),
-    );
+    await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: {} }));
     const summary = JSON.parse(
       await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
     );

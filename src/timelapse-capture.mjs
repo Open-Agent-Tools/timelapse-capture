@@ -2599,7 +2599,9 @@ const CLEANUP_STRATEGIES = {
     reason: "keep-samples",
     resolve({ framesDir, frameFiles, resolved, keepCount }) {
       if (frameFiles.length === 0) {
-        return { earlyReturn: { message: "No frames to sample", frameCount: 0 } };
+        return {
+          earlyReturn: { message: "No frames to sample", frameCount: 0 },
+        };
       }
       const plan = {
         toDelete: frameFiles.map((f) => path.join(framesDir, f)),
@@ -2622,7 +2624,9 @@ const CLEANUP_STRATEGIES = {
     reason: "keep-latest",
     resolve({ framesDir, frameFiles }) {
       if (frameFiles.length === 0) {
-        return { earlyReturn: { message: "No frames to cleanup", frameCount: 0 } };
+        return {
+          earlyReturn: { message: "No frames to cleanup", frameCount: 0 },
+        };
       }
       const last = frameFiles[frameFiles.length - 1];
       const toDeleteNames = frameFiles.filter((f) => f !== last);
@@ -2696,7 +2700,13 @@ export async function commandCleanup({ runDir, options = {} }) {
   }
   const strategy = CLEANUP_STRATEGIES[strategyName];
   const keepCount = keepSamples === true ? 2 : Number(keepSamples);
-  const plan = strategy.resolve({ resolved, framesDir, frameFiles, config, keepCount });
+  const plan = strategy.resolve({
+    resolved,
+    framesDir,
+    frameFiles,
+    config,
+    keepCount,
+  });
 
   if (plan.earlyReturn) {
     await writeCleanupSummary(resolved, {
@@ -2739,7 +2749,8 @@ export async function commandCleanup({ runDir, options = {} }) {
     reason: strategy.reason,
   };
   if (plan.samples != null) summary.samples = plan.samples;
-  if (plan.latestPngRemoved !== undefined) summary.latestPngRemoved = plan.latestPngRemoved;
+  if (plan.latestPngRemoved !== undefined)
+    summary.latestPngRemoved = plan.latestPngRemoved;
 
   await writeCleanupSummary(resolved, summary);
   return result;
