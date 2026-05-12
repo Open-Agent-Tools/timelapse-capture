@@ -2655,11 +2655,19 @@ function printHelp() {
   console.log(`timelapse-capture ${VERSION}
 
 Usage:
-  timelapse-capture start <url> [--duration <2h>] [--interval <5s>] [--video-length <1m>] [--fps <24>] [--out <dir>]
+  timelapse-capture start <url>
+    [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
+    [--fps <24>] [--viewport <1280x720>] [--out <dir>] [--cleanup <mode>]
+    [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
+    [--json] [--force] [--headed] [--keep-frames] [--keep-latest]
   timelapse-capture status <run-dir> [--json]
-  timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
-  timelapse-capture render <run-dir> [--output <file>] [--json]
-  timelapse-capture cleanup <run-dir> [--force]
+  timelapse-capture peek <run-dir>
+    [--latest | --index <n> | --near <iso>] [--json]
+  timelapse-capture render <run-dir>
+    [--output <file>] [--keep-samples [N]]
+    [--json] [--force] [--keep-frames] [--keep-all]
+  timelapse-capture cleanup <run-dir>
+    [--keep-samples [N]] [--frames] [--all] [--force] [--keep-frames] [--keep-latest]
   timelapse-capture doctor [--json]
 `);
 }
@@ -2667,6 +2675,7 @@ Usage:
 // Compatibility re-exports kept lightweight for tests.
 export const __test__ = {
   SIMULATION_FRAME_PNG,
+  COMMAND_SCHEMAS,
   frameName,
   slugify,
   formatBytes,

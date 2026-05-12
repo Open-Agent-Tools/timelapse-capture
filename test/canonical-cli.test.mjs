@@ -2055,6 +2055,50 @@ test("help command prints usage banner with the canonical commands", () => {
   assert.match(result.stdout, /doctor/);
 });
 
+test("help output covers all schema flags for each user-facing command", () => {
+  const result = runCli(["help"]);
+  assert.equal(result.status, 0, result.stderr);
+  const lines = result.stdout.split("\n");
+
+  const USER_COMMANDS = ["start", "status", "peek", "render", "cleanup", "doctor"];
+  const { COMMAND_SCHEMAS } = __test__;
+
+  // Locate the line index where each command's section starts
+  const commandStarts = {};
+  for (const [i, line] of lines.entries()) {
+    for (const cmd of USER_COMMANDS) {
+      if (line.trimStart().startsWith(`timelapse-capture ${cmd}`)) {
+        commandStarts[cmd] = i;
+      }
+    }
+  }
+
+  for (const command of USER_COMMANDS) {
+    const startIdx = commandStarts[command];
+    assert.notEqual(startIdx, undefined, `Command ${command} not found in help output`);
+
+    // Section ends at the next command's line (or end of output)
+    const endIdx = USER_COMMANDS
+      .filter((c) => c !== command)
+      .map((c) => commandStarts[c])
+      .filter((i) => i !== undefined && i > startIdx)
+      .reduce((min, i) => Math.min(min, i), lines.length);
+
+    const section = lines.slice(startIdx, endIdx).join("\n");
+    const schema = COMMAND_SCHEMAS[command];
+    const allFlags = [...schema.valueFlags, ...schema.boolFlags].filter(
+      (f) => f !== "help",
+    );
+
+    for (const flag of allFlags) {
+      assert.ok(
+        section.includes(`--${flag}`),
+        `--${flag} missing from help section for "${command}"`,
+      );
+    }
+  }
+});
+
 test("status --json preserves latestFrame when subsequent frames failed", async () => {
   const { runDir, captured } = await makeRun({
     frameCount: 2,
