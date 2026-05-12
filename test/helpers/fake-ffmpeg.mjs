@@ -22,6 +22,8 @@ class FakeBinaryManager {
       script =
         "#!/bin/sh\n" +
         "if [ \"$1\" = \"-version\" ]; then echo 'fake ffmpeg version 6.1'; exit 0; fi\n" +
+        "echo 'fake ffmpeg stdout: render started'\n" +
+        "echo 'fake ffmpeg stderr: render details' >&2\n" +
         "for arg do out_file=\"$arg\"; done\n" +
         "printf 'fake mp4 bytes' > \"$out_file\"\n" +
         "exit 0";
@@ -35,6 +37,8 @@ class FakeBinaryManager {
         "fs.writeFileSync(path.join(outputDir, 'ffmpeg-args.json'), JSON.stringify(args, null, 2));\n" +
         "const input = args[args.indexOf('-i') + 1];\n" +
         "const output = args.at(-1);\n" +
+        "console.log('fake ffmpeg stdout: contiguous render started');\n" +
+        "console.error('fake ffmpeg stderr: contiguous render details');\n" +
         "const match = input?.match(/^(.*)%0(\\d+)d(.*)$/);\n" +
         "if (!match) { console.error('missing numbered input pattern'); process.exit(2); }\n" +
         "const [, prefixPath, widthText, suffix] = match;\n" +
@@ -50,7 +54,11 @@ class FakeBinaryManager {
         "fs.writeFileSync(output, 'fake mp4 bytes');\n" +
         "process.exit(0);\n";
     } else if (mode === "fail") {
-      script = "#!/bin/sh\nexit 1";
+      script =
+        "#!/bin/sh\n" +
+        "echo 'fake ffmpeg stdout: render failed'\n" +
+        "echo 'fake ffmpeg stderr: encoder failed' >&2\n" +
+        "exit 1";
     } else if (mode === "no-output") {
       script = "#!/bin/sh\nexit 0";
     } else if (mode === "empty-output") {
