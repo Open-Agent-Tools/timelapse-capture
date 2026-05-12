@@ -20,6 +20,11 @@ const CLI = path.join(
 let SKIP_SMOKE = false;
 let SKIP_REASON = "";
 
+function formatCleanupFailure(skipReason, cleanupError) {
+  const errorMessage = cleanupError?.message || String(cleanupError);
+  return `${skipReason}; probe-server cleanup failed: ${errorMessage}`;
+}
+
 const closeServer = (server) =>
   new Promise((resolve, reject) => {
     server.close((error) => {
@@ -56,7 +61,9 @@ try {
       SKIP_REASON = `playwright runtime unavailable: ${error?.message || String(error)}`;
       try {
         await closeServer(probeServer);
-      } catch {}
+      } catch (cleanupError) {
+        SKIP_REASON = formatCleanupFailure(SKIP_REASON, cleanupError);
+      }
     }
   }
 } catch (error) {
@@ -111,6 +118,25 @@ test("closeServer awaits the http.Server close callback", async () => {
     callbackFired,
     true,
     "close callback must fire before closeServer resolves",
+  );
+});
+
+test("formatCleanupFailure appends cleanup message", () => {
+  const result = formatCleanupFailure(
+    "playwright runtime unavailable: launch failed",
+    new Error("close exploded"),
+  );
+  assert.equal(
+    result,
+    "playwright runtime unavailable: launch failed; probe-server cleanup failed: close exploded",
+  );
+});
+
+test("formatCleanupFailure handles non-Error cleanup failures", () => {
+  const result = formatCleanupFailure("base reason", "unknown failure");
+  assert.equal(
+    result,
+    "base reason; probe-server cleanup failed: unknown failure",
   );
 });
 
