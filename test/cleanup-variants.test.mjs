@@ -135,12 +135,22 @@ test("cleanup --keep-samples moves retained frames to samples/ and removes frame
     ]);
 
     const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
-    // Peek currently falls back to poster.png if frames are gone
-    // since we didn't add poster.png to this run, it might fail or fall back to something else.
-    // In this test, makeRun adds output.mp4 but not poster.png.
-    // Actually makeRun does NOT add poster.png.
-    // Let's see what happens.
-    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.notEqual(
+      peekResult.status,
+      0,
+      "peek should fail without raw frames or fallback artifacts",
+    );
+    assert.match(peekResult.stderr, /Raw frames were cleaned up/);
+    assert.match(peekResult.stderr, /poster\.png/);
+    assert.match(peekResult.stderr, /latest-retained\.png/);
+    assert.equal(
+      peekResult.stdout,
+      "",
+      "peek should not emit a JSON payload from samples/",
+    );
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
     assert.equal(summary.cleanup.reason, "keep-samples");
     assert.equal(summary.cleanup.bytesFreed, FRAME_PNG_1x1.length * 3);
   } finally {
