@@ -1661,7 +1661,9 @@ function buildPeekFramePayload(runDir, frameName, pathCount, record) {
   const relativeFramePath = path.join("frames", frameName);
   const fallbackIndex = Number.parseInt(frameName.match(/\d+/)?.[0] || "0", 10);
   const frameIndex =
-    Number.isInteger(record?.index) && record.index > 0 ? record.index : fallbackIndex;
+    Number.isInteger(record?.index) && record.index > 0
+      ? record.index
+      : fallbackIndex;
   const capturedAt = record?.capturedAt ?? null;
   const scheduledAt = record?.scheduledAt ?? null;
   const status = record?.status ?? null;
