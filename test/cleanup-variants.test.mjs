@@ -98,6 +98,7 @@ test("cleanup --keep-frames retains all frames and keeps peek available", async 
       commandCleanup({ runDir, options: { "keep-frames": true } }),
     );
     assert.equal(result.message, "Frames preserved (--keep-frames)");
+    assert.equal(result.frameCount, 3);
     assert.deepEqual((await fs.readdir(path.join(runDir, "frames"))).sort(), [
       "frame-0001.png",
       "frame-0002.png",

@@ -2492,6 +2492,7 @@ const CLEANUP_STRATEGIES = {
         toDelete: [],
         removed: 0,
         retained: frameFiles.length,
+        frameCount: frameFiles.length,
         message: "Frames preserved (--keep-frames)",
       };
     },
@@ -2646,6 +2647,7 @@ export async function commandCleanup({ runDir, options = {} }) {
     bytesFreed,
     retained: plan.retained,
   };
+  if (plan.frameCount != null) result.frameCount = plan.frameCount;
   if (plan.samples != null) result.samples = plan.samples;
 
   const summary = {
