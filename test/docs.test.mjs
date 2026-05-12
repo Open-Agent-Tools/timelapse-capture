@@ -4,12 +4,56 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { __test__ } from "../src/timelapse-capture.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 
 async function readProjectFile(...segments) {
   return fs.readFile(path.join(ROOT, ...segments), "utf8");
 }
+
+test("README start synopsis lists every COMMAND_SCHEMAS.start flag", async () => {
+  const readme = await readProjectFile("README.md");
+
+  const segments = readme.split("```");
+  const synopsisBlocks = [];
+  for (let i = 1; i < segments.length; i += 2) {
+    const block = segments[i];
+    // The first line of a fenced block is the language label (e.g. "bash"),
+    // so skip it and look at the first non-empty content line.
+    const lines = block.split("\n");
+    const contentLines = lines.slice(1);
+    const firstNonEmpty = contentLines
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+    if (
+      firstNonEmpty &&
+      firstNonEmpty.startsWith("timelapse-capture start <url>")
+    ) {
+      synopsisBlocks.push(block);
+    }
+  }
+
+  assert.strictEqual(
+    synopsisBlocks.length,
+    1,
+    `Expected exactly one fenced code block starting with "timelapse-capture start <url>" in README.md, found ${synopsisBlocks.length}`,
+  );
+
+  const synopsisBlock = synopsisBlocks[0];
+  const startSchema = __test__.COMMAND_SCHEMAS.start;
+  const flags = [...startSchema.valueFlags, ...startSchema.boolFlags].filter(
+    (flag) => flag !== "help",
+  );
+
+  for (const flag of flags) {
+    assert.ok(
+      synopsisBlock.includes(`--${flag}`),
+      `--${flag} missing from README start synopsis`,
+    );
+  }
+});
 
 test("README documents dogfood tester setup and capture workflow", async () => {
   const readme = await readProjectFile("README.md");
