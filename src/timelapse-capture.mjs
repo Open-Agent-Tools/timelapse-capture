@@ -49,10 +49,10 @@ const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
 const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
 const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
 const DEFAULT_BACKEND = "playwright-url";
-const SUPPORTED_BACKENDS = Object.freeze([DEFAULT_BACKEND]);
 const BACKEND_MIN_INTERVAL_MS = Object.freeze({
   [DEFAULT_BACKEND]: 1000,
 });
+const SUPPORTED_BACKENDS = Object.freeze(Object.keys(BACKEND_MIN_INTERVAL_MS));
 
 export class ParseError extends Error {
   constructor(code, message) {
@@ -419,7 +419,7 @@ function normalizeBackend(rawBackend) {
     return backend;
   }
   throw new ParseError(
-    "E_BAD_BACKEND",
+    "E_UNSUPPORTED_BACKEND",
     `Unsupported backend: ${rawBackend}. Supported backends: ${SUPPORTED_BACKENDS.join(", ")}`,
   );
 }
@@ -827,6 +827,7 @@ function buildStatusPayload(state) {
   return {
     runDir: state.runDir,
     target: state.target ?? null,
+    backend: state.backend ?? null,
     state: stateName,
     frames: {
       captured: frameCount,
@@ -1225,7 +1226,7 @@ async function runCaptureLoop({ runDir, state, framesDir, manifestPath }) {
       await captureWithPlaywright({ runDir, state, framesDir, manifestPath });
     } else {
       throw new ParseError(
-        "E_BAD_BACKEND",
+        "E_UNSUPPORTED_BACKEND",
         `Unsupported backend: ${state.backend}. Supported backends: ${SUPPORTED_BACKENDS.join(", ")}`,
       );
     }
