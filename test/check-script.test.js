@@ -121,11 +121,11 @@ test("local-check prints SKIP messages when ffmpeg and ffprobe are absent from P
 
     const log = readFileSync(logPath, "utf8");
     const invocations = log.split("\n").filter(Boolean);
-    assert.ok(
-      invocations.includes("run check"),
-      "npm shim should record npm run check",
+    assert.deepStrictEqual(
+      invocations,
+      ["run check", "run format:check", "test"],
+      "npm shim should record local-check npm calls in order",
     );
-    assert.ok(invocations.includes("test"), "npm shim should record npm test");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
