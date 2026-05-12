@@ -4,7 +4,9 @@ import path from "node:path";
 import { pollUntil, isTransientReadError } from "./polling.mjs";
 
 export async function readStatus(runDir) {
-  return JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+  return JSON.parse(
+    await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+  );
 }
 
 export async function readJob(runDir) {
@@ -12,7 +14,10 @@ export async function readJob(runDir) {
 }
 
 export async function readStatusAndJob(runDir) {
-  const [status, job] = await Promise.all([readStatus(runDir), readJob(runDir)]);
+  const [status, job] = await Promise.all([
+    readStatus(runDir),
+    readJob(runDir),
+  ]);
   return { status, job };
 }
 

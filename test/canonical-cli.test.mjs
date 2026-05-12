@@ -23,7 +23,6 @@ const FRAME_PNG_1x1 = Buffer.from(
   "hex",
 );
 
-
 async function makeRun({ frameCount = 3, state = "completed" } = {}) {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-canonical-"));
   const framesDir = path.join(runDir, "frames");
@@ -1963,9 +1962,7 @@ test("start command rejects unsupported backend before writing artifacts", async
 });
 
 test("start command rejects unsupported cleanup policy before writing artifacts", async () => {
-  const runDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), "tlc-bad-cleanup-"),
-  );
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-bad-cleanup-"));
   await fs.rm(runDir, { recursive: true, force: true });
   const result = runCli([
     "start",
@@ -2087,7 +2084,14 @@ test("help output covers all schema flags for each user-facing command", () => {
   assert.equal(result.status, 0, result.stderr);
   const lines = result.stdout.split("\n");
 
-  const USER_COMMANDS = ["start", "status", "peek", "render", "cleanup", "doctor"];
+  const USER_COMMANDS = [
+    "start",
+    "status",
+    "peek",
+    "render",
+    "cleanup",
+    "doctor",
+  ];
   const { COMMAND_SCHEMAS } = __test__;
 
   // Locate the line index where each command's section starts
@@ -2102,11 +2106,14 @@ test("help output covers all schema flags for each user-facing command", () => {
 
   for (const command of USER_COMMANDS) {
     const startIdx = commandStarts[command];
-    assert.notEqual(startIdx, undefined, `Command ${command} not found in help output`);
+    assert.notEqual(
+      startIdx,
+      undefined,
+      `Command ${command} not found in help output`,
+    );
 
     // Section ends at the next command's line (or end of output)
-    const endIdx = USER_COMMANDS
-      .filter((c) => c !== command)
+    const endIdx = USER_COMMANDS.filter((c) => c !== command)
       .map((c) => commandStarts[c])
       .filter((i) => i !== undefined && i > startIdx)
       .reduce((min, i) => Math.min(min, i), lines.length);
