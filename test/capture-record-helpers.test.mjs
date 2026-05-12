@@ -7,7 +7,7 @@ import path from "node:path";
 import { commandStart } from "../src/timelapse-capture.mjs";
 
 const TARGET = "http://example.test/";
-const VIEWPORT = { width: 1280, height: 720 };
+const VIEWPORT = { width: 1440, height: 900 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitForTerminalStatus(
