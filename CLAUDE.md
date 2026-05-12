@@ -52,6 +52,10 @@ bd close <id>         # Complete work
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
 
+## Beads Local Setup
+
+`.beads/` is gitignored, so fresh clones do not include the local Dolt DB, hooks (`post-checkout`, `post-merge`, `pre-commit`, `pre-push`, `prepare-commit-msg`), or `config.yaml` / `metadata.json`. After cloning, run `bd init` once to bootstrap a local `.beads/` directory and install its git hooks. Issue history is synced separately via `refs/dolt/data` on the git remote.
+
 ## Build & Test
 
 ```bash
