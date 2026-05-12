@@ -55,9 +55,9 @@ timelapse-capture start http://localhost:3000 \
   --interval 5s \
   --viewport 1440x900
 
-timelapse-capture status ./runs/localhost-3000-1760000000000
-timelapse-capture peek ./runs/localhost-3000-1760000000000 --latest
-timelapse-capture render ./runs/localhost-3000-1760000000000
+timelapse-capture status ./timelapse-runs/localhost-3000-20260507-121530
+timelapse-capture peek ./timelapse-runs/localhost-3000-20260507-121530 --latest
+timelapse-capture render ./timelapse-runs/localhost-3000-20260507-121530
 ```
 
 If the caller has not linked the binary, use npm from the repository root:
