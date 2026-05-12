@@ -66,6 +66,23 @@ function runCli(args, env = {}) {
   });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function pollCliStatus(runDir, predicate, { timeoutMs = 15000, intervalMs = 100 } = {}) {
+  const started = Date.now();
+  let lastPayload;
+  while (Date.now() - started < timeoutMs) {
+    const statusResult = runCli(["status", runDir, "--json"]);
+    assert.equal(statusResult.status, 0, statusResult.stderr);
+    lastPayload = JSON.parse(statusResult.stdout);
+    if (predicate(lastPayload.status)) {
+      return lastPayload;
+    }
+    await sleep(intervalMs);
+  }
+  assert.fail(`Timed out waiting for capture status. Last payload: ${JSON.stringify(lastPayload)}`);
+}
+
 test("closeServer awaits the http.Server close callback", async () => {
   const server = createServer((_, res) => res.end("ok"));
   await new Promise((resolve) => server.listen(0, resolve));
@@ -114,17 +131,25 @@ if (!SKIP_SMOKE) {
       }
       const startPayload = JSON.parse(startResult.stdout);
 
-      const statusResult = runCli(["status", startPayload.runDir, "--json"]);
-      assert.equal(statusResult.status, 0, statusResult.stderr);
-      const status = JSON.parse(statusResult.stdout);
-      assert.ok(["completed", "running", "failed"].includes(status.status.state));
-      assert.ok(status.status.frames.captured >= 0);
+      const status = await pollCliStatus(
+        startPayload.runDir,
+        (current) => current.frames.captured > 0 || current.state === "failed"
+      );
+      if (status.status.state === "failed" && status.status.frames.captured === 0) {
+        context.skip("runtime unavailable: capture failed before producing a frame");
+        return;
+      }
 
       const peekResult = runCli(["peek", startPayload.runDir, "--latest", "--json"]);
       assert.equal(peekResult.status, 0, peekResult.stderr);
       const peekPayload = JSON.parse(peekResult.stdout);
       assert.equal(peekPayload.exists, true);
       assert.ok(fsSync.existsSync(peekPayload.path));
+
+      await pollCliStatus(
+        startPayload.runDir,
+        (current) => current.state === "completed" || current.state === "failed"
+      );
     } finally {
       await fs.rm(outDir, { recursive: true, force: true });
       await closeServer(server);

@@ -16,6 +16,22 @@ function runCli(args, env = {}) {
   });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForCompletedStatus(runDir, { timeoutMs = 5000 } = {}) {
+  const started = Date.now();
+  let status;
+  while (Date.now() - started < timeoutMs) {
+    status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+    const job = JSON.parse(await fs.readFile(path.join(runDir, "job.json"), "utf8"));
+    if (status.state === "completed" && job.state === "completed") {
+      return status;
+    }
+    await sleep(25);
+  }
+  assert.fail(`Timed out waiting for completed status. Last status: ${JSON.stringify(status)}`);
+}
+
 test("failed frame attempts preserve prior successful latestFrame", async () => {
   const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-status-failed-"));
   try {
@@ -32,8 +48,7 @@ test("failed frame attempts preserve prior successful latestFrame", async () => 
     const startPayload = JSON.parse(result.stdout);
     const runDir = startPayload.runDir;
 
-    const statusPath = path.join(runDir, "status.json");
-    const status = JSON.parse(await fs.readFile(statusPath, "utf8"));
+    const status = await waitForCompletedStatus(runDir);
     assert.equal(status.state, "completed");
     assert.equal(status.frames.captured, 2);
     assert.equal(status.frames.failed, 1);
