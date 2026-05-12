@@ -934,6 +934,65 @@ test("render uses fps from run config for ffmpeg framerate", async () => {
   }
 });
 
+test("render --output writes to the requested run-relative path", async () => {
+  const { runDir, config } = await makeRun();
+  try {
+    const configuredOutput = path.join("configured", "output.mp4");
+    const cliOutput = path.join("exports", "custom.mp4");
+    const expectedOutputPath = path.join(runDir, cliOutput);
+
+    await fs.writeFile(
+      path.join(runDir, "config.json"),
+      JSON.stringify(
+        { ...config, output: { path: configuredOutput } },
+        null,
+        2,
+      ),
+    );
+
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--output", cliOutput, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.output, expectedOutputPath);
+      assert.equal(payload.path, expectedOutputPath);
+      assert.equal(await fs.stat(expectedOutputPath).then(() => true), true);
+
+      const defaultOutputExists = await fs
+        .stat(path.join(runDir, "output.mp4"))
+        .then(
+          () => true,
+          (error) => {
+            if (error.code === "ENOENT") return false;
+            throw error;
+          },
+        );
+      assert.equal(defaultOutputExists, false);
+
+      const configuredOutputExists = await fs
+        .stat(path.join(runDir, configuredOutput))
+        .then(
+          () => true,
+          (error) => {
+            if (error.code === "ENOENT") return false;
+            throw error;
+          },
+        );
+      assert.equal(configuredOutputExists, false);
+
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
+      assert.equal(summary.render.outputPath, expectedOutputPath);
+    }, "success-require-contiguous-input");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("render uses fps persisted by start command", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-fps-"));
   try {

@@ -1800,9 +1800,12 @@ export function getFramesDir(runDir) {
   return path.join(runDir, "frames");
 }
 
-export function getOutputPath(runDir, config) {
-  if (config?.output?.path) {
-    return path.resolve(runDir, config.output.path);
+export function getOutputPath(runDir, options = {}) {
+  if (options?.output) {
+    return path.resolve(runDir, String(options.output));
+  }
+  if (options?.config?.output?.path) {
+    return path.resolve(runDir, options.config.output.path);
   }
   return path.resolve(runDir, "output.mp4");
 }
@@ -2157,7 +2160,7 @@ export function renderFrames(runDir, options = {}) {
     if (sourceFrameCount === 0) {
       throw new RenderError("No frames found to render", "NO_FRAMES");
     }
-    const outputPath = getOutputPath(runDir, options.config);
+    const outputPath = getOutputPath(runDir, options);
     const ffmpegPath = options.ffmpegPath || "ffmpeg";
     ffmpegCommand = [ffmpegPath];
 
@@ -2344,7 +2347,7 @@ export function renderFrames(runDir, options = {}) {
       ...summary,
       lastRenderAttempt: {
         error: result.error,
-        outputPath: getOutputPath(runDir, options.config),
+        outputPath: getOutputPath(runDir, options),
         sourceFrameCount,
         framerate: effectiveFramerate,
         ffmpegCommand,
