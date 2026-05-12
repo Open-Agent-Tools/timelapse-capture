@@ -69,7 +69,7 @@ test("render respects keep-samples from config.json", async () => {
   await fs.writeFile(path.join(framesDir, "frame-0001.png"), FRAME_PNG_1x1);
   await fs.writeFile(path.join(framesDir, "frame-0002.png"), FRAME_PNG_1x1);
   await fs.writeFile(path.join(framesDir, "frame-0003.png"), FRAME_PNG_1x1);
-  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify({ keepSamples: 1 }));
+  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify({ keepSamples: 2 }));
   await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify({ state: "completed", frames: { captured: 3 } }));
   
   try {
