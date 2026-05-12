@@ -61,6 +61,12 @@ test("parseArgs maps positional arguments for core run-dir commands", () => {
   assert.equal(renderParsed.runDir, "/tmp/run");
 });
 
+test("parseArgs maps capture --run for the internal child entrypoint", () => {
+  const parsed = parseArgs(["capture", "--run", "/tmp/run"]);
+  assert.equal(parsed.command, "capture");
+  assert.equal(parsed.options.run, "/tmp/run");
+});
+
 test("parseArgs parses start target and required duration", () => {
   const parsed = parseArgs(["start", "http://example.com", "--duration", "30s"]);
   assert.equal(parsed.command, "start");

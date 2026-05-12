@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -529,7 +529,14 @@ async function reduceDir(dir, fn, init) {
   return acc;
 }
 
-const directorySize = (dir) => reduceDir(dir, async (sum, file) => sum + (await fsp.stat(file)).size, 0);
+const directorySize = (dir) => reduceDir(dir, async (sum, file) => {
+  try {
+    return sum + (await fsp.stat(file)).size;
+  } catch (error) {
+    if (error?.code === "ENOENT") return sum;
+    throw error;
+  }
+}, 0);
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -628,13 +635,22 @@ async function writeStartArtifacts(runDir, state) {
     state: state.state,
     framesPath: framesDir,
     pid: state.pid ?? null,
+    parentPid: state.parentPid ?? process.pid,
     command: state.command ?? null,
+    detached: Boolean(state.detached),
     createdAt: nowIso()
   };
   await writeJsonAtomic(path.join(runDir, "manifest.json"), manifest);
   await writeJsonAtomic(path.join(runDir, "config.json"), config);
   await writeJsonAtomic(path.join(runDir, "job.json"), job);
   await writeStatus(runDir, state);
+}
+
+async function writeJob(runDir, job) {
+  await writeJsonAtomic(path.join(runDir, "job.json"), {
+    ...job,
+    updatedAt: nowIso()
+  });
 }
 
 function buildStatusPayload(state) {
@@ -776,8 +792,12 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
 async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
   const failIndex =
     process.env.TIMELAPSE_SIMULATE_FRAME_FAILURE === "1" ? 2 : null;
+  const delayMs = Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAME_DELAY_MS || "", 10);
   const startedAtMs = new Date(state.startedAt).getTime();
   for (let index = 1; index <= state.targetFrames; index += 1) {
+    if (Number.isFinite(delayMs) && delayMs > 0) {
+      await setTimeoutPromise(delayMs);
+    }
     const scheduledAt = new Date(startedAtMs + (index - 1) * (state.intervalMs || 0)).toISOString();
     if (failIndex && index === failIndex) {
       await recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url: state.target, error: "simulated failure" });
@@ -788,7 +808,7 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
   }
 }
 
-export async function commandStart({ target, options = {} } = {}) {
+function validateStartTarget(target) {
   if (!target) {
     throw new ParseError("E_MISSING_ARGUMENT", "Missing target URL.");
   }
@@ -803,7 +823,9 @@ export async function commandStart({ target, options = {} } = {}) {
   if (process.env.TIMELAPSE_SIMULATE_NAVIGATION_FAILURE === "1") {
     throw new Error(`navigation failed: page could not be loaded: ${target}`);
   }
+}
 
+function buildInitialCaptureState({ target, options = {} }) {
   const timing = resolveStartTiming(options);
   if (
     timing.computedFromVideoLength
@@ -829,15 +851,7 @@ export async function commandStart({ target, options = {} } = {}) {
   const runDir = path.resolve(options.out ?? defaultRunDir(target));
   const startedAt = nowIso();
 
-  if (!options.json) {
-    console.log(
-      `estimated disk: ${formatBytes(estimatedDiskBytes)} (${targetFrames} frames x ${formatBytes(
-        estimateFrameBytes(viewport)
-      )}/frame, approximate)`
-    );
-  }
-
-  const state = {
+  return {
     runDir,
     target,
     backend: options.backend ?? "playwright-url",
@@ -861,14 +875,15 @@ export async function commandStart({ target, options = {} } = {}) {
     headed: Boolean(options.headed),
     lastUpdatedAt: startedAt
   };
+}
 
-  await writeStartArtifacts(runDir, state);
-  await appendLog(runDir, `start invoked target=${target} backend=${state.backend}`);
-
-  const framesDir = path.join(runDir, "frames");
-  const manifestPath = path.join(runDir, "manifest.jsonl");
-
+async function runCaptureLoop({ runDir, state, framesDir, manifestPath }) {
+  state.pid = process.pid;
   state.state = "running";
+  state.lastUpdatedAt = nowIso();
+  await writeStatus(runDir, state);
+  await appendLog(runDir, `capture running pid=${process.pid}`);
+
   try {
     if (process.env.TIMELAPSE_SIMULATE_FRAMES) {
       await captureSimulated({ runDir, state, framesDir, manifestPath });
@@ -879,6 +894,7 @@ export async function commandStart({ target, options = {} } = {}) {
     state.lastUpdatedAt = nowIso();
     await writeStatus(runDir, state);
     await appendLog(runDir, `capture finished state=${state.state}`);
+    return buildStatusPayload({ ...state, runDir });
   } catch (error) {
     state.state = state.frameCount > 0 ? "completed" : "failed";
     state.error = error?.message || String(error);
@@ -887,11 +903,138 @@ export async function commandStart({ target, options = {} } = {}) {
     await appendLog(runDir, `capture failed: ${error?.stack || error}`);
     throw error;
   }
+}
 
+function stateFromConfig({ runDir, config, status }) {
   return {
     runDir,
-    estimatedDiskBytes,
-    status: buildStatusPayload({ ...state, runDir })
+    target: config.target,
+    backend: config.backend,
+    state: "running",
+    startedAt: status?.startedAt ?? config.createdAt ?? nowIso(),
+    targetFrames: config.targetFrames,
+    frameCount: status?.frames?.captured ?? 0,
+    failedFrameCount: status?.frames?.failed ?? 0,
+    latestFrame: typeof status?.latestFrame === "string" ? status.latestFrame : null,
+    latestFrameAt: status?.latestFrameTimestamp ?? null,
+    latestFrameTimestamp: status?.latestFrameTimestamp ?? null,
+    intervalMs: config.intervalMs,
+    durationMs: config.durationMs,
+    fps: config.fps,
+    viewport: config.viewport,
+    estimatedDiskBytes: config.estimatedDiskBytes,
+    cleanup: config.cleanup,
+    keepSamples: Number(config.keepSamples ?? 0),
+    keepLatest: Boolean(config.keepLatest),
+    waitUntil: config.waitUntil ?? "domcontentloaded",
+    headed: Boolean(config.headed),
+    lastUpdatedAt: nowIso()
+  };
+}
+
+export async function commandCapture({ runDir } = {}) {
+  if (!runDir) {
+    throw new ParseError("E_MISSING_ARGUMENT", "Missing --run.");
+  }
+  const resolved = path.resolve(runDir);
+  const configPath = path.join(resolved, "config.json");
+  if (!fs.existsSync(configPath)) {
+    throw new Error(`No run directory at ${resolved}`);
+  }
+
+  const config = await readJson(configPath);
+  const status = await readJsonOptional(path.join(resolved, "status.json"));
+  const framesDir = path.join(resolved, "frames");
+  const manifestPath = path.join(resolved, "manifest.jsonl");
+  const command = [process.execPath, __filename, "capture", "--run", resolved];
+  const state = stateFromConfig({ runDir: resolved, config, status });
+  await writeJob(resolved, {
+    runDir: resolved,
+    state: "running",
+    framesPath: framesDir,
+    pid: process.pid,
+    parentPid: null,
+    command,
+    detached: true,
+    startedAt: state.startedAt
+  });
+  try {
+    const captureStatus = await runCaptureLoop({ runDir: resolved, state, framesDir, manifestPath });
+    await writeJob(resolved, {
+      runDir: resolved,
+      state: captureStatus.state,
+      framesPath: framesDir,
+      pid: process.pid,
+      parentPid: null,
+      command,
+      detached: true,
+      startedAt: state.startedAt,
+      finishedAt: nowIso()
+    });
+    return {
+      runDir: resolved,
+      status: captureStatus
+    };
+  } catch (error) {
+    await writeJob(resolved, {
+      runDir: resolved,
+      state: state.state,
+      framesPath: framesDir,
+      pid: process.pid,
+      parentPid: null,
+      command,
+      detached: true,
+      startedAt: state.startedAt,
+      finishedAt: nowIso(),
+      error: error?.message || String(error)
+    });
+    throw error;
+  }
+}
+
+async function spawnDetachedCapture(runDir) {
+  const command = [process.execPath, __filename, "capture", "--run", runDir];
+  const child = spawn(command[0], command.slice(1), {
+    detached: true,
+    stdio: "ignore",
+    env: process.env
+  });
+  child.unref();
+  const job = {
+    runDir,
+    state: "running",
+    framesPath: path.join(runDir, "frames"),
+    pid: child.pid,
+    parentPid: process.pid,
+    command,
+    detached: true,
+    startedAt: nowIso()
+  };
+  await writeJob(runDir, job);
+  return job;
+}
+
+export async function commandStart({ target, options = {} } = {}) {
+  validateStartTarget(target);
+  const state = buildInitialCaptureState({ target, options });
+
+  if (!options.json) {
+    console.log(
+      `estimated disk: ${formatBytes(state.estimatedDiskBytes)} (${state.targetFrames} frames x ${formatBytes(
+        estimateFrameBytes(state.viewport)
+      )}/frame, approximate)`
+    );
+  }
+
+  await writeStartArtifacts(state.runDir, state);
+  await appendLog(state.runDir, `start invoked target=${target} backend=${state.backend}`);
+  const job = await spawnDetachedCapture(state.runDir);
+
+  return {
+    runDir: state.runDir,
+    estimatedDiskBytes: state.estimatedDiskBytes,
+    job,
+    status: buildStatusPayload({ ...state, runDir: state.runDir })
   };
 }
 
@@ -941,12 +1084,7 @@ async function runStartCli(parsed) {
 }
 
 async function runCaptureCli(parsed) {
-  const runDir = path.resolve(parsed.options.run || ".");
-  if (!fs.existsSync(path.join(runDir, "config.json"))) {
-    throw new Error(`No run directory at ${runDir}`);
-  }
-  // The detached capture path uses commandStart in-process; the capture sub-command is reserved.
-  console.log(`Capture is run in-process by start. runDir=${runDir}`);
+  await commandCapture({ runDir: parsed.options.run });
 }
 
 // ---------- Status ----------

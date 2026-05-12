@@ -105,7 +105,7 @@ timelapse-capture start http://localhost:3000 \
   --viewport 1440x900
 ```
 
-The command prints a `run-dir`. Save that path for the next commands. The default location is under `./timelapse-runs/`.
+The command starts a detached background capture process, prints a `run-dir`, and returns immediately. Save that path for the next commands. The default location is under `./timelapse-runs/`.
 
 3. Check capture progress:
 
@@ -161,8 +161,10 @@ Runs repository checks and tests in sequence. If `ffmpeg` and `ffprobe` are not 
 timelapse-capture start <url> [--duration <duration>] [--interval <duration> | --video-length <duration>] [--fps <number>] [--viewport <width>x<height>] [--json]
 ```
 
-Captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
+Starts a detached background process that captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
 Use `--interval <duration>` to set capture cadence directly, or use `--video-length <duration>` with `--fps <number>` to derive the interval from the requested output video length.
+
+`start` writes the initial run artifacts and returns before capture finishes. Use `status` with the printed run directory to follow progress. The internal child process runs `timelapse-capture capture --run <run-dir>`.
 
 ```bash
 timelapse-capture status <run-dir> [--json]
@@ -303,6 +305,7 @@ timelapse-runs/<slug>-<timestamp>/
 Important paths:
 
 - `frames/`: raw screenshots captured before render cleanup.
+- `job.json`: background process metadata, including the detached child PID and command.
 - `status.json`: current or final run status.
 - `output.mp4`: rendered video.
 - `run-summary.json`: render and cleanup metadata.

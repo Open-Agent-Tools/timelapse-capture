@@ -30,6 +30,25 @@ function runCli(args, env = {}) {
   });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForTerminalStatus(runDir, { timeoutMs = 5000 } = {}) {
+  const started = Date.now();
+  let status;
+  while (Date.now() - started < timeoutMs) {
+    status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+    const job = JSON.parse(await fs.readFile(path.join(runDir, "job.json"), "utf8"));
+    if (
+      (status.state === "completed" || status.state === "failed") &&
+      (job.state === "completed" || job.state === "failed")
+    ) {
+      return status;
+    }
+    await sleep(25);
+  }
+  assert.fail(`Timed out waiting for terminal status. Last status: ${JSON.stringify(status)}`);
+}
+
 async function makeRun({ frameCount = 3, state = "completed" } = {}) {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-canonical-"));
   const framesDir = path.join(runDir, "frames");
@@ -173,6 +192,7 @@ test("start writes config.json with canonical field names only", async () => {
     assert.equal(Object.hasOwn(config, "intervalSeconds"), false);
     assert.equal(Object.hasOwn(config, "durationSeconds"), false);
     assert.equal(Object.hasOwn(config, "expectedFrames"), false);
+    await waitForTerminalStatus(runDir);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -1163,6 +1183,7 @@ test("start command warns when computed video length interval is below one secon
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stderr, /warning: computed interval 250ms is below 1000ms/);
     assert.equal(JSON.parse(result.stdout).status.intervalMs, 250);
+    await waitForTerminalStatus(runDir);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

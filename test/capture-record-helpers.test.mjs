@@ -8,6 +8,26 @@ import { commandStart } from "../src/timelapse-capture.mjs";
 
 const TARGET = "http://example.test/";
 const VIEWPORT = { width: 1280, height: 720 };
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForTerminalStatus(runDir, expectedAttempts, { timeoutMs = 5000 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const raw = await fs.readFile(path.join(runDir, "status.json"), "utf8");
+    const status = JSON.parse(raw);
+    const job = JSON.parse(await fs.readFile(path.join(runDir, "job.json"), "utf8"));
+    const attempts = (status.frames?.captured ?? 0) + (status.frames?.failed ?? 0);
+    if (
+      (status.state === "completed" || status.state === "failed") &&
+      (job.state === "completed" || job.state === "failed") &&
+      attempts >= expectedAttempts
+    ) {
+      return status;
+    }
+    await sleep(25);
+  }
+  assert.fail(`Timed out waiting for ${expectedAttempts} simulated attempts in ${runDir}`);
+}
 
 async function runSimulated(frames, extraEnv = {}) {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-record-helpers-"));
@@ -25,6 +45,7 @@ async function runSimulated(frames, extraEnv = {}) {
       else process.env[k] = v;
     }
   }
+  await waitForTerminalStatus(runDir, frames);
   return runDir;
 }
 
