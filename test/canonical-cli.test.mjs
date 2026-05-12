@@ -11,6 +11,7 @@ import {
   commandStart,
   commandCleanup,
   commandRender,
+  __test__,
   parseArgs,
   ParseError,
   resolveStartTiming,
@@ -66,7 +67,7 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
   for (let index = 1; index <= frameCount; index += 1) {
     const relative = path.join(
       "frames",
-      `frame-${String(index).padStart(6, "0")}.png`,
+      `frame-${String(index).padStart(4, "0")}.png`,
     );
     await fs.writeFile(path.join(runDir, relative), FRAME_PNG_1x1);
     captured.push({
@@ -500,7 +501,7 @@ test("peek --near with no captured frame timestamps exits non-zero", async () =>
         index: 1,
         scheduledAt: new Date().toISOString(),
         capturedAt: null,
-        path: "frames/frame-000001.png",
+        path: "frames/frame-0001.png",
         status: "failed",
         error: "timeout",
       },
@@ -508,7 +509,7 @@ test("peek --near with no captured frame timestamps exits non-zero", async () =>
         index: 2,
         scheduledAt: new Date().toISOString(),
         capturedAt: null,
-        path: "frames/frame-000002.png",
+        path: "frames/frame-0002.png",
         status: "failed",
         error: "timeout",
       },
@@ -567,7 +568,7 @@ test("peek --near selects first, middle, and last frame by timestamp proximity",
       const index = i + 1;
       const relative = path.join(
         "frames",
-        `frame-${String(index).padStart(6, "0")}.png`,
+        `frame-${String(index).padStart(4, "0")}.png`,
       );
       await fs.writeFile(path.join(runDir, relative), FRAME_PNG_1x1);
       captured.push({
@@ -697,6 +698,35 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
         },
       );
       assert.equal(framesDirExists, false);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("frame filename width and render input pattern stay in sync", async () => {
+  const { runDir } = await makeRun({ frameCount: 3 });
+  try {
+    assert.equal(__test__.frameName(1), "frame-0001.png");
+    assert.equal(__test__.frameName(42), "frame-0042.png");
+    assert.match(__test__.frameName(1), /^frame-\d{4}\.png$/);
+
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const summary = JSON.parse(
+        await fs.readFile(
+          path.join(runDir, "run-summary.json"),
+          "utf8",
+        ),
+      );
+      const ffmpegArgs = summary.render.ffmpegCommand;
+      const inputIndex = ffmpegArgs.indexOf("-i");
+      assert.notEqual(inputIndex, -1);
+      assert.equal(path.basename(ffmpegArgs[inputIndex + 1]), "frame-%04d.png");
     }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
