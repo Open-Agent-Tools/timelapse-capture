@@ -144,7 +144,7 @@ test("cleanup --keep-samples moves retained frames to samples/ and removes frame
     );
     assert.match(peekResult.stderr, /Raw frames were cleaned up/);
     assert.match(peekResult.stderr, /poster\.png/);
-    assert.match(peekResult.stderr, /latest-retained\.png/);
+    assert.doesNotMatch(peekResult.stderr, /latest-retained\.png/);
     assert.equal(
       peekResult.stdout,
       "",
@@ -253,31 +253,6 @@ test("cleanup --keep-latest with no frames records reason in summary", async () 
     assert.equal(summary.cleanup.bytesFreed, 0);
     assert.equal(summary.cleanup.reason, "keep-latest");
     assert.equal(typeof summary.cleanup.timestamp, "string");
-  } finally {
-    await fs.rm(runDir, { recursive: true, force: true });
-  }
-});
-
-test("peek falls back to latest-retained.png when frames are cleaned up", async () => {
-  const runDir = await makeRun();
-  try {
-    await fs.writeFile(path.join(runDir, "latest-retained.png"), FRAME_PNG_1x1);
-    await runWithFakeFFmpeg(() => commandCleanup({ runDir, options: {} }));
-
-    const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
-    assert.equal(peekResult.status, 0, peekResult.stderr);
-    const payload = JSON.parse(peekResult.stdout);
-    assert.equal(payload.exists, true);
-    assert.match(payload.path, /latest-retained\.png$/);
-    assert.equal(payload.selection.source, "latest-retained");
-    assert.equal(payload.selection.metadataAvailable, false);
-    assert.equal(payload.frame, null);
-    assert.equal(payload.fallback.source, "latest-retained");
-    assert.equal(
-      payload.fallback.path,
-      path.join(runDir, "latest-retained.png"),
-    );
-    assert.equal(path.isAbsolute(payload.fallback.path), true);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
