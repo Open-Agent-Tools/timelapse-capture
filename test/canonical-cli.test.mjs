@@ -1957,6 +1957,28 @@ test("start command rejects unsupported backend before writing artifacts", async
   await assert.rejects(fs.stat(runDir), { code: "ENOENT" });
 });
 
+test("start command rejects unsupported cleanup policy before writing artifacts", async () => {
+  const runDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-bad-cleanup-"),
+  );
+  await fs.rm(runDir, { recursive: true, force: true });
+  const result = runCli([
+    "start",
+    "http://example.test",
+    "--duration",
+    "1s",
+    "--cleanup",
+    "typo",
+    "--out",
+    runDir,
+  ]);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /E_BAD_CLEANUP/);
+  assert.match(result.stderr, /Invalid cleanup policy/);
+  await assert.rejects(fs.stat(runDir), { code: "ENOENT" });
+});
+
 test("start command persists explicit playwright-url backend", async () => {
   const runDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "tlc-explicit-backend-"),

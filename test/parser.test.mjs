@@ -249,3 +249,61 @@ test("parseArgs rejects unsupported backend values", () => {
       /playwright-url/.test(error.message),
   );
 });
+
+test("parseArgs accepts valid cleanup policy values", () => {
+  const afterRender = parseArgs([
+    "start",
+    "http://example.test",
+    "--duration",
+    "10s",
+    "--cleanup",
+    "after-render",
+  ]);
+  assert.equal(afterRender.options.cleanup, "after-render");
+
+  const never = parseArgs([
+    "start",
+    "http://example.test",
+    "--duration",
+    "10s",
+    "--cleanup",
+    "never",
+  ]);
+  assert.equal(never.options.cleanup, "never");
+});
+
+test("parseArgs rejects unsupported cleanup policy values", () => {
+  assert.throws(
+    () =>
+      parseArgs([
+        "start",
+        "http://example.test",
+        "--duration",
+        "10s",
+        "--cleanup",
+        "typo",
+      ]),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_BAD_CLEANUP" &&
+      /typo/.test(error.message) &&
+      /after-render/.test(error.message) &&
+      /never/.test(error.message),
+  );
+  assert.throws(
+    () =>
+      parseArgs([
+        "start",
+        "http://example.test",
+        "--duration",
+        "10s",
+        "--cleanup",
+        "delete-after",
+      ]),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_BAD_CLEANUP" &&
+      /delete-after/.test(error.message) &&
+      /after-render/.test(error.message),
+  );
+});
