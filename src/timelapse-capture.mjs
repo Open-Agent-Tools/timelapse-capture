@@ -1819,24 +1819,28 @@ export function getFramesDir(runDir) {
   return path.join(runDir, "frames");
 }
 
-export function getOutputPath(runDir, options = {}) {
-  if (options?.output) {
-    return path.resolve(runDir, String(options.output));
-  }
-  if (options?.config?.output?.path) {
-    return path.resolve(runDir, options.config.output.path);
-  }
-  return path.resolve(runDir, "output.mp4");
-}
-
-function getConfiguredOutputPath(runDir, options = {}) {
+/**
+ * Resolves an explicitly configured output path from a source object.
+ * Priority: source.output (CLI string) → source.output.path →
+ * source.config.output.path → source.config.outputPath → null.
+ */
+function readConfiguredOutputPath(runDir, source) {
+  const cliString = typeof source?.output === "string" ? source.output : null;
   const configured =
-    options?.output?.path ??
-    options?.config?.output?.path ??
-    options?.config?.outputPath ??
+    cliString ??
+    source?.output?.path ??
+    source?.config?.output?.path ??
+    source?.config?.outputPath ??
     null;
   if (!configured) return null;
   return path.resolve(runDir, String(configured));
+}
+
+export function getOutputPath(runDir, source = {}) {
+  return (
+    readConfiguredOutputPath(runDir, source) ??
+    path.resolve(runDir, "output.mp4")
+  );
 }
 
 function getSummaryOutputPath(runDir, summary) {
@@ -1856,8 +1860,8 @@ async function resolveCleanupOutputPath(runDir, options = {}) {
   ]);
 
   return (
-    getConfiguredOutputPath(runDir, options) ||
-    getConfiguredOutputPath(runDir, config) ||
+    readConfiguredOutputPath(runDir, options) ||
+    readConfiguredOutputPath(runDir, config) ||
     getSummaryOutputPath(runDir, summary) ||
     getDefaultOutputPath(runDir)
   );
