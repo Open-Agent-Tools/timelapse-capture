@@ -1783,6 +1783,21 @@ test("start timing clamps explicit interval below backend minimum", () => {
   assert.equal(timing.computedFromVideoLength, false);
 });
 
+test("start timing rejects unsupported backend values", () => {
+  assert.throws(
+    () =>
+      resolveStartTiming({
+        duration: { ms: 10_000 },
+        interval: 250,
+        backend: "command-frame",
+      }),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_BAD_BACKEND" &&
+      /unsupported backend/i.test(error.message),
+  );
+});
+
 test("start command clamps direct interval below backend minimum and persists clamp metadata", async () => {
   const runDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "tlc-direct-interval-"),
@@ -1821,6 +1836,26 @@ test("start command clamps direct interval below backend minimum and persists cl
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
+});
+
+test("start command rejects unsupported backend before writing artifacts", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-bad-backend-"));
+  await fs.rm(runDir, { recursive: true, force: true });
+  const result = runCli([
+    "start",
+    "http://example.test",
+    "--duration",
+    "10s",
+    "--backend",
+    "playwrite-url",
+    "--out",
+    runDir,
+    "--json",
+  ]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unsupported backend/i);
+  await assert.rejects(fs.stat(runDir), { code: "ENOENT" });
 });
 
 test("start command clamps computed video-length interval below backend minimum", async () => {

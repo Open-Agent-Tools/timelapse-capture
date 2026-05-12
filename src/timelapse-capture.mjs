@@ -48,8 +48,10 @@ const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
 const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
 const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
 const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
+const DEFAULT_BACKEND = "playwright-url";
+const SUPPORTED_BACKENDS = Object.freeze([DEFAULT_BACKEND]);
 const BACKEND_MIN_INTERVAL_MS = Object.freeze({
-  "playwright-url": 1000,
+  [DEFAULT_BACKEND]: 1000,
 });
 
 export class ParseError extends Error {
@@ -405,7 +407,21 @@ function parseValueFlag(flag, value) {
     }
     return new Date(parsed).toISOString();
   }
+  if (flag === "backend") {
+    return normalizeBackend(value);
+  }
   return value;
+}
+
+function normalizeBackend(rawBackend) {
+  const backend = String(rawBackend ?? "").trim();
+  if (SUPPORTED_BACKENDS.includes(backend)) {
+    return backend;
+  }
+  throw new ParseError(
+    "E_BAD_BACKEND",
+    `Unsupported backend: ${rawBackend}. Supported backends: ${SUPPORTED_BACKENDS.join(", ")}`,
+  );
 }
 
 export function parseDuration(input) {
@@ -1121,11 +1137,12 @@ function validateStartTarget(target) {
 }
 
 function backendMinIntervalMs(backend) {
-  return BACKEND_MIN_INTERVAL_MS[backend] ?? 1;
+  const normalized = normalizeBackend(backend);
+  return BACKEND_MIN_INTERVAL_MS[normalized];
 }
 
 function buildInitialCaptureState({ target, options = {} }) {
-  const backend = options.backend ?? "playwright-url";
+  const backend = normalizeBackend(options.backend ?? DEFAULT_BACKEND);
   const timing = resolveStartTiming(options);
   if (timing.intervalClamped) {
     const source = timing.computedFromVideoLength
@@ -1204,8 +1221,13 @@ async function runCaptureLoop({ runDir, state, framesDir, manifestPath }) {
     }
     if (process.env.TIMELAPSE_SIMULATE_FRAMES) {
       await captureSimulated({ runDir, state, framesDir, manifestPath });
-    } else {
+    } else if (state.backend === DEFAULT_BACKEND) {
       await captureWithPlaywright({ runDir, state, framesDir, manifestPath });
+    } else {
+      throw new ParseError(
+        "E_BAD_BACKEND",
+        `Unsupported backend: ${state.backend}. Supported backends: ${SUPPORTED_BACKENDS.join(", ")}`,
+      );
     }
     state.state = state.frameCount > 0 ? "completed" : "failed";
     state.lastUpdatedAt = nowIso();
@@ -1385,7 +1407,7 @@ export async function commandStart({ target, options = {} } = {}) {
 export function resolveStartTiming(options = {}) {
   const durationMs = options.duration?.ms ?? 0;
   const fps = Number(options.fps ?? 24);
-  const backend = options.backend ?? "playwright-url";
+  const backend = normalizeBackend(options.backend ?? DEFAULT_BACKEND);
   const minimumIntervalMs = backendMinIntervalMs(backend);
   const explicitIntervalMs =
     typeof options.interval === "number"

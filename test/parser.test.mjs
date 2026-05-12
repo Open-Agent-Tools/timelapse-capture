@@ -194,3 +194,21 @@ test("parseArgs validates required arguments and arity", () => {
     (error) => error instanceof ParseError && error.code === "E_EXTRA_ARGUMENT",
   );
 });
+
+test("parseArgs rejects unsupported backend values", () => {
+  assert.throws(
+    () =>
+      parseArgs([
+        "start",
+        "http://example.test",
+        "--duration",
+        "30s",
+        "--backend",
+        "playwrite-url",
+      ]),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_BAD_BACKEND" &&
+      /unsupported backend/i.test(error.message),
+  );
+});
