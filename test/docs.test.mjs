@@ -158,4 +158,34 @@ test("CLAUDE.md contains concrete project guidance instead of template placehold
   // Must mention bd workflow
   assert.match(claudeMd, /bd prime/);
   assert.match(claudeMd, /bd/);
+
+  // Architecture Overview bullet for src/timelapse-capture.mjs must list
+  // the canonical command set and must not name a nonexistent `report`
+  // command. Source of truth: the `main` switch in src/timelapse-capture.mjs.
+  const cliBulletMatch = claudeMd.match(/`src\/timelapse-capture\.mjs`[^\n]*/);
+  assert.ok(
+    cliBulletMatch,
+    "Expected an Architecture Overview bullet referencing `src/timelapse-capture.mjs`",
+  );
+  const cliBullet = cliBulletMatch[0];
+  for (const cmd of [
+    "start",
+    "capture",
+    "status",
+    "peek",
+    "render",
+    "cleanup",
+    "doctor",
+  ]) {
+    assert.match(
+      cliBullet,
+      new RegExp("`" + cmd + "`"),
+      `Expected \`${cmd}\` in the src/timelapse-capture.mjs command list`,
+    );
+  }
+  assert.doesNotMatch(
+    cliBullet,
+    /`report`/,
+    "src/timelapse-capture.mjs has no `report` command; remove it from the CLAUDE.md command list",
+  );
 });

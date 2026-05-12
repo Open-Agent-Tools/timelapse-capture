@@ -69,7 +69,7 @@ npm run ci                  # check + typecheck + test (what CI runs)
 
 ## Architecture Overview
 
-- `src/timelapse-capture.mjs` — canonical CLI entry point; all commands (`start`, `status`, `peek`, `render`, `cleanup`, `report`) are handled here
+- `src/timelapse-capture.mjs` — canonical CLI entry point; all commands (`start`, `capture`, `status`, `peek`, `render`, `cleanup`, `doctor`) are handled here (`capture` is the internal child entrypoint that `start` dispatches)
 - `src/doctor.mjs` — dependency doctor that checks Node.js, Playwright/Chromium, ffmpeg, and ffprobe versions before any capture work
 - `test/` — Node built-in test runner (`node --test`); unit and integration tests live here
 - `docs/` — user-facing documentation including the dogfood protocol
