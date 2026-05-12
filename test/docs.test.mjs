@@ -70,6 +70,13 @@ test("skill requires doctor before capture and describes the agent workflow", as
   assert.match(skill, /<run-dir>\/output\.mp4/);
   // Report artifact paths instruction
   assert.match(skill, /report.*artifact path/i);
+  // Example run-dir paths should match the canonical README shape.
+  assert.match(skill, /\.\/timelapse-runs\//);
+  assert.doesNotMatch(skill, /\.\/runs\/localhost/);
+  assert.doesNotMatch(
+    skill,
+    /timelapse-capture (status|peek|render) [^\n]*-\d{13}/,
+  );
 });
 
 test("dogfood-protocol.md covers install checklist, all three scenarios, feedback section, and key CLI coverage", async () => {
