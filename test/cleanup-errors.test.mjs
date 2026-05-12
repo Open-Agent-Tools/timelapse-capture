@@ -75,7 +75,7 @@ test("cleanupFrames reports unexpected frames directory removal failures", async
       return originalRmdirSync(target);
     };
 
-    const result = cleanupFrames(framesDir);
+    const result = cleanupFrames(runDir);
     assert.equal(result.success, false);
     assert.equal(result.removed, 1);
     assert.match(result.error, /permission denied/);
@@ -92,7 +92,7 @@ test("cleanupFrames removes leftover render staging before removing frames direc
     await fsp.mkdir(stagingDir);
     await fsp.writeFile(path.join(stagingDir, "frame-000001.png"), FRAME_PNG_1x1);
 
-    const result = cleanupFrames(framesDir);
+    const result = cleanupFrames(runDir);
     assert.equal(result.success, true);
     assert.equal(result.removed, 1);
     assert.equal(fs.existsSync(framesDir), false);
@@ -109,7 +109,7 @@ test("cleanupFrames removes render staging when no image files exist", async () 
     await fsp.mkdir(stagingDir, { recursive: true });
     await fsp.writeFile(path.join(stagingDir, "frame-000001.png"), FRAME_PNG_1x1);
 
-    const result = cleanupFrames(framesDir);
+    const result = cleanupFrames(runDir);
     assert.equal(result.success, true);
     assert.equal(result.removed, 0);
     assert.equal(fs.existsSync(framesDir), true);
@@ -450,6 +450,23 @@ test("renderFrames reports render staging cleanup failures", async () => {
     });
   } finally {
     fs.rmSync = originalRmSync;
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanupFrames with keep-samples should move samples to samples/", async () => {
+  const { runDir, framesDir } = await makeRun({ frameCount: 10 });
+  try {
+    const result = cleanupFrames(runDir, { "keep-samples": 3 });
+    
+    const framesExist = await exists(framesDir);
+    const samplesExist = await exists(path.join(runDir, "samples"));
+    
+    assert.equal(samplesExist, true, "Samples directory should exist");
+    assert.equal(framesExist, false, "Frames directory should be removed");
+    assert.equal(result.retained, 3);
+    assert.ok(result.samples && result.samples.length === 3);
+  } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });

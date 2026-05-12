@@ -900,7 +900,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     viewport,
     estimatedDiskBytes,
     cleanup,
-    keepSamples: options["keep-samples"] === true ? 5 : Number(options["keep-samples"] ?? 0),
+    keepSamples: options["keep-samples"] === true ? 2 : Number(options["keep-samples"] ?? 0),
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
     headed: Boolean(options.headed),
@@ -1442,7 +1442,30 @@ export function validateMP4(outputPath) {
   return result;
 }
 
-export function cleanupFrames(framesDir, options = {}) {
+function pickSamples(files, count) {
+  if (count <= 0) return [];
+  const indices = getSampleIndices(files.length, count);
+  return Array.from(indices).sort((a, b) => a - b).map((i) => files[i]);
+}
+
+function copySamplesSync(framesDir, runDir, count) {
+  const names = listFrameFilesSync(framesDir);
+  if (names.length === 0) return [];
+  const samples = pickSamples(names, count);
+  const samplesDir = path.join(runDir, "samples");
+  fs.mkdirSync(samplesDir, { recursive: true });
+  const samplePaths = [];
+  for (let i = 0; i < samples.length; i++) {
+    const destName = `sample-${String(i + 1).padStart(6, "0")}.png`;
+    const dest = path.join(samplesDir, destName);
+    fs.copyFileSync(path.join(framesDir, samples[i]), dest);
+    samplePaths.push(`samples/${destName}`);
+  }
+  return samplePaths;
+}
+
+export function cleanupFrames(runDir, options = {}) {
+  const framesDir = getFramesDir(runDir);
   if (!fs.existsSync(framesDir)) {
     return { success: true, removed: 0, retained: 0 };
   }
@@ -1457,12 +1480,12 @@ export function cleanupFrames(framesDir, options = {}) {
     .sort();
 
   const retained = new Set();
+  let samplePaths = [];
+
   if (options["keep-samples"]) {
-    const sampleCount = options["keep-samples"] === true ? 5 : Number(options["keep-samples"]);
-    const retainedIndices = getSampleIndices(files.length, sampleCount);
-    for (const index of retainedIndices) {
-      if (index >= 0 && index < files.length) retained.add(files[index]);
-    }
+    const sampleCount = options["keep-samples"] === true ? 2 : Number(options["keep-samples"]);
+    samplePaths = copySamplesSync(framesDir, runDir, sampleCount);
+    // Samples are now in runDir/samples, so we don't need to retain any in framesDir
   } else if (options["keep-latest"]) {
     if (files.length > 0) {
       retained.add(files[files.length - 1]);
@@ -1483,7 +1506,12 @@ export function cleanupFrames(framesDir, options = {}) {
       return { success: false, removed, error: removeResult.error };
     }
   }
-  return { success: true, removed, retained: retained.size };
+  return {
+    success: true,
+    removed,
+    retained: samplePaths.length || retained.size,
+    samples: samplePaths.length > 0 ? samplePaths : undefined
+  };
 }
 
 function readSummarySync(runDir) {
@@ -1578,36 +1606,6 @@ function combinedProcessOutput(result) {
   return [processOutputToString(result.stdout), processOutputToString(result.stderr)]
     .filter((output) => output.length > 0)
     .join("\n");
-}
-
-function pickSamples(files, count) {
-  if (files.length === 0) return [];
-  if (count <= 0) return [];
-  if (count >= files.length) return [...files];
-  if (count === 1) return [files[files.length - 1]];
-
-  const samples = [];
-  for (let i = 0; i < count; i++) {
-    const index = Math.floor((i * (files.length - 1)) / (count - 1));
-    samples.push(files[index]);
-  }
-  return samples;
-}
-
-function copySamplesSync(framesDir, runDir, count) {
-  const names = listFrameFilesSync(framesDir);
-  if (names.length === 0) return [];
-  const samples = pickSamples(names, count);
-  const samplesDir = path.join(runDir, "samples");
-  fs.mkdirSync(samplesDir, { recursive: true });
-  const samplePaths = [];
-  for (let i = 0; i < samples.length; i++) {
-    const destName = `sample-${String(i + 1).padStart(6, "0")}.png`;
-    const dest = path.join(samplesDir, destName);
-    fs.copyFileSync(path.join(framesDir, samples[i]), dest);
-    samplePaths.push(`samples/${destName}`);
-  }
-  return samplePaths;
 }
 
 function resolveRenderFramerate(...values) {
@@ -1724,15 +1722,6 @@ export function renderFrames(runDir, options = {}) {
 
     const posterRelPath = copyPosterSync(framesDir, runDir);
 
-    let samplePaths = [];
-    if (options["keep-samples"]) {
-      const count =
-        typeof options["keep-samples"] === "number"
-          ? options["keep-samples"]
-          : parseInt(options["keep-samples"]) || 2;
-      samplePaths = copySamplesSync(framesDir, runDir, count);
-    }
-
     const existing = readSummarySync(runDir);
     const summary = {
       ...existing,
@@ -1748,25 +1737,20 @@ export function renderFrames(runDir, options = {}) {
 
     const effectiveCleanup = options.cleanup ?? "after-render";
     const keepAll = options["keep-frames"] || options["keep-all"] || effectiveCleanup === "never";
-    const keepSamples = options["keep-samples"];
-    const keepLatest = options["keep-latest"];
 
     if (!keepAll) {
-      const cleanupOptions = keepSamples
-        ? { ...options, "keep-samples": false }
-        : { "keep-samples": keepSamples, "keep-latest": keepLatest };
-      const cleanup = cleanupFrames(framesDir, cleanupOptions);
-      const retainedCount = keepSamples ? samplePaths.length : cleanup.retained;
+      const cleanup = cleanupFrames(runDir, options);
       let reason = "post-render-cleanup";
-      if (keepSamples) reason = "keep-samples";
-      else if (keepLatest) reason = "keep-latest";
+      if (options["keep-samples"]) reason = "keep-samples";
+      else if (options["keep-latest"]) reason = "keep-latest";
+
       summary.cleanup = {
         success: cleanup.success,
         removed: cleanup.removed,
-        retained: retainedCount,
+        retained: cleanup.retained,
         reason,
         source: options.cleanupSource || "default",
-        samples: samplePaths.length > 0 ? samplePaths : undefined,
+        samples: cleanup.samples,
         error: cleanup.error || null,
         timestamp: nowIso()
       };
@@ -1945,8 +1929,10 @@ export async function commandCleanup({ runDir, options = {} }) {
 
   const framesDir = path.join(resolved, "frames");
   const frameFiles = await listFrameFiles(resolved);
+  const config = await readJsonOptional(path.join(resolved, "config.json"));
 
-  if (options["keep-frames"]) {
+  const keepFrames = options["keep-frames"] || options["keep-all"];
+  if (keepFrames) {
     const result = { message: "Frames preserved (--keep-frames)", frameCount: frameFiles.length };
     await writeCleanupSummary(resolved, {
       success: true,
@@ -1977,18 +1963,15 @@ export async function commandCleanup({ runDir, options = {} }) {
     return { message: "Entire run directory deleted" };
   }
 
-  if (options["keep-samples"]) {
+  const keepSamples = options["keep-samples"] ?? config?.keepSamples;
+  if (keepSamples) {
     if (frameFiles.length === 0) {
       const result = { message: "No frames to sample", frameCount: 0 };
       await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0 });
       return result;
     }
 
-    const count =
-      typeof options["keep-samples"] === "number"
-        ? options["keep-samples"]
-        : parseInt(options["keep-samples"]) || 2;
-
+    const count = keepSamples === true ? 2 : Number(keepSamples);
     const samplePaths = copySamplesSync(framesDir, resolved, count);
 
     // Entirely remove frames directory and its remaining contents
@@ -2004,12 +1987,14 @@ export async function commandCleanup({ runDir, options = {} }) {
       success: true,
       removed: frameFiles.length,
       retained: samplePaths.length,
-      samples: samplePaths
+      samples: samplePaths,
+      reason: "keep-samples"
     });
     return result;
   }
 
-  if (options["keep-latest"]) {
+  const keepLatest = options["keep-latest"] ?? config?.keepLatest;
+  if (keepLatest) {
     if (frameFiles.length === 0) {
       const result = { message: "No frames to cleanup", frameCount: 0 };
       await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0 });
@@ -2023,7 +2008,12 @@ export async function commandCleanup({ runDir, options = {} }) {
       removed: toDelete.length,
       retained: 1
     };
-    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained: 1 });
+    await writeCleanupSummary(resolved, {
+      success: true,
+      removed: toDelete.length,
+      retained: 1,
+      reason: "keep-latest"
+    });
     return result;
   }
 
@@ -2033,15 +2023,16 @@ export async function commandCleanup({ runDir, options = {} }) {
   if (!removeResult.success) {
     throw new Error(removeResult.error);
   }
+
   const result = { message: "Cleanup complete", removed: frameFiles.length };
   await writeCleanupSummary(resolved, {
     success: true,
     removed: frameFiles.length,
-    retained: 0
+    retained: 0,
+    reason: "default"
   });
   return result;
 }
-
 
 async function runCleanupCli(parsed) {
   const result = await commandCleanup({ runDir: parsed.runDir, options: parsed.options });
