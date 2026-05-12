@@ -689,12 +689,13 @@ function buildStatusPayload(state) {
   const elapsedMs = Math.max(0, Date.now() - startedAtMs);
   const frameCount = state.frames?.captured ?? state.frameCount ?? state.framesCaptured ?? 0;
   const failedFrameCount = state.frames?.failed ?? state.failedFrameCount ?? state.framesFailed ?? 0;
+  const skippedFrameCount = state.frames?.skipped ?? state.skippedFrameCount ?? state.framesSkipped ?? 0;
   const totalExpected = Number.isFinite(state.frames?.totalExpected)
     ? state.frames.totalExpected
     : Number.isFinite(state.targetFrames)
       ? state.targetFrames
       : (state.expectedFrames ?? frameCount);
-  const completedAttempts = frameCount + failedFrameCount;
+  const completedAttempts = frameCount + failedFrameCount + skippedFrameCount;
   const stateName = state.state || "starting";
   const etaMs =
     stateName === "running"
@@ -716,6 +717,8 @@ function buildStatusPayload(state) {
     frames: {
       captured: frameCount,
       failed: failedFrameCount,
+      skipped: skippedFrameCount,
+      attempted: completedAttempts,
       totalExpected
     },
     latestFrame: state.latestFrame || null,
@@ -772,6 +775,14 @@ async function recordFailedFrame({ state, runDir, manifestPath, index, scheduled
   state.failedFrameCount += 1;
   state.lastUpdatedAt = nowIso();
   const record = { index, scheduledAt, capturedAt: null, path: null, status: "failed", url, title: title ?? null, viewport: state.viewport, error };
+  await appendJsonLine(manifestPath, record);
+  await writeStatus(runDir, state);
+}
+
+async function recordSkippedFrame({ state, runDir, manifestPath, index, scheduledAt, url, title, reason }) {
+  state.skippedFrameCount += 1;
+  state.lastUpdatedAt = nowIso();
+  const record = { index, scheduledAt, capturedAt: null, path: null, status: "skipped", url, title: title ?? null, viewport: state.viewport, error: reason };
   await appendJsonLine(manifestPath, record);
   await writeStatus(runDir, state);
 }
@@ -849,6 +860,8 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
   }
   const failIndex =
     process.env.TIMELAPSE_SIMULATE_FRAME_FAILURE === "1" ? 2 : null;
+  const skipIndex =
+    process.env.TIMELAPSE_SIMULATE_FRAME_SKIP === "1" ? 3 : null;
   const delayMs = Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAME_DELAY_MS || "", 10);
   const startedAtMs = new Date(state.startedAt).getTime();
   for (let index = 1; index <= state.targetFrames; index += 1) {
@@ -858,6 +871,10 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
     const scheduledAt = new Date(startedAtMs + (index - 1) * (state.intervalMs || 0)).toISOString();
     if (failIndex && index === failIndex) {
       await recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url: state.target, error: "simulated failure" });
+      continue;
+    }
+    if (skipIndex && index === skipIndex) {
+      await recordSkippedFrame({ state, runDir, manifestPath, index, scheduledAt, url: state.target, reason: "simulated skip" });
       continue;
     }
     const filename = await writeFakeFrame(runDir, index);
@@ -917,6 +934,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     targetFrames,
     frameCount: 0,
     failedFrameCount: 0,
+    skippedFrameCount: 0,
     latestFrame: null,
     latestFrameAt: null,
     latestFrameTimestamp: null,
@@ -972,6 +990,7 @@ function stateFromConfig({ runDir, config, status }) {
     targetFrames: config.targetFrames,
     frameCount: status?.frames?.captured ?? 0,
     failedFrameCount: status?.frames?.failed ?? 0,
+    skippedFrameCount: status?.frames?.skipped ?? status?.framesSkipped ?? 0,
     latestFrame: typeof status?.latestFrame === "string" ? status.latestFrame : null,
     latestFrameAt: status?.latestFrameTimestamp ?? null,
     latestFrameTimestamp: status?.latestFrameTimestamp ?? null,
@@ -1197,7 +1216,7 @@ function printHumanStatus(status) {
   lines.push(`elapsed: ${formatDuration(status.elapsedMs)}`);
   if (status.state === "running") lines.push(`eta: ${formatDuration(status.etaMs)}`);
   lines.push(
-    `frames: ${status.frames.captured} captured, ${status.frames.failed} failed, ${status.frames.totalExpected} expected`
+    `frames: ${status.frames.attempted} attempted, ${status.frames.captured} captured, ${status.frames.failed} failed, ${status.frames.skipped} skipped, ${status.frames.totalExpected} expected`
   );
   if (status.latestFrame) lines.push(`latest successful frame: ${status.latestFrame}`);
   if (status.latestFrameTimestamp) lines.push(`latest successful frame at: ${status.latestFrameTimestamp}`);

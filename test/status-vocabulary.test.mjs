@@ -83,6 +83,8 @@ test("status command migrates legacy done to completed without rewriting status.
     assert.deepEqual(payload.status.frames, {
       captured: 5,
       failed: 0,
+      skipped: 0,
+      attempted: 5,
       totalExpected: 5,
     });
     assert.equal(Object.hasOwn(payload.status, "framesCaptured"), false);
