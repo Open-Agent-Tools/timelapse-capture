@@ -1873,14 +1873,6 @@ function countFrameFiles(framesDir) {
   return files.filter(isFrameFile).length;
 }
 
-function fileSize(filePath) {
-  try {
-    return fs.statSync(filePath).size;
-  } catch (error) {
-    throw error;
-  }
-}
-
 function safeFileSize(filePath) {
   try {
     return fs.statSync(filePath).size;
@@ -1911,7 +1903,7 @@ export function validateMP4(outputPath) {
   }
   result.exists = true;
   try {
-    result.bytes = fileSize(outputPath);
+    result.bytes = fs.statSync(outputPath).size;
   } catch (error) {
     result.error = `Failed to stat output file: ${error.message}`;
     return result;
