@@ -450,6 +450,39 @@ test("peek --latest --json returns the latest captured frame", async () => {
     assert.equal(payload.exists, true);
     assert.equal(payload.frame.index, captured.at(-1).index);
     assert.equal(payload.framePath, path.join(runDir, captured.at(-1).path));
+    assert.equal(payload.frame.capturedAt, captured.at(-1).capturedAt);
+    assert.equal(payload.frame.scheduledAt, captured.at(-1).scheduledAt);
+    assert.equal(payload.frame.url, captured.at(-1).url);
+    assert.equal(payload.frame.title, captured.at(-1).title);
+    assert.deepEqual(payload.frame.viewport, captured.at(-1).viewport);
+    assert.equal(payload.frame.status, captured.at(-1).status);
+    assert.equal(payload.frame.error, captured.at(-1).error);
+    assert.equal(payload.selection.source, "frames");
+    assert.equal(payload.selection.metadataAvailable, true);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("peek --index --json returns selected frame metadata", async () => {
+  const { runDir, captured } = await makeRun({ frameCount: 4 });
+  try {
+    const selected = captured[1];
+    const result = runCli(["peek", runDir, "--index", "1", "--json"]);
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.exists, true);
+    assert.equal(payload.frame.index, selected.index);
+    assert.equal(payload.frame.path, selected.path);
+    assert.equal(payload.frame.capturedAt, selected.capturedAt);
+    assert.equal(payload.frame.scheduledAt, selected.scheduledAt);
+    assert.equal(payload.frame.url, selected.url);
+    assert.equal(payload.frame.title, selected.title);
+    assert.deepEqual(payload.frame.viewport, selected.viewport);
+    assert.equal(payload.frame.status, selected.status);
+    assert.equal(payload.frame.error, selected.error);
+    assert.equal(payload.selection.source, "frames");
+    assert.equal(payload.selection.metadataAvailable, true);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -467,6 +500,15 @@ test("peek --near --json returns the frame closest to an ISO timestamp", async (
     assert.equal(payload.exists, true);
     assert.equal(payload.frame.index, captured[1].index);
     assert.equal(payload.framePath, path.join(runDir, captured[1].path));
+    assert.equal(payload.frame.capturedAt, captured[1].capturedAt);
+    assert.equal(payload.frame.scheduledAt, captured[1].scheduledAt);
+    assert.equal(payload.frame.url, captured[1].url);
+    assert.equal(payload.frame.title, captured[1].title);
+    assert.deepEqual(payload.frame.viewport, captured[1].viewport);
+    assert.equal(payload.frame.status, captured[1].status);
+    assert.equal(payload.frame.error, captured[1].error);
+    assert.equal(payload.selection.source, "frames");
+    assert.equal(payload.selection.metadataAvailable, true);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -1976,6 +2018,10 @@ test("peek --latest returns poster.png after default cleanup removes raw frames"
       const payload = JSON.parse(peekResult.stdout);
       assert.equal(payload.exists, true);
       assert.equal(payload.path, posterPath);
+      assert.equal(payload.selection.source, "poster");
+      assert.equal(payload.selection.metadataAvailable, false);
+      assert.equal(payload.frame, null);
+      assert.equal(payload.fallback.source, "poster");
     }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
