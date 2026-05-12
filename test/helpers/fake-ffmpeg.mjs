@@ -18,13 +18,17 @@ class FakeBinaryManager {
   async createFakeFFmpeg(mode = "success") {
     const ffmpegPath = path.join(this.binDir, "ffmpeg");
     let script;
-    if (mode === "success" || mode === "zero-duration" || mode === "no-video-stream") {
+    if (
+      mode === "success" ||
+      mode === "zero-duration" ||
+      mode === "no-video-stream"
+    ) {
       script =
         "#!/bin/sh\n" +
-        "if [ \"$1\" = \"-version\" ]; then echo 'fake ffmpeg version 6.1'; exit 0; fi\n" +
+        'if [ "$1" = "-version" ]; then echo \'fake ffmpeg version 6.1\'; exit 0; fi\n' +
         "echo 'fake ffmpeg stdout: render started'\n" +
         "echo 'fake ffmpeg stderr: render details' >&2\n" +
-        "for arg do out_file=\"$arg\"; done\n" +
+        'for arg do out_file="$arg"; done\n' +
         "printf 'fake mp4 bytes' > \"$out_file\"\n" +
         "exit 0";
     } else if (mode === "success-require-contiguous-input") {
@@ -64,13 +68,13 @@ class FakeBinaryManager {
     } else if (mode === "empty-output") {
       script =
         "#!/bin/sh\n" +
-        "for arg do out_file=\"$arg\"; done\n" +
-        ": > \"$out_file\"\n" +
+        'for arg do out_file="$arg"; done\n' +
+        ': > "$out_file"\n' +
         "exit 0";
     } else if (mode === "invalid-output") {
       script =
         "#!/bin/sh\n" +
-        "for arg do out_file=\"$arg\"; done\n" +
+        'for arg do out_file="$arg"; done\n' +
         "echo 'not a video file' > \"$out_file\"\n" +
         "exit 0";
     }
@@ -99,7 +103,7 @@ class FakeBinaryManager {
       const duration = mode === "zero-duration" ? "0" : "10.0";
       script =
         "#!/bin/sh\n" +
-        "if [ \"$1\" = \"-version\" ]; then echo 'fake ffprobe'; exit 0; fi\n" +
+        'if [ "$1" = "-version" ]; then echo \'fake ffprobe\'; exit 0; fi\n' +
         "cat << 'EOF'\n" +
         "{\n" +
         '  "streams": [\n' +
@@ -115,7 +119,7 @@ class FakeBinaryManager {
     } else {
       script =
         "#!/bin/sh\n" +
-        "if [ \"$1\" = \"-version\" ]; then echo 'fake ffprobe'; exit 0; fi\n" +
+        'if [ "$1" = "-version" ]; then echo \'fake ffprobe\'; exit 0; fi\n' +
         "exit 1";
     }
     await fs.writeFile(ffprobePath, script, { mode: 0o755 });
@@ -133,14 +137,17 @@ class FakeBinaryManager {
 export async function withFakeFFmpeg(testFn, mode = "success") {
   const tempDir = path.join(
     os.tmpdir(),
-    `fake-ffmpeg-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    `fake-ffmpeg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
   const manager = new FakeBinaryManager(tempDir);
   try {
     await manager.setup();
     const modes =
       typeof mode === "object"
-        ? { ffmpeg: mode.ffmpeg ?? "success", ffprobe: mode.ffprobe ?? mode.ffmpeg ?? "success" }
+        ? {
+            ffmpeg: mode.ffmpeg ?? "success",
+            ffprobe: mode.ffprobe ?? mode.ffmpeg ?? "success",
+          }
         : { ffmpeg: mode, ffprobe: mode };
     await manager.createFakeFFmpeg(modes.ffmpeg);
     await manager.createFakeFFprobe(modes.ffprobe);

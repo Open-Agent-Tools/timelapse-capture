@@ -39,7 +39,9 @@ test("commandStatus treats missing frames directory as zero usage", async () => 
 });
 
 test("commandStatus ignores ENOENT from frame stat during traversal", async () => {
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
+  const runDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "tlc-fs-errors-status-"),
+  );
   const framesDir = path.join(runDir, "frames");
   const framePath = path.join(framesDir, "frame-0001.png");
   const originalStat = fsp.stat;
@@ -95,7 +97,9 @@ test("commandStatus ignores ENOTDIR from frame stat during traversal", async () 
 });
 
 test("commandStatus treats ENOTDIR from nested traversal as a benign race", async () => {
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
+  const runDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "tlc-fs-errors-status-"),
+  );
   const framesDir = path.join(runDir, "frames");
   const stalePath = path.join(framesDir, "stale-dir");
   const originalReaddir = fsp.readdir;
