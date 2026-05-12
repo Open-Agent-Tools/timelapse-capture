@@ -2593,6 +2593,7 @@ export async function commandCleanup({ runDir, options = {} }) {
         removed: 0,
         retained: 0,
         bytesFreed: 0,
+        reason: "keep-latest",
       });
       return result;
     }
@@ -2615,6 +2616,7 @@ export async function commandCleanup({ runDir, options = {} }) {
       removed: toDelete.length,
       retained: 1,
       bytesFreed,
+      reason: "keep-latest",
     });
     return result;
   }
