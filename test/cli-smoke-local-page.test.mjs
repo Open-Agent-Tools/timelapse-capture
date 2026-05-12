@@ -9,7 +9,12 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
-const CLI = path.join(path.dirname(__filename), "..", "src", "timelapse-capture.mjs");
+const CLI = path.join(
+  path.dirname(__filename),
+  "..",
+  "src",
+  "timelapse-capture.mjs",
+);
 
 let SKIP_SMOKE = false;
 let SKIP_REASON = "";
@@ -35,9 +40,9 @@ try {
       response.end("<!doctype html><title>probe</title><body>probe</body>");
     });
 
-    const probePort = await new Promise((resolve) => probeServer.listen(0, resolve)).then(
-      () => probeServer.address()?.port
-    );
+    const probePort = await new Promise((resolve) =>
+      probeServer.listen(0, resolve),
+    ).then(() => probeServer.address()?.port);
     try {
       const browser = await playwright.chromium.launch({ headless: true });
       const page = await browser.newPage();
@@ -50,25 +55,30 @@ try {
       SKIP_REASON = `playwright runtime unavailable: ${error?.message || String(error)}`;
       try {
         await closeServer(probeServer);
-      } catch {
-      }
+      } catch {}
     }
   }
 } catch (error) {
   SKIP_SMOKE = true;
-  SKIP_REASON = error?.message ? `playwright unavailable: ${error.message}` : "playwright unavailable";
+  SKIP_REASON = error?.message
+    ? `playwright unavailable: ${error.message}`
+    : "playwright unavailable";
 }
 
 function runCli(args, env = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
     encoding: "utf8",
-    env: { ...process.env, ...env }
+    env: { ...process.env, ...env },
   });
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function pollCliStatus(runDir, predicate, { timeoutMs = 15000, intervalMs = 100 } = {}) {
+async function pollCliStatus(
+  runDir,
+  predicate,
+  { timeoutMs = 15000, intervalMs = 100 } = {},
+) {
   const started = Date.now();
   let lastPayload;
   while (Date.now() - started < timeoutMs) {
@@ -80,7 +90,9 @@ async function pollCliStatus(runDir, predicate, { timeoutMs = 15000, intervalMs 
     }
     await sleep(intervalMs);
   }
-  assert.fail(`Timed out waiting for capture status. Last payload: ${JSON.stringify(lastPayload)}`);
+  assert.fail(
+    `Timed out waiting for capture status. Last payload: ${JSON.stringify(lastPayload)}`,
+  );
 }
 
 test("closeServer awaits the http.Server close callback", async () => {
@@ -95,7 +107,11 @@ test("closeServer awaits the http.Server close callback", async () => {
     });
   };
   await closeServer(server);
-  assert.equal(callbackFired, true, "close callback must fire before closeServer resolves");
+  assert.equal(
+    callbackFired,
+    true,
+    "close callback must fire before closeServer resolves",
+  );
 });
 
 if (!SKIP_SMOKE) {
@@ -114,33 +130,48 @@ if (!SKIP_SMOKE) {
       assert.ok(Number.isFinite(port));
       const target = `http://127.0.0.1:${port}/`;
 
-      const startResult = runCli([
-        "start",
-        target,
-        "--duration",
-        "2s",
-        "--interval",
-        "500ms",
-        "--out",
-        outDir,
-        "--json"
-      ], { CI: "1" });
+      const startResult = runCli(
+        [
+          "start",
+          target,
+          "--duration",
+          "2s",
+          "--interval",
+          "500ms",
+          "--out",
+          outDir,
+          "--json",
+        ],
+        { CI: "1" },
+      );
       if (startResult.status !== 0) {
-        context.skip(`runtime unavailable: start command failed: ${startResult.stderr}`);
+        context.skip(
+          `runtime unavailable: start command failed: ${startResult.stderr}`,
+        );
         return;
       }
       const startPayload = JSON.parse(startResult.stdout);
 
       const status = await pollCliStatus(
         startPayload.runDir,
-        (current) => current.frames.captured > 0 || current.state === "failed"
+        (current) => current.frames.captured > 0 || current.state === "failed",
       );
-      if (status.status.state === "failed" && status.status.frames.captured === 0) {
-        context.skip("runtime unavailable: capture failed before producing a frame");
+      if (
+        status.status.state === "failed" &&
+        status.status.frames.captured === 0
+      ) {
+        context.skip(
+          "runtime unavailable: capture failed before producing a frame",
+        );
         return;
       }
 
-      const peekResult = runCli(["peek", startPayload.runDir, "--latest", "--json"]);
+      const peekResult = runCli([
+        "peek",
+        startPayload.runDir,
+        "--latest",
+        "--json",
+      ]);
       assert.equal(peekResult.status, 0, peekResult.stderr);
       const peekPayload = JSON.parse(peekResult.stdout);
       assert.equal(peekPayload.exists, true);
@@ -148,7 +179,8 @@ if (!SKIP_SMOKE) {
 
       await pollCliStatus(
         startPayload.runDir,
-        (current) => current.state === "completed" || current.state === "failed"
+        (current) =>
+          current.state === "completed" || current.state === "failed",
       );
     } finally {
       await fs.rm(outDir, { recursive: true, force: true });
@@ -156,7 +188,11 @@ if (!SKIP_SMOKE) {
     }
   });
 } else {
-  test("CLI smoke start/status/peek with a local static page (skipped)", { skip: true }, () => {
-    assert.ok(SKIP_REASON);
-  });
+  test(
+    "CLI smoke start/status/peek with a local static page (skipped)",
+    { skip: true },
+    () => {
+      assert.ok(SKIP_REASON);
+    },
+  );
 }

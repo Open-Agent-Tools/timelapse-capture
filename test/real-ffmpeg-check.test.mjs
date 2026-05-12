@@ -5,9 +5,7 @@ import { checkFfmpeg, checkFfprobe, commandDoctor } from "../src/doctor.mjs";
 import { hasRealFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 
 const shouldRunRealFFmpegChecks =
-  process.env.TIMELAPSE_HAS_REAL_FFMPEG_SUITE === "1"
-    ? true
-    : hasRealFFmpeg();
+  process.env.TIMELAPSE_HAS_REAL_FFMPEG_SUITE === "1" ? true : hasRealFFmpeg();
 
 test(
   "real ffmpeg/ffprobe checks pass when binaries are available",
@@ -22,5 +20,5 @@ test(
     assert.equal(result.checks[0].status, "pass");
     assert.equal(result.checks[1].name, "ffprobe");
     assert.equal(result.checks[1].status, "pass");
-  }
+  },
 );

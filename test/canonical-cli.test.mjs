@@ -11,7 +11,7 @@ import {
   commandCleanup,
   parseArgs,
   ParseError,
-  resolveStartTiming
+  resolveStartTiming,
 } from "../src/timelapse-capture.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,13 +20,13 @@ const CLI = path.join(__dirname, "..", "src", "timelapse-capture.mjs");
 
 const FRAME_PNG_1x1 = Buffer.from(
   "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
-  "hex"
+  "hex",
 );
 
 function runCli(args, env = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
     encoding: "utf8",
-    env: { ...process.env, ...env }
+    env: { ...process.env, ...env },
   });
 }
 
@@ -36,8 +36,12 @@ async function waitForTerminalStatus(runDir, { timeoutMs = 5000 } = {}) {
   const started = Date.now();
   let status;
   while (Date.now() - started < timeoutMs) {
-    status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
-    const job = JSON.parse(await fs.readFile(path.join(runDir, "job.json"), "utf8"));
+    status = JSON.parse(
+      await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+    );
+    const job = JSON.parse(
+      await fs.readFile(path.join(runDir, "job.json"), "utf8"),
+    );
     if (
       (status.state === "completed" || status.state === "failed") &&
       (job.state === "completed" || job.state === "failed")
@@ -46,7 +50,9 @@ async function waitForTerminalStatus(runDir, { timeoutMs = 5000 } = {}) {
     }
     await sleep(25);
   }
-  assert.fail(`Timed out waiting for terminal status. Last status: ${JSON.stringify(status)}`);
+  assert.fail(
+    `Timed out waiting for terminal status. Last status: ${JSON.stringify(status)}`,
+  );
 }
 
 async function makeRun({ frameCount = 3, state = "completed" } = {}) {
@@ -56,18 +62,25 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
 
   const captured = [];
   for (let index = 1; index <= frameCount; index += 1) {
-    const relative = path.join("frames", `frame-${String(index).padStart(6, "0")}.png`);
+    const relative = path.join(
+      "frames",
+      `frame-${String(index).padStart(6, "0")}.png`,
+    );
     await fs.writeFile(path.join(runDir, relative), FRAME_PNG_1x1);
     captured.push({
       index,
-      scheduledAt: new Date(Date.now() - (frameCount - index) * 1000).toISOString(),
-      capturedAt: new Date(Date.now() - (frameCount - index) * 1000 + 50).toISOString(),
+      scheduledAt: new Date(
+        Date.now() - (frameCount - index) * 1000,
+      ).toISOString(),
+      capturedAt: new Date(
+        Date.now() - (frameCount - index) * 1000 + 50,
+      ).toISOString(),
       path: relative,
       status: "captured",
       url: "http://example.test/",
       title: "fixture",
       viewport: { width: 1280, height: 720 },
-      error: null
+      error: null,
     });
   }
 
@@ -86,7 +99,7 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
     keepLatest: false,
     waitUntil: "domcontentloaded",
     headed: false,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
 
   const status = {
@@ -98,19 +111,28 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
     frames: {
       captured: frameCount,
       failed: 0,
-      totalExpected: frameCount
+      totalExpected: frameCount,
     },
-    latestFrame: captured.at(-1) ?? null
+    latestFrame: captured.at(-1) ?? null,
   };
 
-  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
-  await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+  await fs.writeFile(
+    path.join(runDir, "config.json"),
+    JSON.stringify(config, null, 2),
+  );
+  await fs.writeFile(
+    path.join(runDir, "status.json"),
+    JSON.stringify(status, null, 2),
+  );
   await fs.writeFile(
     path.join(runDir, "manifest.jsonl"),
-    captured.map((record) => JSON.stringify(record)).join("\n") + "\n"
+    captured.map((record) => JSON.stringify(record)).join("\n") + "\n",
   );
   if (captured.length) {
-    await fs.writeFile(path.join(runDir, "latest-frame.json"), JSON.stringify(captured.at(-1), null, 2));
+    await fs.writeFile(
+      path.join(runDir, "latest-frame.json"),
+      JSON.stringify(captured.at(-1), null, 2),
+    );
   }
 
   return { runDir, captured, config, status };
@@ -133,7 +155,10 @@ test("status --json reports canonical state for a completed run", async () => {
 });
 
 test("status --json round-trips status.json with canonical frames object", async () => {
-  const { runDir, captured } = await makeRun({ frameCount: 3, state: "completed" });
+  const { runDir, captured } = await makeRun({
+    frameCount: 3,
+    state: "completed",
+  });
   try {
     const statusPath = path.join(runDir, "status.json");
     const status = {
@@ -144,9 +169,9 @@ test("status --json round-trips status.json with canonical frames object", async
       frames: {
         captured: 3,
         failed: 0,
-        totalExpected: 3
+        totalExpected: 3,
       },
-      latestFrame: captured.at(-1) ?? null
+      latestFrame: captured.at(-1) ?? null,
     };
 
     await fs.writeFile(statusPath, JSON.stringify(status, null, 2));
@@ -177,13 +202,15 @@ test("start writes config.json with canonical field names only", async () => {
         "1s",
         "--out",
         runDir,
-        "--json"
+        "--json",
       ],
-      { TIMELAPSE_SIMULATE_FRAMES: "2" }
+      { TIMELAPSE_SIMULATE_FRAMES: "2" },
     );
     assert.equal(result.status, 0, result.stderr);
 
-    const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
     assert.equal(config.target, "http://example.test/");
     assert.equal(config.intervalMs, 1000);
     assert.equal(config.durationMs, 2000);
@@ -207,7 +234,7 @@ test("status --json reports exact frame disk usage for nested directories", asyn
     const files = [
       { path: path.join(framesDir, "root.png"), data: "root-frame" },
       { path: path.join(nestedDir, "nested.png"), data: "nested-frame" },
-      { path: path.join(deeperDir, "deep.png"), data: "deep-frame" }
+      { path: path.join(deeperDir, "deep.png"), data: "deep-frame" },
     ];
     await fs.mkdir(deeperDir, { recursive: true });
     for (const file of files) {
@@ -219,7 +246,7 @@ test("status --json reports exact frame disk usage for nested directories", asyn
     const payload = JSON.parse(result.stdout);
     assert.equal(
       payload.framesDiskUsageBytes,
-      files.reduce((sum, file) => sum + Buffer.byteLength(file.data), 0)
+      files.reduce((sum, file) => sum + Buffer.byteLength(file.data), 0),
     );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -232,11 +259,17 @@ test("status --json includes status.diskUsage with runDirBytes and framesBytes",
     const result = runCli(["status", runDir, "--json"]);
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
-    assert.ok(typeof payload.status.diskUsage === "object" && payload.status.diskUsage !== null);
+    assert.ok(
+      typeof payload.status.diskUsage === "object" &&
+        payload.status.diskUsage !== null,
+    );
     assert.ok(typeof payload.status.diskUsage.runDirBytes === "number");
     assert.ok(typeof payload.status.diskUsage.framesBytes === "number");
     assert.ok(payload.status.diskUsage.framesBytes > 0);
-    assert.ok(payload.status.diskUsage.runDirBytes >= payload.status.diskUsage.framesBytes);
+    assert.ok(
+      payload.status.diskUsage.runDirBytes >=
+        payload.status.diskUsage.framesBytes,
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -266,22 +299,28 @@ test("status --json includes outputPath and cleanup from run-summary when presen
         duration: 1.5,
         dimensions: { width: 1280, height: 720 },
         sourceFrameCount: 3,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
       cleanup: {
         success: true,
         removed: 3,
         retained: 0,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     };
-    await fs.writeFile(path.join(runDir, "run-summary.json"), JSON.stringify(summary, null, 2));
+    await fs.writeFile(
+      path.join(runDir, "run-summary.json"),
+      JSON.stringify(summary, null, 2),
+    );
 
     const result = runCli(["status", runDir, "--json"]);
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.status.outputPath, fakeOutputPath);
-    assert.ok(payload.status.cleanup !== null && typeof payload.status.cleanup === "object");
+    assert.ok(
+      payload.status.cleanup !== null &&
+        typeof payload.status.cleanup === "object",
+    );
     assert.equal(payload.status.cleanup.success, true);
     assert.equal(payload.status.cleanup.removed, 3);
     assert.equal(payload.status.cleanup.retained, 0);
@@ -295,7 +334,9 @@ test("status --human output includes stale warning when latest frame is stale", 
   try {
     const intervalMs = 5_000;
     const staleAgeMs = 60_000;
-    const latestFrameTimestamp = new Date(Date.now() - staleAgeMs).toISOString();
+    const latestFrameTimestamp = new Date(
+      Date.now() - staleAgeMs,
+    ).toISOString();
     const startedAt = new Date(Date.now() - 120_000).toISOString();
     await fs.writeFile(
       path.join(runDir, "status.json"),
@@ -305,11 +346,11 @@ test("status --human output includes stale warning when latest frame is stale", 
           startedAt,
           intervalMs,
           frames: { captured: 1, failed: 0, totalExpected: 5 },
-          latestFrameTimestamp
+          latestFrameTimestamp,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
 
     const result = runCli(["status", runDir]);
@@ -329,7 +370,10 @@ test("status --human output omits eta line for non-running states", async () => 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /^state: completed$/m);
     assert.doesNotMatch(result.stdout, /^eta: /m);
-    assert.doesNotMatch(result.stdout, /warning: latest successful frame is stale/);
+    assert.doesNotMatch(
+      result.stdout,
+      /warning: latest successful frame is stale/,
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -339,13 +383,21 @@ test("status --human output prints output and cleanup summary", async () => {
   const { runDir } = await makeRun();
   try {
     await withFakeFFmpeg(async (manager) => {
-      const renderResult = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const renderResult = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(renderResult.status, 0, renderResult.stderr);
 
       const statusResult = runCli(["status", runDir]);
       assert.equal(statusResult.status, 0, statusResult.stderr);
-      assert.match(statusResult.stdout, new RegExp(`^output: .*output\\.mp4$`, "m"));
-      assert.match(statusResult.stdout, /^cleanup: removed \d+, retained \d+$/m);
+      assert.match(
+        statusResult.stdout,
+        new RegExp(`^output: .*output\\.mp4$`, "m"),
+      );
+      assert.match(
+        statusResult.stdout,
+        /^cleanup: removed \d+, retained \d+$/m,
+      );
     }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -370,7 +422,7 @@ test("peek --near --json returns the frame closest to an ISO timestamp", async (
   const { runDir, captured } = await makeRun({ frameCount: 4 });
   try {
     const nearTimestamp = new Date(
-      new Date(captured[1].capturedAt).getTime() + 25
+      new Date(captured[1].capturedAt).getTime() + 25,
     ).toISOString();
     const result = runCli(["peek", runDir, "--near", nearTimestamp, "--json"]);
     assert.equal(result.status, 0, result.stderr);
@@ -387,9 +439,17 @@ test("peek --near reports missing captured timestamps when manifest is absent", 
   const { runDir, captured } = await makeRun();
   try {
     await fs.rm(path.join(runDir, "manifest.jsonl"));
-    const result = runCli(["peek", runDir, "--near", captured.at(-1).capturedAt]);
+    const result = runCli([
+      "peek",
+      runDir,
+      "--near",
+      captured.at(-1).capturedAt,
+    ]);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /No captured frame timestamps are available for --near\./);
+    assert.match(
+      result.stderr,
+      /No captured frame timestamps are available for --near\./,
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -402,7 +462,13 @@ test("peek --near guard does not fire for matching manifest and frames", async (
       (new Date(captured[0].capturedAt).getTime() +
         new Date(captured[1].capturedAt).getTime()) /
       2;
-    const result = runCli(["peek", runDir, "--near", new Date(midMs).toISOString(), "--json"]);
+    const result = runCli([
+      "peek",
+      runDir,
+      "--near",
+      new Date(midMs).toISOString(),
+      "--json",
+    ]);
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.exists, true);
@@ -428,14 +494,34 @@ test("peek --near with no captured frame timestamps exits non-zero", async () =>
   try {
     const manifestPath = path.join(runDir, "manifest.jsonl");
     const failedRecords = [
-      { index: 1, scheduledAt: new Date().toISOString(), capturedAt: null, path: "frames/frame-000001.png", status: "failed", error: "timeout" },
-      { index: 2, scheduledAt: new Date().toISOString(), capturedAt: null, path: "frames/frame-000002.png", status: "failed", error: "timeout" }
+      {
+        index: 1,
+        scheduledAt: new Date().toISOString(),
+        capturedAt: null,
+        path: "frames/frame-000001.png",
+        status: "failed",
+        error: "timeout",
+      },
+      {
+        index: 2,
+        scheduledAt: new Date().toISOString(),
+        capturedAt: null,
+        path: "frames/frame-000002.png",
+        status: "failed",
+        error: "timeout",
+      },
     ];
-    await fs.writeFile(manifestPath, failedRecords.map((r) => JSON.stringify(r)).join("\n") + "\n");
+    await fs.writeFile(
+      manifestPath,
+      failedRecords.map((r) => JSON.stringify(r)).join("\n") + "\n",
+    );
 
     const result = runCli(["peek", runDir, "--near", new Date().toISOString()]);
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /No captured frame timestamps are available for --near/);
+    assert.match(
+      result.stderr,
+      /No captured frame timestamps are available for --near/,
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -472,12 +558,15 @@ test("peek --near selects first, middle, and last frame by timestamp proximity",
     const timestamps = [
       "2026-01-01T12:00:00Z",
       "2026-01-01T12:01:00Z",
-      "2026-01-01T12:02:00Z"
+      "2026-01-01T12:02:00Z",
     ];
     const captured = [];
     for (let i = 0; i < timestamps.length; i += 1) {
       const index = i + 1;
-      const relative = path.join("frames", `frame-${String(index).padStart(6, "0")}.png`);
+      const relative = path.join(
+        "frames",
+        `frame-${String(index).padStart(6, "0")}.png`,
+      );
       await fs.writeFile(path.join(runDir, relative), FRAME_PNG_1x1);
       captured.push({
         index,
@@ -488,26 +577,56 @@ test("peek --near selects first, middle, and last frame by timestamp proximity",
         url: "http://example.test/",
         title: "fixture",
         viewport: { width: 1280, height: 720 },
-        error: null
+        error: null,
       });
     }
-    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify({ state: "completed" }));
+    await fs.writeFile(
+      path.join(runDir, "status.json"),
+      JSON.stringify({ state: "completed" }),
+    );
     await fs.writeFile(
       path.join(runDir, "manifest.jsonl"),
-      captured.map((r) => JSON.stringify(r)).join("\n") + "\n"
+      captured.map((r) => JSON.stringify(r)).join("\n") + "\n",
     );
 
-    const r1 = runCli(["peek", runDir, "--near", "2026-01-01T12:00:20Z", "--json"]);
+    const r1 = runCli([
+      "peek",
+      runDir,
+      "--near",
+      "2026-01-01T12:00:20Z",
+      "--json",
+    ]);
     assert.equal(r1.status, 0, r1.stderr);
-    assert.equal(JSON.parse(r1.stdout).framePath, path.join(runDir, captured[0].path));
+    assert.equal(
+      JSON.parse(r1.stdout).framePath,
+      path.join(runDir, captured[0].path),
+    );
 
-    const r2 = runCli(["peek", runDir, "--near", "2026-01-01T12:01:10Z", "--json"]);
+    const r2 = runCli([
+      "peek",
+      runDir,
+      "--near",
+      "2026-01-01T12:01:10Z",
+      "--json",
+    ]);
     assert.equal(r2.status, 0, r2.stderr);
-    assert.equal(JSON.parse(r2.stdout).framePath, path.join(runDir, captured[1].path));
+    assert.equal(
+      JSON.parse(r2.stdout).framePath,
+      path.join(runDir, captured[1].path),
+    );
 
-    const r3 = runCli(["peek", runDir, "--near", "2026-01-01T12:02:40Z", "--json"]);
+    const r3 = runCli([
+      "peek",
+      runDir,
+      "--near",
+      "2026-01-01T12:02:40Z",
+      "--json",
+    ]);
     assert.equal(r3.status, 0, r3.stderr);
-    assert.equal(JSON.parse(r3.stdout).framePath, path.join(runDir, captured[2].path));
+    assert.equal(
+      JSON.parse(r3.stdout).framePath,
+      path.join(runDir, captured[2].path),
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -519,14 +638,16 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
     await fs.writeFile(path.join(runDir, "render.log"), "[prior] previous render\n");
 
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.ok(summary.output.endsWith("output.mp4"));
       assert.equal(summary.sourceFrameCount, 3);
 
       const onDisk = JSON.parse(
-        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
       );
       assert.equal(onDisk.render.outputPath, path.join(runDir, "output.mp4"));
       assert.equal(onDisk.render.bytes > 0, true);
@@ -541,7 +662,9 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
       assert.equal(onDisk.cleanup.error, null);
       assert.ok(typeof onDisk.cleanup.timestamp === "string");
 
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(status.state, "rendered");
       assert.ok(status.renderedAt);
 
@@ -568,14 +691,20 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
 
 test("render with fake ffmpeg success mode does not create -version artifact", async () => {
   const { runDir } = await makeRun();
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-ffmpeg-version-cwd-"));
+  const cwd = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-ffmpeg-version-cwd-"),
+  );
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = spawnSync(process.execPath, [CLI, "render", runDir, "--json"], {
-        encoding: "utf8",
-        cwd,
-        env: { ...process.env, PATH: manager.getPATHEnv() }
-      });
+      const result = spawnSync(
+        process.execPath,
+        [CLI, "render", runDir, "--json"],
+        {
+          encoding: "utf8",
+          cwd,
+          env: { ...process.env, PATH: manager.getPATHEnv() },
+        },
+      );
       assert.equal(result.status, 0, result.stderr);
 
       const summary = JSON.parse(result.stdout);
@@ -590,7 +719,7 @@ test("render with fake ffmpeg success mode does not create -version artifact", a
           (error) => {
             if (error.code === "ENOENT") return false;
             throw error;
-          }
+          },
         );
       assert.equal(versionArtifactExists, false);
     }, "success");
@@ -605,11 +734,13 @@ test("render with --keep-frames records retained cleanup summary", async () => {
   try {
     await withFakeFFmpeg(async (manager) => {
       const result = runCli(["render", runDir, "--json", "--keep-frames"], {
-        PATH: manager.getPATHEnv()
+        PATH: manager.getPATHEnv(),
       });
       assert.equal(result.status, 0, result.stderr);
 
-      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
       assert.equal(summary.cleanup.success, true);
       assert.equal(summary.cleanup.removed, 0);
       assert.equal(summary.cleanup.retained, 3);
@@ -623,17 +754,18 @@ test("render with --keep-frames records retained cleanup summary", async () => {
   }
 });
 
-
 test("render with --keep-all records retained cleanup summary", async () => {
   const { runDir } = await makeRun();
   try {
     await withFakeFFmpeg(async (manager) => {
       const result = runCli(["render", runDir, "--json", "--keep-all"], {
-        PATH: manager.getPATHEnv()
+        PATH: manager.getPATHEnv(),
       });
       assert.equal(result.status, 0, result.stderr);
 
-      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
       assert.equal(summary.cleanup.success, true);
       assert.equal(summary.cleanup.removed, 0);
       assert.equal(summary.cleanup.retained, 3);
@@ -650,17 +782,23 @@ test("render records validation metadata before default cleanup", async () => {
   const { runDir } = await makeRun();
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
 
       const payload = JSON.parse(result.stdout);
       const expectedOutputPath = path.join(runDir, "output.mp4");
       assert.equal(payload.output, expectedOutputPath);
 
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(status.state, "rendered");
 
-      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
       assert.equal(summary.render.outputPath, expectedOutputPath);
       assert.ok(summary.render.bytes > 0);
       assert.ok(summary.render.duration > 0);
@@ -675,7 +813,10 @@ test("render records validation metadata before default cleanup", async () => {
         if (error.code === "ENOENT") return [];
         throw error;
       });
-      assert.deepEqual(remainingFrames.filter((name) => name.endsWith(".png")), []);
+      assert.deepEqual(
+        remainingFrames.filter((name) => name.endsWith(".png")),
+        [],
+      );
     }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -689,7 +830,9 @@ test("render writes render_failed when ffmpeg exits non-zero", async () => {
       const result = runCli(["render", runDir], { PATH: manager.getPATHEnv() });
       assert.notEqual(result.status, 0);
 
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(status.state, "render_failed");
       assert.ok(status.error);
 
@@ -710,27 +853,41 @@ test("render preserves frames when MP4 validation fails", async () => {
     ["ffmpeg creates no output", "no-output", /Output file does not exist/],
     ["ffmpeg creates empty output", "empty-output", /Output file is empty/],
     ["ffprobe reports zero duration", "zero-duration", /duration is zero/],
-    ["ffprobe reports no video stream", "no-video-stream", /readable video stream/],
-    ["ffprobe cannot read output", "invalid-output", /ffprobe failed|valid MP4/]
+    [
+      "ffprobe reports no video stream",
+      "no-video-stream",
+      /readable video stream/,
+    ],
+    [
+      "ffprobe cannot read output",
+      "invalid-output",
+      /ffprobe failed|valid MP4/,
+    ],
   ];
 
   for (const [name, fakeMode, errorPattern] of cases) {
     const { runDir } = await makeRun();
     try {
       await withFakeFFmpeg(async (manager) => {
-        const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+        const result = runCli(["render", runDir, "--json"], {
+          PATH: manager.getPATHEnv(),
+        });
         assert.notEqual(result.status, 0, name);
         assert.match(result.stderr, errorPattern, name);
 
-        const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+        const status = JSON.parse(
+          await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+        );
         assert.equal(status.state, "render_failed", name);
 
-        const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+        const summary = JSON.parse(
+          await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+        );
         assert.equal(summary.cleanup.removed, 0, name);
 
-        const frameNames = (await fs.readdir(path.join(runDir, "frames"))).filter((frameName) =>
-          frameName.endsWith(".png")
-        );
+        const frameNames = (
+          await fs.readdir(path.join(runDir, "frames"))
+        ).filter((frameName) => frameName.endsWith(".png"));
         assert.equal(frameNames.length, 3, name);
       }, fakeMode);
     } finally {
@@ -743,11 +900,18 @@ test("render marks render_failed when output is not a valid MP4", async () => {
   const { runDir } = await makeRun();
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /Rendered output is not a valid MP4|valid MP4/);
+      assert.match(
+        result.stderr,
+        /Rendered output is not a valid MP4|valid MP4/,
+      );
 
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(status.state, "render_failed");
       assert.ok(status.error);
       assert.equal((await fs.readdir(path.join(runDir, "frames"))).length, 3);
@@ -762,10 +926,14 @@ test("render succeeds when status.json is initially missing", async () => {
   try {
     await fs.rm(path.join(runDir, "status.json"));
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json", "--force"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json", "--force"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
 
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(status.state, "rendered");
     }, "success");
   } finally {
@@ -777,17 +945,22 @@ test("render leaves no .tmp status file after success", async () => {
   const { runDir } = await makeRun();
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
 
-      const statusJson = await fs.readFile(path.join(runDir, "status.json"), "utf8");
+      const statusJson = await fs.readFile(
+        path.join(runDir, "status.json"),
+        "utf8",
+      );
       const status = JSON.parse(statusJson);
       assert.equal(status.state, "rendered");
 
       const entries = await fs.readdir(runDir);
       assert.deepEqual(
         entries.filter((entry) => entry.startsWith("status.json.tmp-")),
-        []
+        [],
       );
     }, "success");
   } finally {
@@ -803,7 +976,7 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
   for (const index of indices) {
     await fs.writeFile(
       path.join(framesDir, `frame-${String(index).padStart(4, "0")}.png`),
-      FRAME_PNG_1x1
+      FRAME_PNG_1x1,
     );
   }
   const status = {
@@ -815,9 +988,9 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
     frames: {
       captured: 3,
       failed: 2,
-      totalExpected: 5
+      totalExpected: 5,
     },
-    latestFrame: null
+    latestFrame: null,
   };
   const config = {
     version: "0.1.0",
@@ -834,30 +1007,53 @@ test("render succeeds with sparse (gapped) frame numbering", async () => {
     keepLatest: false,
     waitUntil: "domcontentloaded",
     headed: false,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
-  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
-  await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+  await fs.writeFile(
+    path.join(runDir, "config.json"),
+    JSON.stringify(config, null, 2),
+  );
+  await fs.writeFile(
+    path.join(runDir, "status.json"),
+    JSON.stringify(status, null, 2),
+  );
 
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.equal(summary.sourceFrameCount, 3);
       const ffmpegArgs = JSON.parse(
-        await fs.readFile(path.join(manager.outputDir, "ffmpeg-args.json"), "utf8")
+        await fs.readFile(
+          path.join(manager.outputDir, "ffmpeg-args.json"),
+          "utf8",
+        ),
       );
       const inputPattern = ffmpegArgs[ffmpegArgs.indexOf("-i") + 1];
       assert.equal(path.basename(inputPattern), "frame-%04d.png");
-      assert.equal(path.basename(path.dirname(inputPattern)), ".render-staging");
+      assert.equal(
+        path.basename(path.dirname(inputPattern)),
+        ".render-staging",
+      );
 
-      const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const finalStatus = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(finalStatus.state, "rendered");
 
       const stagingDir = path.join(framesDir, ".render-staging");
-      const stagingExists = await fs.stat(stagingDir).then(() => true, () => false);
-      assert.equal(stagingExists, false, "staging directory should be cleaned up");
+      const stagingExists = await fs.stat(stagingDir).then(
+        () => true,
+        () => false,
+      );
+      assert.equal(
+        stagingExists,
+        false,
+        "staging directory should be cleaned up",
+      );
     }, "success-require-contiguous-input");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -873,7 +1069,7 @@ test("render replaces stale sparse-frame staging before restaging", async () => 
   for (const index of indices) {
     await fs.writeFile(
       path.join(framesDir, `frame-${String(index).padStart(4, "0")}.png`),
-      FRAME_PNG_1x1
+      FRAME_PNG_1x1,
     );
   }
   await fs.writeFile(path.join(stagingDir, "frame-0001.png"), "stale fixture");
@@ -886,7 +1082,7 @@ test("render replaces stale sparse-frame staging before restaging", async () => 
     framesAttempted: 5,
     framesCaptured: 3,
     framesFailed: 2,
-    latestFrame: null
+    latestFrame: null,
   };
   const config = {
     version: "0.1.0",
@@ -903,23 +1099,40 @@ test("render replaces stale sparse-frame staging before restaging", async () => 
     keepLatest: false,
     waitUntil: "domcontentloaded",
     headed: false,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
-  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
-  await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+  await fs.writeFile(
+    path.join(runDir, "config.json"),
+    JSON.stringify(config, null, 2),
+  );
+  await fs.writeFile(
+    path.join(runDir, "status.json"),
+    JSON.stringify(status, null, 2),
+  );
 
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.equal(summary.sourceFrameCount, 3);
 
-      const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const finalStatus = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(finalStatus.state, "rendered");
 
-      const stagingExists = await fs.stat(stagingDir).then(() => true, () => false);
-      assert.equal(stagingExists, false, "staging directory should be cleaned up");
+      const stagingExists = await fs.stat(stagingDir).then(
+        () => true,
+        () => false,
+      );
+      assert.equal(
+        stagingExists,
+        false,
+        "staging directory should be cleaned up",
+      );
     }, "success-require-contiguous-input");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -933,7 +1146,7 @@ test("render with contiguous frames skips staging", async () => {
   for (let index = 1; index <= 3; index++) {
     await fs.writeFile(
       path.join(framesDir, `frame-${String(index).padStart(4, "0")}.png`),
-      FRAME_PNG_1x1
+      FRAME_PNG_1x1,
     );
   }
   const status = {
@@ -945,9 +1158,9 @@ test("render with contiguous frames skips staging", async () => {
     frames: {
       captured: 3,
       failed: 0,
-      totalExpected: 3
+      totalExpected: 3,
     },
-    latestFrame: null
+    latestFrame: null,
   };
   const config = {
     version: "0.1.0",
@@ -964,19 +1177,29 @@ test("render with contiguous frames skips staging", async () => {
     keepLatest: false,
     waitUntil: "domcontentloaded",
     headed: false,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
-  await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
-  await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+  await fs.writeFile(
+    path.join(runDir, "config.json"),
+    JSON.stringify(config, null, 2),
+  );
+  await fs.writeFile(
+    path.join(runDir, "status.json"),
+    JSON.stringify(status, null, 2),
+  );
 
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.equal(summary.sourceFrameCount, 3);
 
-      const finalStatus = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const finalStatus = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(finalStatus.state, "rendered");
     }, "success");
   } finally {
@@ -989,10 +1212,20 @@ test("render refuses active capture runs without --force", async () => {
     const { runDir } = await makeRun({ state: activeState });
     try {
       const result = runCli(["render", runDir]);
-      assert.notEqual(result.status, 0, `Expected non-zero exit for state=${activeState}`);
+      assert.notEqual(
+        result.status,
+        0,
+        `Expected non-zero exit for state=${activeState}`,
+      );
       assert.match(result.stderr, /Cannot render while capture is active/);
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
-      assert.equal(status.state, activeState, `status.state should remain ${activeState}`);
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
+      assert.equal(
+        status.state,
+        activeState,
+        `status.state should remain ${activeState}`,
+      );
     } finally {
       await fs.rm(runDir, { recursive: true, force: true });
     }
@@ -1003,10 +1236,14 @@ test("render --force refuses when no frames exist during active capture", async 
   const { runDir } = await makeRun({ frameCount: 0, state: "running" });
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--force"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--force"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.notEqual(result.status, 0, result.stderr);
       assert.match(result.stderr, /no frames/i);
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(status.state, "running");
     }, "success");
   } finally {
@@ -1018,17 +1255,25 @@ test("render --force during active capture preserves frames after success", asyn
   const { runDir } = await makeRun({ frameCount: 3, state: "running" });
   try {
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--force", "--json"], { PATH: manager.getPATHEnv() });
+      const result = runCli(["render", runDir, "--force", "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.ok(summary.output.endsWith("output.mp4"));
 
-      const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+      const status = JSON.parse(
+        await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+      );
       assert.equal(status.state, "rendered");
 
       const frames = await fs.readdir(path.join(runDir, "frames"));
       const pngs = frames.filter((f) => f.endsWith(".png"));
-      assert.equal(pngs.length, 3, "frames must be preserved after forced active-state render");
+      assert.equal(
+        pngs.length,
+        3,
+        "frames must be preserved after forced active-state render",
+      );
     }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -1042,7 +1287,7 @@ test("cleanup refuses to delete frames before output.mp4 exists without --force"
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      /Refusing to delete frames: Output file does not exist \(at .*output\.mp4\)\. Pass --force to override\./
+      /Refusing to delete frames: Output file does not exist \(at .*output\.mp4\)\. Pass --force to override\./,
     );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -1057,13 +1302,22 @@ test("cleanup honors configured custom output path before output.mp4", async () 
       await fs.rm(path.join(runDir, "output.mp4"), { force: true });
       await fs.mkdir(path.join(runDir, "custom"), { recursive: true });
       await fs.writeFile(configuredOutput, "rendered");
-      const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+      const config = JSON.parse(
+        await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+      );
       config.output = { path: "custom/output.mp4" };
-      await fs.writeFile(path.join(runDir, "config.json"), JSON.stringify(config, null, 2));
+      await fs.writeFile(
+        path.join(runDir, "config.json"),
+        JSON.stringify(config, null, 2),
+      );
 
-      const result = runCli(["cleanup", runDir], { PATH: manager.getPATHEnv() });
+      const result = runCli(["cleanup", runDir], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(result.status, 0, result.stderr);
-      const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
       assert.equal(summary.cleanup.removed, 3);
       assert.equal(summary.cleanup.retained, 0);
     });
@@ -1080,13 +1334,18 @@ test("cleanup --keep-samples reports one retained frame for a one-frame run", as
       const originalPath = process.env.PATH;
       process.env.PATH = manager.getPATHEnv();
       try {
-        const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+        const result = await commandCleanup({
+          runDir,
+          options: { "keep-samples": true },
+        });
         assert.equal(result.removed, 0);
         assert.equal(result.retained, 1);
         const frames = await fs.readdir(path.join(runDir, "frames"));
         assert.deepEqual(frames.sort(), ["frame-000001.png"]);
 
-        const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+        const summary = JSON.parse(
+          await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+        );
         assert.equal(summary.cleanup.success, true);
         assert.equal(summary.cleanup.removed, 0);
         assert.equal(summary.cleanup.retained, 1);
@@ -1106,7 +1365,9 @@ test("start command rejects missing URL clearly", async () => {
 });
 
 test("start command accepts positional URL and validates required flags", async () => {
-  const workdir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-positional-"));
+  const workdir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-start-positional-"),
+  );
   try {
     const result = runCli(["start", "http://example.com"], { PWD: workdir });
     assert.notEqual(result.status, 0);
@@ -1125,7 +1386,7 @@ test("start parser accepts video length and fps options", () => {
     "--video-length",
     "1m",
     "--fps",
-    "24"
+    "24",
   ]);
 
   assert.equal(parsed.options.duration.ms, 7_200_000);
@@ -1135,23 +1396,32 @@ test("start parser accepts video length and fps options", () => {
 
 test("start parser rejects video length and interval together", () => {
   assert.throws(
-    () => parseArgs([
-      "start",
-      "http://example.test",
-      "--duration",
-      "2h",
-      "--video-length",
-      "1m",
-      "--interval",
-      "5s"
-    ]),
-    (error) => error instanceof ParseError
-      && /--video-length.*--interval|--interval.*--video-length/.test(error.message)
+    () =>
+      parseArgs([
+        "start",
+        "http://example.test",
+        "--duration",
+        "2h",
+        "--video-length",
+        "1m",
+        "--interval",
+        "5s",
+      ]),
+    (error) =>
+      error instanceof ParseError &&
+      /--video-length.*--interval|--interval.*--video-length/.test(
+        error.message,
+      ),
   );
 });
 
 test("start parser still requires duration with video length", () => {
-  const result = runCli(["start", "http://example.test", "--video-length", "1m"]);
+  const result = runCli([
+    "start",
+    "http://example.test",
+    "--video-length",
+    "1m",
+  ]);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Missing --duration/);
 });
@@ -1160,7 +1430,7 @@ test("start timing derives interval from target video length", () => {
   const timing = resolveStartTiming({
     duration: { ms: 7_200_000 },
     "video-length": { ms: 60_000 },
-    fps: 24
+    fps: 24,
   });
 
   assert.equal(timing.durationMs, 7_200_000);
@@ -1175,7 +1445,7 @@ test("start timing keeps explicit interval behavior unchanged", () => {
   const timing = resolveStartTiming({
     duration: { ms: 10_000 },
     interval: 250,
-    fps: 12
+    fps: 12,
   });
 
   assert.equal(timing.intervalMs, 250);
@@ -1199,13 +1469,16 @@ test("start command warns when computed video length interval is below one secon
         "2",
         "--out",
         runDir,
-        "--json"
+        "--json",
       ],
-      { TIMELAPSE_SIMULATE_FRAMES: "1" }
+      { TIMELAPSE_SIMULATE_FRAMES: "1" },
     );
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stderr, /warning: computed interval 250ms is below 1000ms/);
+    assert.match(
+      result.stderr,
+      /warning: computed interval 250ms is below 1000ms/,
+    );
     assert.equal(JSON.parse(result.stdout).status.intervalMs, 250);
     await waitForTerminalStatus(runDir);
   } finally {
@@ -1224,7 +1497,10 @@ test("help command prints usage banner with the canonical commands", () => {
 });
 
 test("status --json preserves latestFrame when subsequent frames failed", async () => {
-  const { runDir, captured } = await makeRun({ frameCount: 2, state: "failed" });
+  const { runDir, captured } = await makeRun({
+    frameCount: 2,
+    state: "failed",
+  });
   try {
     const lastCaptured = captured.at(-1);
     const status = {
@@ -1235,12 +1511,15 @@ test("status --json preserves latestFrame when subsequent frames failed", async 
       frames: {
         captured: 2,
         failed: 1,
-        totalExpected: 3
+        totalExpected: 3,
       },
       latestFrame: lastCaptured.path,
-      latestFrameTimestamp: lastCaptured.capturedAt
+      latestFrameTimestamp: lastCaptured.capturedAt,
     };
-    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify(status, null, 2));
+    await fs.writeFile(
+      path.join(runDir, "status.json"),
+      JSON.stringify(status, null, 2),
+    );
 
     const result = runCli(["status", runDir, "--json"]);
     assert.equal(result.status, 0, result.stderr);
@@ -1259,24 +1538,48 @@ test("peek --latest returns poster.png after default cleanup removes raw frames"
   const { runDir } = await makeRun();
   try {
     await withFakeFFmpeg(async (manager) => {
-      const renderResult = runCli(["render", runDir, "--json"], { PATH: manager.getPATHEnv() });
+      const renderResult = runCli(["render", runDir, "--json"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(renderResult.status, 0, renderResult.stderr);
 
       // Write poster.png directly since fake-ffmpeg doesn't copy the poster in tests
       const posterPath = path.join(runDir, "poster.png");
-      if (!(await fs.stat(posterPath).then(() => true, () => false))) {
-        await fs.writeFile(posterPath, Buffer.from(
-          "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
-          "hex"
-        ));
+      if (
+        !(await fs.stat(posterPath).then(
+          () => true,
+          () => false,
+        ))
+      ) {
+        await fs.writeFile(
+          posterPath,
+          Buffer.from(
+            "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000b49444154789c636060000000020001d75edeb0000000049454e44ae426082",
+            "hex",
+          ),
+        );
       }
 
-      const cleanupResult = runCli(["cleanup", runDir], { PATH: manager.getPATHEnv() });
+      const cleanupResult = runCli(["cleanup", runDir], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
 
-      assert.equal(await fs.stat(path.join(runDir, "frames")).then(() => true, () => false), false,
-        "frames/ directory should not exist after cleanup");
-      assert.ok(await fs.stat(posterPath).then(() => true, () => false), "poster.png should exist");
+      assert.equal(
+        await fs.stat(path.join(runDir, "frames")).then(
+          () => true,
+          () => false,
+        ),
+        false,
+        "frames/ directory should not exist after cleanup",
+      );
+      assert.ok(
+        await fs.stat(posterPath).then(
+          () => true,
+          () => false,
+        ),
+        "poster.png should exist",
+      );
 
       const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
       assert.equal(peekResult.status, 0, peekResult.stderr);
@@ -1302,8 +1605,9 @@ test("status --json includes diskUsage with runDirBytes and framesBytes", async 
     assert.ok(payload.status.diskUsage.runDirBytes > 0);
     assert.ok(payload.status.diskUsage.framesBytes >= 0);
     assert.ok(
-      payload.status.diskUsage.runDirBytes >= payload.status.diskUsage.framesBytes,
-      `runDirBytes (${payload.status.diskUsage.runDirBytes}) should be >= framesBytes (${payload.status.diskUsage.framesBytes})`
+      payload.status.diskUsage.runDirBytes >=
+        payload.status.diskUsage.framesBytes,
+      `runDirBytes (${payload.status.diskUsage.runDirBytes}) should be >= framesBytes (${payload.status.diskUsage.framesBytes})`,
     );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -1315,11 +1619,16 @@ test("peek --latest returns remaining frame after cleanup --keep-latest", async 
   // render auto-calls cleanupFrames internally; use --keep-frames to preserve frames for --keep-latest
   try {
     await withFakeFFmpeg(async (manager) => {
-      const renderResult = runCli(["render", runDir, "--json", "--keep-frames"], { PATH: manager.getPATHEnv() });
+      const renderResult = runCli(
+        ["render", runDir, "--json", "--keep-frames"],
+        { PATH: manager.getPATHEnv() },
+      );
       assert.equal(renderResult.status, 0, renderResult.stderr);
 
       // cleanup --keep-latest needs fake ffprobe to validate the rendered output.mp4
-      const cleanupResult = runCli(["cleanup", runDir, "--keep-latest"], { PATH: manager.getPATHEnv() });
+      const cleanupResult = runCli(["cleanup", runDir, "--keep-latest"], {
+        PATH: manager.getPATHEnv(),
+      });
       assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
 
       // With --keep-latest, the last frame remains in frames/ (no latest-retained.png)
@@ -1349,9 +1658,9 @@ test("start with simulated navigation failure reports 'navigation failed:' error
         "--interval",
         "1s",
         "--out",
-        runDir
+        runDir,
       ],
-      { TIMELAPSE_SIMULATE_NAVIGATION_FAILURE: "1" }
+      { TIMELAPSE_SIMULATE_NAVIGATION_FAILURE: "1" },
     );
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /navigation failed:/);
@@ -1366,19 +1675,28 @@ test("peek --latest exits non-zero with a clear error when no frames or fallback
     await fs.rm(path.join(runDir, "frames"), { recursive: true, force: true });
 
     const peekResult = runCli(["peek", runDir, "--latest"]);
-    assert.notEqual(peekResult.status, 0, "peek should exit non-zero when no frames or artifacts");
+    assert.notEqual(
+      peekResult.status,
+      0,
+      "peek should exit non-zero when no frames or artifacts",
+    );
     assert.match(peekResult.stderr, /Raw frames were cleaned up/);
     assert.match(peekResult.stderr, /poster\.png/);
     assert.match(peekResult.stderr, /latest-retained\.png/);
-    assert.ok(!peekResult.stdout.includes("frames/"),
-      "stdout should not mention a frames/ path");
+    assert.ok(
+      !peekResult.stdout.includes("frames/"),
+      "stdout should not mention a frames/ path",
+    );
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
 });
 
 test("status with missing run directory reports 'run directory not found'", async () => {
-  const missing = path.join(os.tmpdir(), `tlc-missing-${process.pid}-${Date.now()}`);
+  const missing = path.join(
+    os.tmpdir(),
+    `tlc-missing-${process.pid}-${Date.now()}`,
+  );
   const result = runCli(["status", missing]);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /run directory not found/);

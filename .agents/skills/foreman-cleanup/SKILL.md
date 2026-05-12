@@ -38,43 +38,48 @@ Run cleanup in an isolated worktree pinned to the target branch. Never `git stas
 
 Project docs are authoritative. Fall back to manifest inspection. Record `tools_detected` and `tools_skipped`. A repo may match multiple ecosystems; run all that are present.
 
-| Ecosystem | Manifest | Manager |
-|---|---|---|
-| Python | `pyproject.toml`, `setup.py` | `uv`, `pip` |
+| Ecosystem          | Manifest                           | Manager                              |
+| ------------------ | ---------------------------------- | ------------------------------------ |
+| Python             | `pyproject.toml`, `setup.py`       | `uv`, `pip`                          |
 | JS (no TypeScript) | `package.json`, no `tsconfig.json` | `npm`/`npx` — typecheck step skipped |
-| JS/TS | `package.json` + `tsconfig.json` | `npm`/`npx` |
-| Rust | `Cargo.toml` | `cargo` |
-| Go | `go.mod` | `go` |
-| Ruby | `Gemfile` | `bundle` |
-| Java/Kotlin | `pom.xml`, `build.gradle*` | `./mvnw`, `./gradlew` |
-| C# | `*.csproj`, `*.sln` | `dotnet` |
-| Swift | `Package.swift` | `swift` |
-| C/C++ | `CMakeLists.txt`, `Makefile` | `cmake`/`make` |
-| PHP | `composer.json` | `vendor/bin/...` |
-| Elixir | `mix.exs` | `mix` |
+| JS/TS              | `package.json` + `tsconfig.json`   | `npm`/`npx`                          |
+| Rust               | `Cargo.toml`                       | `cargo`                              |
+| Go                 | `go.mod`                           | `go`                                 |
+| Ruby               | `Gemfile`                          | `bundle`                             |
+| Java/Kotlin        | `pom.xml`, `build.gradle*`         | `./mvnw`, `./gradlew`                |
+| C#                 | `*.csproj`, `*.sln`                | `dotnet`                             |
+| Swift              | `Package.swift`                    | `swift`                              |
+| C/C++              | `CMakeLists.txt`, `Makefile`       | `cmake`/`make`                       |
+| PHP                | `composer.json`                    | `vendor/bin/...`                     |
+| Elixir             | `mix.exs`                          | `mix`                                |
 
 ## Step 3 — Auto-fix pass
 
 Run one tool at a time to avoid lockfile / cache contention. Only invoke tools that exist (`command -v <tool>` or `which <tool>`). Record every command executed.
 
 **Python:**
+
 - `command -v ruff` → `uv run ruff check --fix . && uv run ruff format .` (or `ruff` directly if uv absent)
 - If ruff absent: `command -v black` → `black .`; `command -v isort` → `isort .`
 
 **JS/TS:**
+
 - If `package.json` has a `lint` script → `npm run lint -- --fix` (attempt; skip if it exits non-zero due to missing `--fix` support)
 - `command -v prettier` or `prettier` in devDependencies → `npx prettier --write .`
 - `command -v eslint` → `npx eslint --fix .`
 
 **Rust:**
+
 - `cargo fmt`
 - `command -v cargo-clippy` → `cargo clippy --fix --allow-dirty --allow-staged 2>&1`
 
 **Go:**
+
 - `gofmt -w .`
 - `command -v golangci-lint` → `golangci-lint run --fix 2>&1`
 
 **Ruby:**
+
 - `bundle exec rubocop -A 2>&1` (only if Gemfile contains `rubocop`)
 
 **Other ecosystems:** record `auto_fix: skipped` — no language-agnostic auto-fixer available.
@@ -85,14 +90,14 @@ After all fixers run, check `git diff --stat` inside the worktree to determine w
 
 Run the type-checker and test suite for each detected ecosystem. These gates determine `success` but never mutate files.
 
-| Ecosystem | Type check | Test suite |
-|---|---|---|
-| Python | `uv run mypy src/` (or `mypy src/`) | `uv run pytest` (or `pytest`) |
-| JS/TS | see conditional block below | `npm test` |
-| Rust | `cargo check` | `cargo test` |
-| Go | `go vet ./...` | `go test ./...` |
-| Ruby | *(none)* | `bundle exec rspec` or `bundle exec rake test` |
-| Other | *(skip)* | *(skip)* |
+| Ecosystem | Type check                          | Test suite                                     |
+| --------- | ----------------------------------- | ---------------------------------------------- |
+| Python    | `uv run mypy src/` (or `mypy src/`) | `uv run pytest` (or `pytest`)                  |
+| JS/TS     | see conditional block below         | `npm test`                                     |
+| Rust      | `cargo check`                       | `cargo test`                                   |
+| Go        | `go vet ./...`                      | `go test ./...`                                |
+| Ruby      | _(none)_                            | `bundle exec rspec` or `bundle exec rake test` |
+| Other     | _(skip)_                            | _(skip)_                                       |
 
 **JS/TS typecheck — conditional logic (apply in order):**
 
@@ -120,6 +125,7 @@ If Step 3 produced a non-empty diff:
    git add -u
    ```
 3. Commit:
+
    ```
    git commit -m "chore: automated code-quality cleanup
 
@@ -127,6 +133,7 @@ If Step 3 produced a non-empty diff:
    Files changed: <N>
    Fixes applied: <N lint/format fixes>"
    ```
+
 4. Push and open a PR:
    ```
    gh pr create \
@@ -141,11 +148,13 @@ If `git diff --stat` was empty after Step 3, skip this step entirely. Emit `"pr_
 ## Step 6 — File issues for unfixable failures
 
 For each type-check or test failure from Step 4, check for an existing open issue before creating:
+
 ```
 gh issue list --search "<summary>" --label "foreman/cleanup" --state all --json number,title,state
 ```
 
 Skip creation if an open issue already covers the same root problem. Group failures by root cause (e.g., 50 mypy errors from one config gap = one issue). Create using:
+
 ```
 gh issue create \
   --title "Cleanup: <description>" \
@@ -166,10 +175,10 @@ git worktree remove --force "$CLEANUP_WORKTREE"
 {
   "success": true,
   "artifacts": [
-    {"type": "format", "status": "pass", "files_changed": 12},
-    {"type": "lint_fix", "status": "pass", "fixes_applied": 47},
-    {"type": "typecheck", "status": "pass", "errors": 0},
-    {"type": "test", "status": "pass", "passed": 124, "failed": 0}
+    { "type": "format", "status": "pass", "files_changed": 12 },
+    { "type": "lint_fix", "status": "pass", "fixes_applied": 47 },
+    { "type": "typecheck", "status": "pass", "errors": 0 },
+    { "type": "test", "status": "pass", "passed": 124, "failed": 0 }
   ],
   "tools_detected": ["ruff", "mypy", "pytest"],
   "tools_skipped": ["typescript", "rust"],

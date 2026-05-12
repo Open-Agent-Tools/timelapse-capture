@@ -18,7 +18,11 @@ test("waitUntilFrameTime uses one wait for short delays", async () => {
     now += ms;
   };
 
-  await __test__.waitUntilFrameTime(1_050, { now: nowProvider, wait, maxWaitMs: 200 });
+  await __test__.waitUntilFrameTime(1_050, {
+    now: nowProvider,
+    wait,
+    maxWaitMs: 200,
+  });
   assert.deepEqual(events, [50]);
 });
 
@@ -31,17 +35,33 @@ test("waitUntilFrameTime splits long delays into bounded chunks", async () => {
     now += ms;
   };
 
-  await __test__.waitUntilFrameTime(11_001, { now: nowProvider, wait, maxWaitMs: 250 });
+  await __test__.waitUntilFrameTime(11_001, {
+    now: nowProvider,
+    wait,
+    maxWaitMs: 250,
+  });
   assert.deepEqual(events, [250, 250, 250, 250, 1]);
-  assert.equal(events.reduce((sum, item) => sum + item, 0), 1_001);
+  assert.equal(
+    events.reduce((sum, item) => sum + item, 0),
+    1_001,
+  );
 });
 
 test("computeWaitSchedule clamps non-positive maxWaitMs to 1ms", () => {
   const now = () => 1_000;
-  const schedule = __test__.computeWaitSchedule(1_003, { now, maxWaitMs: -500 });
+  const schedule = __test__.computeWaitSchedule(1_003, {
+    now,
+    maxWaitMs: -500,
+  });
   assert.equal(schedule.length, 3);
-  assert.equal(schedule.every((value) => value === 1), true);
-  assert.equal(schedule.reduce((sum, value) => sum + value, 0), 3);
+  assert.equal(
+    schedule.every((value) => value === 1),
+    true,
+  );
+  assert.equal(
+    schedule.reduce((sum, value) => sum + value, 0),
+    3,
+  );
 });
 
 test("computeWaitSchedule returns no chunks when target equals now", () => {

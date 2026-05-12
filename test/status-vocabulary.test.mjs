@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import {
   CANONICAL_STATES,
   migrateLegacyState,
-  validateMP4
+  validateMP4,
 } from "../src/timelapse-capture.mjs";
 
 const require = createRequire(import.meta.url);
@@ -21,10 +21,15 @@ const __dirname = path.dirname(__filename);
 const CLI = path.join(__dirname, "..", "src", "timelapse-capture.mjs");
 
 test("CANONICAL_STATES exposes the unified vocabulary", () => {
-  assert.deepEqual(
-    [...CANONICAL_STATES].sort(),
-    ["completed", "failed", "render_failed", "rendered", "rendering", "running", "starting"]
-  );
+  assert.deepEqual([...CANONICAL_STATES].sort(), [
+    "completed",
+    "failed",
+    "render_failed",
+    "rendered",
+    "rendering",
+    "running",
+    "starting",
+  ]);
 });
 
 test("migrateLegacyState rewrites legacy done to completed and leaves canonical states untouched", () => {
@@ -38,7 +43,7 @@ test("importing the canonical CLI module has no dispatcher side effects", () => 
   const result = spawnSync(
     process.execPath,
     ["--input-type=module", "-e", `await import(${JSON.stringify(CLI)});`],
-    { encoding: "utf8" }
+    { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "");
@@ -58,33 +63,46 @@ test("status command migrates legacy done to completed without rewriting status.
       framesAttempted: 5,
       framesCaptured: 5,
       framesFailed: 0,
-      latestFrame: null
+      latestFrame: null,
     };
-    await fsp.writeFile(statusPath, `${JSON.stringify(legacyStatus, null, 2)}\n`);
+    await fsp.writeFile(
+      statusPath,
+      `${JSON.stringify(legacyStatus, null, 2)}\n`,
+    );
     await fsp.writeFile(configPath, JSON.stringify({ expectedFrames: 5 }));
 
     const before = await fsp.readFile(statusPath, "utf8");
-    const result = spawnSync(process.execPath, [CLI, "status", runDir, "--json"], { encoding: "utf8" });
+    const result = spawnSync(
+      process.execPath,
+      [CLI, "status", runDir, "--json"],
+      { encoding: "utf8" },
+    );
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.status.state, "completed");
     assert.deepEqual(payload.status.frames, {
       captured: 5,
       failed: 0,
-      totalExpected: 5
+      totalExpected: 5,
     });
     assert.equal(Object.hasOwn(payload.status, "framesCaptured"), false);
     assert.equal(Object.hasOwn(payload.status, "framesFailed"), false);
 
     const after = await fsp.readFile(statusPath, "utf8");
-    assert.equal(before, after, "status.json must not be rewritten by a read-only status migration");
+    assert.equal(
+      before,
+      after,
+      "status.json must not be rewritten by a read-only status migration",
+    );
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
 
 test("status --json parity fields present with legacy done state and run-summary, no status.json rewrite", async () => {
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-status-vocab-parity-"));
+  const runDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "tlc-status-vocab-parity-"),
+  );
   try {
     const statusPath = path.join(runDir, "status.json");
     const legacyStatus = {
@@ -93,18 +111,38 @@ test("status --json parity fields present with legacy done state and run-summary
       startedAt: "2026-04-30T14:00:00.000Z",
       updatedAt: "2026-04-30T15:00:00.000Z",
       framesCaptured: 2,
-      framesFailed: 0
+      framesFailed: 0,
     };
     const fakeOutputPath = path.join(runDir, "output.mp4");
     const summary = {
-      render: { outputPath: fakeOutputPath, bytes: 1000, sourceFrameCount: 2, timestamp: new Date().toISOString() },
-      cleanup: { success: true, removed: 2, retained: 0, timestamp: new Date().toISOString() }
+      render: {
+        outputPath: fakeOutputPath,
+        bytes: 1000,
+        sourceFrameCount: 2,
+        timestamp: new Date().toISOString(),
+      },
+      cleanup: {
+        success: true,
+        removed: 2,
+        retained: 0,
+        timestamp: new Date().toISOString(),
+      },
     };
-    await fsp.writeFile(statusPath, `${JSON.stringify(legacyStatus, null, 2)}\n`);
-    await fsp.writeFile(path.join(runDir, "run-summary.json"), JSON.stringify(summary, null, 2));
+    await fsp.writeFile(
+      statusPath,
+      `${JSON.stringify(legacyStatus, null, 2)}\n`,
+    );
+    await fsp.writeFile(
+      path.join(runDir, "run-summary.json"),
+      JSON.stringify(summary, null, 2),
+    );
 
     const before = await fsp.readFile(statusPath, "utf8");
-    const result = spawnSync(process.execPath, [CLI, "status", runDir, "--json"], { encoding: "utf8" });
+    const result = spawnSync(
+      process.execPath,
+      [CLI, "status", runDir, "--json"],
+      { encoding: "utf8" },
+    );
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.status.state, "completed");
@@ -113,7 +151,11 @@ test("status --json parity fields present with legacy done state and run-summary
     assert.ok(typeof payload.status.diskUsage?.runDirBytes === "number");
 
     const after = await fsp.readFile(statusPath, "utf8");
-    assert.equal(before, after, "status.json must not be rewritten when parity fields are populated");
+    assert.equal(
+      before,
+      after,
+      "status.json must not be rewritten when parity fields are populated",
+    );
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
@@ -130,12 +172,12 @@ test("source files do not write the legacy done state", async () => {
     "README.md",
     "skill/SKILL.md",
     "docs/PRD.md",
-    "package.json"
+    "package.json",
   ];
   const writePatterns = [
     /state:\s*['"]done['"]/,
     /state\s*===\s*['"]done['"]/,
-    /['"]state['"]\s*:\s*['"]done['"]/
+    /['"]state['"]\s*:\s*['"]done['"]/,
   ];
 
   for (const relative of targets) {
@@ -147,13 +189,19 @@ test("source files do not write the legacy done state", async () => {
     if (!content) continue;
     for (const pattern of writePatterns) {
       const match = content.match(pattern);
-      assert.equal(match, null, `Forbidden legacy "done" state write in ${relative}: ${match?.[0] ?? ""}`);
+      assert.equal(
+        match,
+        null,
+        `Forbidden legacy "done" state write in ${relative}: ${match?.[0] ?? ""}`,
+      );
     }
   }
 });
 
 test("validateMP4 surfaces non-ENOENT stat errors in validation output", async () => {
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-status-vocab-mp4-"));
+  const runDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "tlc-status-vocab-mp4-"),
+  );
   const outputPath = path.join(runDir, "output.mp4");
   const originalStatSync = nodeFs.statSync;
 
@@ -170,7 +218,10 @@ test("validateMP4 surfaces non-ENOENT stat errors in validation output", async (
 
     const result = validateMP4(outputPath);
     assert.equal(result.exists, true);
-    assert.equal(result.error, "Failed to stat output file: permission denied reading output.mp4");
+    assert.equal(
+      result.error,
+      "Failed to stat output file: permission denied reading output.mp4",
+    );
     assert.notEqual(result.error, "Output file is empty");
   } finally {
     nodeFs.statSync = originalStatSync;
@@ -179,7 +230,9 @@ test("validateMP4 surfaces non-ENOENT stat errors in validation output", async (
 });
 
 test("validateMP4 surfaces ENOENT stat errors instead of reporting an empty output file", async () => {
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-status-vocab-mp4-enoent-"));
+  const runDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "tlc-status-vocab-mp4-enoent-"),
+  );
   const outputPath = path.join(runDir, "output.mp4");
   const originalStatSync = nodeFs.statSync;
 
@@ -196,7 +249,10 @@ test("validateMP4 surfaces ENOENT stat errors instead of reporting an empty outp
 
     const result = validateMP4(outputPath);
     assert.equal(result.exists, true);
-    assert.equal(result.error, "Failed to stat output file: output file vanished before stat");
+    assert.equal(
+      result.error,
+      "Failed to stat output file: output file vanished before stat",
+    );
   } finally {
     nodeFs.statSync = originalStatSync;
     await fsp.rm(runDir, { recursive: true, force: true });

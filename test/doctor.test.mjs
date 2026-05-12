@@ -13,7 +13,7 @@ import {
   checkPlaywright,
   commandDoctor,
   formatDoctorHuman,
-  runAllChecks
+  runAllChecks,
 } from "../src/doctor.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,7 +38,7 @@ test("checkBinary reports parsed version output", async () => {
   const result = await checkBinary("ffmpeg", {
     execFileSync() {
       return "ffmpeg version 6.1 Copyright";
-    }
+    },
   });
 
   assert.equal(result.status, "pass");
@@ -51,29 +51,53 @@ test("checkBinary reports missing binaries with actionable fixes", async () => {
       const error = new Error("spawn ENOENT");
       error.code = "ENOENT";
       throw error;
-    }
+    },
   });
 
   assert.equal(result.status, "fail");
   assert.match(result.error, /ffprobe was not found/);
   assert.match(result.fix, /Install FFmpeg/);
   assert.match(result.message, /ffprobe is missing from PATH/);
-  assert.match(result.message, /tests and captures that require ffprobe should be skipped/);
+  assert.match(
+    result.message,
+    /tests and captures that require ffprobe should be skipped/,
+  );
 });
 
 test("DEFAULT_CHECKS locks the canonical doctor check order", () => {
   assert.deepEqual(
     DEFAULT_CHECKS.map((fn) => fn.name),
-    ["checkNode", "checkPlaywright", "checkChromium", "checkFfmpeg", "checkFfprobe"]
+    [
+      "checkNode",
+      "checkPlaywright",
+      "checkChromium",
+      "checkFfmpeg",
+      "checkFfprobe",
+    ],
   );
 });
 
 test("src/doctor.mjs is free of unresolved merge conflict markers", async () => {
-  const source = await readFile(new URL("../src/doctor.mjs", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("../src/doctor.mjs", import.meta.url),
+    "utf8",
+  );
 
-  assert.equal(source.includes("<<<<<<<"), false, "src/doctor.mjs must not contain a conflict start marker");
-  assert.equal(source.includes(">>>>>>>"), false, "src/doctor.mjs must not contain a conflict end marker");
-  assert.equal(/^=======\s*$/m.test(source), false, "src/doctor.mjs must not contain a bare conflict separator");
+  assert.equal(
+    source.includes("<<<<<<<"),
+    false,
+    "src/doctor.mjs must not contain a conflict start marker",
+  );
+  assert.equal(
+    source.includes(">>>>>>>"),
+    false,
+    "src/doctor.mjs must not contain a conflict end marker",
+  );
+  assert.equal(
+    /^=======\s*$/m.test(source),
+    false,
+    "src/doctor.mjs must not contain a bare conflict separator",
+  );
 });
 
 test("src/doctor.mjs imports cleanly as an ES module", async () => {
@@ -118,12 +142,12 @@ test("checkChromium reports browser close failures", async () => {
             return {
               async close() {
                 throw new Error("close failed");
-              }
+              },
             };
-          }
-        }
+          },
+        },
       };
-    }
+    },
   });
 
   assert.equal(result.status, "fail");
@@ -134,9 +158,22 @@ test("checkChromium reports browser close failures", async () => {
 test("runAllChecks returns summary counts and exit code", async () => {
   const result = await runAllChecks({
     checks: [
-      async () => ({ name: "one", status: "pass", message: "ok", fix: null, details: {} }),
-      async () => ({ name: "two", status: "fail", message: "bad", error: "bad", fix: "fix it", details: {} })
-    ]
+      async () => ({
+        name: "one",
+        status: "pass",
+        message: "ok",
+        fix: null,
+        details: {},
+      }),
+      async () => ({
+        name: "two",
+        status: "fail",
+        message: "bad",
+        error: "bad",
+        fix: "fix it",
+        details: {},
+      }),
+    ],
   });
 
   assert.equal(result.ok, false);
@@ -152,12 +189,17 @@ test("commandDoctor returns the structured agent payload", async () => {
         name: "node",
         status: "pass",
         message: "Node.js 25.0.0",
-        details: { version: "25.0.0" }
-      })
-    ]
+        details: { version: "25.0.0" },
+      }),
+    ],
   });
 
-  assert.deepEqual(Object.keys(result).sort(), ["checks", "exitCode", "ok", "summary"]);
+  assert.deepEqual(Object.keys(result).sort(), [
+    "checks",
+    "exitCode",
+    "ok",
+    "summary",
+  ]);
   assert.equal(result.checks[0].name, "node");
   assert.equal(result.exitCode, 0);
   assert.equal(result.checks[0].details.version, "25.0.0");
@@ -169,8 +211,14 @@ test("commandDoctor normalizes custom check payloads to the stable contract", as
   const result = await commandDoctor({
     checks: [
       async () => ({ name: "custom-pass", status: "pass", message: "ok" }),
-      async () => ({ name: "custom-fail", status: "fail", message: "broken", error: "broken", details: { reason: "bad" } })
-    ]
+      async () => ({
+        name: "custom-fail",
+        status: "fail",
+        message: "broken",
+        error: "broken",
+        details: { reason: "bad" },
+      }),
+    ],
   });
 
   assert.equal(result.ok, false);
@@ -183,7 +231,7 @@ test("commandDoctor normalizes custom check payloads to the stable contract", as
     message: "ok",
     details: {},
     error: null,
-    fix: null
+    fix: null,
   });
   assert.deepEqual(result.checks[1], {
     name: "custom-fail",
@@ -191,15 +239,21 @@ test("commandDoctor normalizes custom check payloads to the stable contract", as
     message: "broken",
     details: { reason: "bad" },
     error: "broken",
-    fix: null
+    fix: null,
   });
 });
 
 test("normalizeCheckResult coerces explicit undefined error/fix to null", async () => {
   const result = await commandDoctor({
     checks: [
-      async () => ({ name: "check", status: "pass", message: "ok", error: undefined, fix: undefined })
-    ]
+      async () => ({
+        name: "check",
+        status: "pass",
+        message: "ok",
+        error: undefined,
+        fix: undefined,
+      }),
+    ],
   });
 
   assert.strictEqual(result.checks[0].error, null);
@@ -219,15 +273,18 @@ test("checkPlaywright reports missing dependency with manual fix guidance", asyn
         resolve() {
           calls.push("resolve-playwright");
           throw error;
-        }
-      }
-    )
+        },
+      },
+    ),
   });
 
   assert.equal(result.status, "fail");
   assert.equal(result.name, "playwright");
   assert.equal(result.error, error.message);
-  assert.equal(result.fix, "Run npm install in this project. Do not rely on doctor to install dependencies.");
+  assert.equal(
+    result.fix,
+    "Run npm install in this project. Do not rely on doctor to install dependencies.",
+  );
   assert.equal(calls.includes("resolve-playwright"), true);
   assert.equal(result.message, "Playwright package cannot be imported");
 });
@@ -240,13 +297,16 @@ test("checkBinary attempts only version check command for missing ffmpeg/ffprobe
       const error = new Error("missing");
       error.code = "ENOENT";
       throw error;
-    }
+    },
   });
 
   assert.equal(result.status, "fail");
   assert.equal(execCalls.length, 1);
   assert.deepEqual(execCalls[0], { binary: "ffmpeg", args: ["-version"] });
-  assert.equal(result.fix, "Install FFmpeg and ensure ffmpeg is available on PATH.");
+  assert.equal(
+    result.fix,
+    "Install FFmpeg and ensure ffmpeg is available on PATH.",
+  );
   assert.match(result.message, /missing from PATH/);
 });
 
@@ -254,9 +314,14 @@ test("formatDoctorHuman prints pass/fail lines with fixes", () => {
   const output = formatDoctorHuman({
     checks: [
       { name: "node", status: "pass", message: "Node.js 25.0.0" },
-      { name: "ffmpeg", status: "fail", message: "ffmpeg unavailable", fix: "Install FFmpeg." }
+      {
+        name: "ffmpeg",
+        status: "fail",
+        message: "ffmpeg unavailable",
+        fix: "Install FFmpeg.",
+      },
     ],
-    summary: { pass: 1, fail: 1, total: 2 }
+    summary: { pass: 1, fail: 1, total: 2 },
   });
 
   assert.match(output, /\[PASS\] node: Node\.js 25\.0\.0/);
@@ -281,7 +346,7 @@ test("runAllChecks normalizes a check returning an empty object", async () => {
 
 test("runAllChecks coerces unknown status values to fail", async () => {
   const result = await runAllChecks({
-    checks: [async () => ({ name: "x", status: "weird", message: "hi" })]
+    checks: [async () => ({ name: "x", status: "weird", message: "hi" })],
   });
   assert.equal(result.checks[0].status, "fail");
   assert.equal(result.summary.fail, 1);
@@ -289,23 +354,33 @@ test("runAllChecks coerces unknown status values to fail", async () => {
   assert.equal(result.exitCode, 1);
 });
 
-test("formatDoctorHuman never prints \"undefined\" for malformed checks", async () => {
+test('formatDoctorHuman never prints "undefined" for malformed checks', async () => {
   const result = await runAllChecks({ checks: [async () => ({})] });
   const output = formatDoctorHuman(result);
-  assert.ok(output.includes("[FAIL] unknown:"), `Expected "[FAIL] unknown:" in output: ${output}`);
-  assert.ok(!output.includes("undefined"), `Expected no "undefined" in output: ${output}`);
+  assert.ok(
+    output.includes("[FAIL] unknown:"),
+    `Expected "[FAIL] unknown:" in output: ${output}`,
+  );
+  assert.ok(
+    !output.includes("undefined"),
+    `Expected no "undefined" in output: ${output}`,
+  );
 });
 
 test("doctor --json emits parseable JSON and exits non-zero when a dependency is missing", () => {
   const result = spawnSync(process.execPath, [CLI, "doctor", "--json"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: "" }
+    env: { ...process.env, PATH: "" },
   });
 
   assert.notEqual(result.status, 0);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.ok, false);
-  assert.ok(payload.checks.some((check) => check.name === "ffmpeg" && check.status === "fail"));
+  assert.ok(
+    payload.checks.some(
+      (check) => check.name === "ffmpeg" && check.status === "fail",
+    ),
+  );
   assert.equal(result.stderr, "");
   assert.equal(payload.exitCode, result.status);
 });
@@ -313,7 +388,7 @@ test("doctor --json emits parseable JSON and exits non-zero when a dependency is
 test("doctor without --json emits human-readable output and summary", () => {
   const result = spawnSync(process.execPath, [CLI, "doctor"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: "" }
+    env: { ...process.env, PATH: "" },
   });
 
   assert.notEqual(result.status, 0);
