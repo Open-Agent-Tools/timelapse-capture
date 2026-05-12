@@ -38,6 +38,8 @@ const SIMULATION_FRAME_PNG_BASE64 =
 const SIMULATION_FRAME_PNG = Buffer.from(SIMULATION_FRAME_PNG_BASE64, "base64");
 const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set(["ENOENT", "ENOTEMPTY", "EEXIST"]);
 const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
+const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
+const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
 
 export class ParseError extends Error {
   constructor(code, message) {
@@ -1261,7 +1263,7 @@ async function listFrameFiles(runDir) {
     throw error;
   });
   return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".png"))
+    .filter((entry) => entry.isFile() && isFrameFile(entry.name))
     .map((entry) => entry.name)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
@@ -1426,7 +1428,7 @@ export function getSummaryPath(runDir) {
 function countFrameFiles(framesDir) {
   if (!fs.existsSync(framesDir)) return 0;
   const files = fs.readdirSync(framesDir);
-  return files.filter((file) => /\.(png|jpg|jpeg)$/i.test(file)).length;
+  return files.filter(isFrameFile).length;
 }
 
 function fileSize(filePath) {
@@ -1523,7 +1525,8 @@ function copySamplesSync(framesDir, runDir, count) {
   fs.mkdirSync(samplesDir, { recursive: true });
   const samplePaths = [];
   for (let i = 0; i < samples.length; i++) {
-    const destName = `sample-${String(i + 1).padStart(6, "0")}.png`;
+    const ext = path.extname(samples[i]);
+    const destName = `sample-${String(i + 1).padStart(6, "0")}${ext}`;
     const dest = path.join(samplesDir, destName);
     fs.copyFileSync(path.join(framesDir, samples[i]), dest);
     samplePaths.push(`samples/${destName}`);
@@ -1544,7 +1547,7 @@ export function cleanupFrames(runDir, options = {}) {
     return { success: false, removed, bytesFreed, error: error.message };
   }
   const files = fs.readdirSync(framesDir)
-    .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
+    .filter(isFrameFile)
     .sort();
 
   const retained = new Set();
@@ -1623,7 +1626,7 @@ function listFrameFilesSync(framesDir) {
   if (!fs.existsSync(framesDir)) return [];
   return fs
     .readdirSync(framesDir)
-    .filter((name) => /\.png$/i.test(name))
+    .filter(isFrameFile)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
@@ -2146,5 +2149,8 @@ export const __test__ = {
   formatDuration,
   writeJsonSync,
   computeWaitSchedule,
-  waitUntilFrameTime
+  waitUntilFrameTime,
+  countFrameFiles,
+  listFrameFiles,
+  listFrameFilesSync
 };
