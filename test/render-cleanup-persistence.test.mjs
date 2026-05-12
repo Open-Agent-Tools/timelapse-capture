@@ -83,8 +83,11 @@ test("render respects keep-samples from config.json", async () => {
       }
     });
 
-    const frames = await fs.readdir(framesDir);
-    assert.deepEqual(frames.sort(), ["frame-0001.png", "frame-0003.png"], "Should keep first and last frame");
+    const samples = await fs.readdir(path.join(runDir, "samples"));
+    assert.equal(samples.length, 2, "Should keep two sampled frames");
+    assert.ok(samples.every((name) => /^sample-\d+\.png$/.test(name)), "Sample filenames should use sample-*.png format");
+    const framesExist = await fs.access(framesDir).then(() => true, () => false);
+    assert.equal(framesExist, false, "Frames directory should be removed after keep-samples cleanup");
     
     const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
     assert.equal(summary.cleanup.source, "config", "Cleanup source should be 'config'");
