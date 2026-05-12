@@ -69,7 +69,9 @@ test("commandStatus ignores ENOENT from frame stat during traversal", async () =
 });
 
 test("commandStatus ignores ENOTDIR from frame stat during traversal", async () => {
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
+  const runDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "tlc-fs-errors-status-"),
+  );
   const framesDir = path.join(runDir, "frames");
   const framePath = path.join(framesDir, "frame-0001.png");
   const originalStat = fsp.stat;

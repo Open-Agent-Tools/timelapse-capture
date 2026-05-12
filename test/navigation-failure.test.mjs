@@ -30,8 +30,13 @@ async function waitForFailedStatus(runDir, { timeoutMs = 5000 } = {}) {
     try {
       const statusPath = path.join(runDir, "status.json");
       const jobPath = path.join(runDir, "job.json");
-      
-      if (await fs.access(statusPath).then(() => true).catch(() => false)) {
+
+      if (
+        await fs
+          .access(statusPath)
+          .then(() => true)
+          .catch(() => false)
+      ) {
         status = JSON.parse(await fs.readFile(statusPath, "utf8"));
         if (status.state === "failed") {
           return status;
@@ -79,10 +84,15 @@ test("initial navigation failure should leave diagnostic manifest record", async
     assert.match(status.error, /navigation failed/);
 
     const manifestPath = path.join(runDir, "manifest.jsonl");
-    const manifestExists = await fs.access(manifestPath).then(() => true).catch(() => false);
-    
+    const manifestExists = await fs
+      .access(manifestPath)
+      .then(() => true)
+      .catch(() => false);
+
     if (!manifestExists) {
-        assert.fail("manifest.jsonl does not exist after initial navigation failure");
+      assert.fail(
+        "manifest.jsonl does not exist after initial navigation failure",
+      );
     }
 
     const manifestLines = (await fs.readFile(manifestPath, "utf8"))
@@ -90,8 +100,11 @@ test("initial navigation failure should leave diagnostic manifest record", async
       .split(/\r?\n/)
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-    
-    assert.ok(manifestLines.length > 0, "Manifest should have at least one record");
+
+    assert.ok(
+      manifestLines.length > 0,
+      "Manifest should have at least one record",
+    );
     assert.equal(manifestLines[0].status, "failed");
     assert.match(manifestLines[0].error, /navigation failed/);
   } finally {
@@ -100,7 +113,9 @@ test("initial navigation failure should leave diagnostic manifest record", async
 });
 
 test("initial navigation failure simulation (playwright backend) should leave diagnostic manifest record", async () => {
-  const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-repro-298-sim-pw-"));
+  const outDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-repro-298-sim-pw-"),
+  );
   try {
     const result = runCli(
       [
@@ -132,17 +147,22 @@ test("initial navigation failure simulation (playwright backend) should leave di
       .split(/\r?\n/)
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-    
+
     assert.ok(manifestLines.length > 0);
     assert.equal(manifestLines[0].status, "failed");
-    assert.match(manifestLines[0].error, /simulated initial navigation failure/);
+    assert.match(
+      manifestLines[0].error,
+      /simulated initial navigation failure/,
+    );
   } finally {
     await fs.rm(outDir, { recursive: true, force: true });
   }
 });
 
 test("initial navigation failure simulation (simulated backend) should leave diagnostic manifest record", async () => {
-  const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-repro-298-sim-sim-"));
+  const outDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-repro-298-sim-sim-"),
+  );
   try {
     const result = runCli(
       [
@@ -175,12 +195,14 @@ test("initial navigation failure simulation (simulated backend) should leave dia
       .split(/\r?\n/)
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-    
+
     assert.ok(manifestLines.length > 0);
     assert.equal(manifestLines[0].status, "failed");
-    assert.match(manifestLines[0].error, /simulated initial navigation failure/);
+    assert.match(
+      manifestLines[0].error,
+      /simulated initial navigation failure/,
+    );
   } finally {
     await fs.rm(outDir, { recursive: true, force: true });
   }
 });
-

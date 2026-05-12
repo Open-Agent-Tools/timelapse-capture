@@ -19,13 +19,16 @@ export const CANONICAL_STATES = Object.freeze([
   "failed",
   "rendering",
   "rendered",
-  "render_failed"
+  "render_failed",
 ]);
 
 const LEGACY_STATE_MIGRATIONS = Object.freeze({ done: "completed" });
 
 export function migrateLegacyState(state) {
-  if (state && Object.prototype.hasOwnProperty.call(LEGACY_STATE_MIGRATIONS, state)) {
+  if (
+    state &&
+    Object.prototype.hasOwnProperty.call(LEGACY_STATE_MIGRATIONS, state)
+  ) {
     return LEGACY_STATE_MIGRATIONS[state];
   }
   return state;
@@ -36,12 +39,16 @@ export function migrateLegacyState(state) {
 const SIMULATION_FRAME_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAC0lEQVR4nGNgYAAAAAIAAdde3rAAAAAElFTkSuQmCA==";
 const SIMULATION_FRAME_PNG = Buffer.from(SIMULATION_FRAME_PNG_BASE64, "base64");
-const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set(["ENOENT", "ENOTEMPTY", "EEXIST"]);
+const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set([
+  "ENOENT",
+  "ENOTEMPTY",
+  "EEXIST",
+]);
 const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
 const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
 const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
 const BACKEND_MIN_INTERVAL_MS = Object.freeze({
-  "playwright-url": 1000
+  "playwright-url": 1000,
 });
 
 export class ParseError extends Error {
@@ -66,47 +73,47 @@ const COMMAND_SCHEMAS = {
       "cleanup",
       "keep-samples",
       "wait-until",
-      "backend"
+      "backend",
     ],
-    boolFlags: ["json", "force", "help", "headed", "keep-frames", "keep-latest"]
+    boolFlags: [
+      "json",
+      "force",
+      "help",
+      "headed",
+      "keep-frames",
+      "keep-latest",
+    ],
   },
   capture: {
     positional: [],
     valueFlags: ["run"],
-    boolFlags: ["help"]
+    boolFlags: ["help"],
   },
   status: {
     positional: ["runDir"],
     valueFlags: [],
-    boolFlags: ["json", "help"]
+    boolFlags: ["json", "help"],
   },
   render: {
     positional: ["runDir"],
     valueFlags: ["output", "keep-samples"],
-    boolFlags: ["json", "force", "help", "keep-frames", "keep-all"]
+    boolFlags: ["json", "force", "help", "keep-frames", "keep-all"],
   },
   peek: {
     positional: ["runDir"],
     valueFlags: ["index", "near"],
-    boolFlags: ["json", "help", "latest"]
+    boolFlags: ["json", "help", "latest"],
   },
   cleanup: {
     positional: ["runDir"],
     valueFlags: ["keep-samples"],
-    boolFlags: [
-      "frames",
-      "all",
-      "force",
-      "help",
-      "keep-frames",
-      "keep-latest"
-    ]
+    boolFlags: ["frames", "all", "force", "help", "keep-frames", "keep-latest"],
   },
   doctor: {
     positional: [],
     valueFlags: [],
-    boolFlags: ["json", "help"]
-  }
+    boolFlags: ["json", "help"],
+  },
 };
 
 const SHORT_FLAGS = { j: "json", f: "force", h: "help" };
@@ -170,7 +177,10 @@ export async function main(argv) {
     case "doctor":
       return runDoctorCli(parsed);
     default:
-      throw new ParseError("E_UNKNOWN_COMMAND", `Unknown command: ${parsed.command}`);
+      throw new ParseError(
+        "E_UNKNOWN_COMMAND",
+        `Unknown command: ${parsed.command}`,
+      );
   }
 }
 
@@ -236,7 +246,10 @@ export function parseArgs(argv) {
               options[key] = true;
               continue;
             }
-            throw new ParseError("E_MISSING_VALUE", `Missing value for --${key}`);
+            throw new ParseError(
+              "E_MISSING_VALUE",
+              `Missing value for --${key}`,
+            );
           }
           value = next;
           i += 1;
@@ -256,7 +269,7 @@ export function parseArgs(argv) {
 
       throw new ParseError(
         "E_UNKNOWN_FLAG",
-        `Unknown flag for ${command}: ${token}`
+        `Unknown flag for ${command}: ${token}`,
       );
     }
 
@@ -274,15 +287,16 @@ export function parseArgs(argv) {
 
   const expected = schema.positional.length;
   if (positional.length < expected) {
-    const msg = command === "start"
-      ? "Missing URL. Pass it positionally (start <url>) or via --url."
-      : `Missing required argument for ${command}`;
+    const msg =
+      command === "start"
+        ? "Missing URL. Pass it positionally (start <url>) or via --url."
+        : `Missing required argument for ${command}`;
     throw new ParseError("E_MISSING_ARGUMENT", msg);
   }
   if (positional.length > expected) {
     throw new ParseError(
       "E_EXTRA_ARGUMENT",
-      `Too many positional arguments for ${command}`
+      `Too many positional arguments for ${command}`,
     );
   }
 
@@ -294,10 +308,14 @@ export function parseArgs(argv) {
   if (command === "start" && !options.duration) {
     throw new ParseError("E_MISSING_VALUE", "Missing --duration.");
   }
-  if (command === "start" && options["video-length"] && options.interval !== undefined) {
+  if (
+    command === "start" &&
+    options["video-length"] &&
+    options.interval !== undefined
+  ) {
     throw new ParseError(
       "E_MUTUALLY_EXCLUSIVE",
-      "--video-length and --interval cannot be used together."
+      "--video-length and --interval cannot be used together.",
     );
   }
 
@@ -311,7 +329,7 @@ function assertBoolFlag(command, schema, key, token) {
   if (!schema.boolFlags.includes(key)) {
     throw new ParseError(
       "E_UNKNOWN_FLAG",
-      `Unknown flag for ${command}: ${token}`
+      `Unknown flag for ${command}: ${token}`,
     );
   }
 }
@@ -333,14 +351,20 @@ function parseValueFlag(flag, value) {
   if (flag === "video-length") {
     const parsed = parseDuration(value);
     if (parsed.ms === 0) {
-      throw new ParseError("E_BAD_VIDEO_LENGTH", `Invalid video length: ${value}`);
+      throw new ParseError(
+        "E_BAD_VIDEO_LENGTH",
+        `Invalid video length: ${value}`,
+      );
     }
     return parsed;
   }
   if (flag === "fps" || flag === "keep-samples") {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      throw new ParseError(`E_BAD_${flag.toUpperCase().replace(/-/g, "_")}`, `Invalid ${flag}: ${value}`);
+      throw new ParseError(
+        `E_BAD_${flag.toUpperCase().replace(/-/g, "_")}`,
+        `Invalid ${flag}: ${value}`,
+      );
     }
     return parsed;
   }
@@ -349,7 +373,7 @@ function parseValueFlag(flag, value) {
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
       throw new ParseError(
         "E_BAD_INDEX",
-        `Invalid numeric value for --${flag}: ${value}`
+        `Invalid numeric value for --${flag}: ${value}`,
       );
     }
     return parsed;
@@ -361,7 +385,10 @@ function parseValueFlag(flag, value) {
       !/^\d{4}-\d{2}-\d{2}T/.test(value) ||
       !Number.isFinite(parsed)
     ) {
-      throw new ParseError("E_BAD_TIMESTAMP", `Invalid ISO timestamp for --near: ${value}`);
+      throw new ParseError(
+        "E_BAD_TIMESTAMP",
+        `Invalid ISO timestamp for --near: ${value}`,
+      );
     }
     return new Date(parsed).toISOString();
   }
@@ -373,7 +400,9 @@ export function parseDuration(input) {
     throw new ParseError("E_BAD_DURATION", `Invalid duration: ${input}`);
   }
   const normalized = input.trim().toLowerCase();
-  const match = normalized.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?(?:(\d+)ms)?$/);
+  const match = normalized.match(
+    /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?(?:(\d+)ms)?$/,
+  );
   if (!match) {
     throw new ParseError("E_BAD_DURATION", `Invalid duration: ${input}`);
   }
@@ -385,12 +414,16 @@ export function parseDuration(input) {
   const minutes = Number.parseInt(match[2] || "0", 10);
   const seconds = Number.parseInt(match[3] || "0", 10);
   const ms = Number.parseInt(match[4] || "0", 10);
-  if ([hours, minutes, seconds, ms].some((value) => !Number.isFinite(value) || value < 0)) {
+  if (
+    [hours, minutes, seconds, ms].some(
+      (value) => !Number.isFinite(value) || value < 0,
+    )
+  ) {
     throw new ParseError("E_BAD_DURATION", `Invalid duration: ${input}`);
   }
   return {
     input,
-    ms: hours * 3_600_000 + minutes * 60_000 + seconds * 1000 + ms
+    ms: hours * 3_600_000 + minutes * 60_000 + seconds * 1000 + ms,
   };
 }
 
@@ -440,8 +473,16 @@ function slugify(input) {
 }
 
 function defaultRunDir(url) {
-  const slug = slugify(String(url).replace(/^https?:\/\//, "").replace(/[:/]+/g, "-"));
-  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  const slug = slugify(
+    String(url)
+      .replace(/^https?:\/\//, "")
+      .replace(/[:/]+/g, "-"),
+  );
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\..+$/, "")
+    .replace("T", "-");
   return path.join(process.cwd(), "timelapse-runs", `${slug}-${stamp}`);
 }
 
@@ -470,7 +511,10 @@ async function readJsonOptional(file) {
 }
 
 async function appendLog(runDir, message) {
-  await fsp.appendFile(path.join(runDir, "capture.log"), `[${nowIso()}] ${message}\n`);
+  await fsp.appendFile(
+    path.join(runDir, "capture.log"),
+    `[${nowIso()}] ${message}\n`,
+  );
 }
 
 function appendLogSync(runDir, filename, message) {
@@ -478,7 +522,8 @@ function appendLogSync(runDir, filename, message) {
   while (lines.length > 0 && lines.at(-1) === "") lines.pop();
   if (lines.length === 0) return;
 
-  const payload = lines.map((line) => `[${nowIso()}] ${line}`).join("\n") + "\n";
+  const payload =
+    lines.map((line) => `[${nowIso()}] ${line}`).join("\n") + "\n";
   fs.appendFileSync(path.join(runDir, filename), payload, "utf8");
 }
 
@@ -528,7 +573,7 @@ function removeEmptyDirSync(dir) {
     }
     return {
       success: false,
-      error: formatFsError("Failed to remove frames directory", dir, error)
+      error: formatFsError("Failed to remove frames directory", dir, error),
     };
   }
 }
@@ -543,17 +588,19 @@ async function removeEmptyDir(dir) {
     }
     return {
       success: false,
-      error: formatFsError("Failed to remove frames directory", dir, error)
+      error: formatFsError("Failed to remove frames directory", dir, error),
     };
   }
 }
 
 async function reduceDir(dir, fn, init) {
   let acc = init;
-  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch((error) => {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return [];
-    throw error;
-  });
+  const entries = await fsp
+    .readdir(dir, { withFileTypes: true })
+    .catch((error) => {
+      if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return [];
+      throw error;
+    });
   for (const entry of entries) {
     const itemPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -565,14 +612,19 @@ async function reduceDir(dir, fn, init) {
   return acc;
 }
 
-const directorySize = (dir) => reduceDir(dir, async (sum, file) => {
-  try {
-    return sum + (await fsp.stat(file)).size;
-  } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return sum;
-    throw error;
-  }
-}, 0);
+const directorySize = (dir) =>
+  reduceDir(
+    dir,
+    async (sum, file) => {
+      try {
+        return sum + (await fsp.stat(file)).size;
+      } catch (error) {
+        if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return sum;
+        throw error;
+      }
+    },
+    0,
+  );
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -581,7 +633,9 @@ function formatBytes(bytes) {
 }
 
 function estimateFrameBytes(viewport) {
-  return Math.ceil(((viewport?.width || 1280) * (viewport?.height || 720) * 3) / 4);
+  return Math.ceil(
+    ((viewport?.width || 1280) * (viewport?.height || 720) * 3) / 4,
+  );
 }
 
 function estimateDiskBytes(viewport, targetFrames) {
@@ -604,7 +658,10 @@ async function safePageTitle(page) {
   }
 }
 
-function computeWaitSchedule(targetTimestampMs, { now = Date.now, maxWaitMs = 1000 } = {}) {
+function computeWaitSchedule(
+  targetTimestampMs,
+  { now = Date.now, maxWaitMs = 1000 } = {},
+) {
   const delay = Math.max(0, Math.round(targetTimestampMs - now()));
   if (delay <= 0) return [];
   const clampedMaxWaitMs = Math.max(1, Math.floor(maxWaitMs));
@@ -624,8 +681,8 @@ async function waitUntilFrameTime(
     now = Date.now,
     wait = (ms, options) => setTimeoutPromise(ms, undefined, options),
     maxWaitMs = 1000,
-    signal
-  } = {}
+    signal,
+  } = {},
 ) {
   const schedule = computeWaitSchedule(targetTimestampMs, { now, maxWaitMs });
   for (const chunkMs of schedule) {
@@ -646,7 +703,7 @@ async function writeStartArtifacts(runDir, state) {
   const manifest = {
     runDir,
     createdAt: nowIso(),
-    state: state.state
+    state: state.state,
   };
   const config = {
     version: VERSION,
@@ -667,7 +724,7 @@ async function writeStartArtifacts(runDir, state) {
     keepLatest: state.keepLatest,
     waitUntil: state.waitUntil,
     headed: state.headed,
-    createdAt: nowIso()
+    createdAt: nowIso(),
   };
   const job = {
     runDir,
@@ -677,7 +734,7 @@ async function writeStartArtifacts(runDir, state) {
     parentPid: state.parentPid ?? process.pid,
     command: state.command ?? null,
     detached: Boolean(state.detached),
-    createdAt: nowIso()
+    createdAt: nowIso(),
   };
   await writeJsonAtomic(path.join(runDir, "manifest.json"), manifest);
   await writeJsonAtomic(path.join(runDir, "config.json"), config);
@@ -688,16 +745,24 @@ async function writeStartArtifacts(runDir, state) {
 async function writeJob(runDir, job) {
   await writeJsonAtomic(path.join(runDir, "job.json"), {
     ...job,
-    updatedAt: nowIso()
+    updatedAt: nowIso(),
   });
 }
 
 function buildStatusPayload(state) {
-  const startedAtMs = state.startedAt ? new Date(state.startedAt).getTime() : Date.now();
+  const startedAtMs = state.startedAt
+    ? new Date(state.startedAt).getTime()
+    : Date.now();
   const elapsedMs = Math.max(0, Date.now() - startedAtMs);
-  const frameCount = state.frames?.captured ?? state.frameCount ?? state.framesCaptured ?? 0;
-  const failedFrameCount = state.frames?.failed ?? state.failedFrameCount ?? state.framesFailed ?? 0;
-  const skippedFrameCount = state.frames?.skipped ?? state.skippedFrameCount ?? state.framesSkipped ?? 0;
+  const frameCount =
+    state.frames?.captured ?? state.frameCount ?? state.framesCaptured ?? 0;
+  const failedFrameCount =
+    state.frames?.failed ?? state.failedFrameCount ?? state.framesFailed ?? 0;
+  const skippedFrameCount =
+    state.frames?.skipped ??
+    state.skippedFrameCount ??
+    state.framesSkipped ??
+    0;
   const totalExpected = Number.isFinite(state.frames?.totalExpected)
     ? state.frames.totalExpected
     : Number.isFinite(state.targetFrames)
@@ -707,16 +772,27 @@ function buildStatusPayload(state) {
   const stateName = state.state || "starting";
   const etaMs =
     stateName === "running"
-      ? Math.max(0, (totalExpected - completedAttempts) * (state.intervalMs || 0))
+      ? Math.max(
+          0,
+          (totalExpected - completedAttempts) * (state.intervalMs || 0),
+        )
       : 0;
-  const latestFrameTimestamp = state.latestFrameTimestamp || state.latestFrameAt || null;
-  let staleWarning = { isStale: false, intervalMs: state.intervalMs || null, ageMs: null };
+  const latestFrameTimestamp =
+    state.latestFrameTimestamp || state.latestFrameAt || null;
+  let staleWarning = {
+    isStale: false,
+    intervalMs: state.intervalMs || null,
+    ageMs: null,
+  };
   if (stateName === "running" && latestFrameTimestamp && state.intervalMs) {
-    const ageMs = Math.max(0, Date.now() - new Date(latestFrameTimestamp).getTime());
+    const ageMs = Math.max(
+      0,
+      Date.now() - new Date(latestFrameTimestamp).getTime(),
+    );
     staleWarning = {
       isStale: ageMs > state.intervalMs,
       intervalMs: state.intervalMs,
-      ageMs
+      ageMs,
     };
   }
   return {
@@ -727,7 +803,7 @@ function buildStatusPayload(state) {
       failed: failedFrameCount,
       skipped: skippedFrameCount,
       attempted: completedAttempts,
-      totalExpected
+      totalExpected,
     },
     latestFrame: state.latestFrame || null,
     latestFrameTimestamp,
@@ -741,7 +817,7 @@ function buildStatusPayload(state) {
     backendMinIntervalMs: state.backendMinIntervalMs ?? null,
     intervalClamped: Boolean(state.intervalClamped),
     estimatedDiskBytes: state.estimatedDiskBytes ?? null,
-    error: state.error || null
+    error: state.error || null,
   };
 }
 
@@ -754,7 +830,8 @@ async function writeStatus(runDir, state) {
 function inferStateFromStatus(status) {
   if (!status) return "idle";
   if (status.state) return status.state;
-  const failedFrameCount = status.frames?.failed ?? status.failedFrameCount ?? 0;
+  const failedFrameCount =
+    status.frames?.failed ?? status.failedFrameCount ?? 0;
   const frameCount = status.frames?.captured ?? status.frameCount ?? 0;
   if (failedFrameCount > 0 && frameCount === 0) return "failed";
   if (status.lastUpdatedAt) return "completed";
@@ -767,9 +844,28 @@ async function writeFakeFrame(runDir, index) {
   return filename;
 }
 
-async function recordCapturedFrame({ state, runDir, manifestPath, index, scheduledAt, filename, url, title }) {
+async function recordCapturedFrame({
+  state,
+  runDir,
+  manifestPath,
+  index,
+  scheduledAt,
+  filename,
+  url,
+  title,
+}) {
   const capturedAt = nowIso();
-  const record = { index, scheduledAt, capturedAt, path: filename, status: "captured", url, title: title ?? null, viewport: state.viewport, error: null };
+  const record = {
+    index,
+    scheduledAt,
+    capturedAt,
+    path: filename,
+    status: "captured",
+    url,
+    title: title ?? null,
+    viewport: state.viewport,
+    error: null,
+  };
   state.frameCount += 1;
   state.latestFrame = filename;
   state.latestFrameAt = capturedAt;
@@ -782,23 +878,66 @@ async function recordCapturedFrame({ state, runDir, manifestPath, index, schedul
   await writeStatus(runDir, state);
 }
 
-async function recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url, title, error }) {
+async function recordFailedFrame({
+  state,
+  runDir,
+  manifestPath,
+  index,
+  scheduledAt,
+  url,
+  title,
+  error,
+}) {
   state.failedFrameCount += 1;
   state.lastUpdatedAt = nowIso();
-  const record = { index, scheduledAt, capturedAt: null, path: null, status: "failed", url, title: title ?? null, viewport: state.viewport, error };
+  const record = {
+    index,
+    scheduledAt,
+    capturedAt: null,
+    path: null,
+    status: "failed",
+    url,
+    title: title ?? null,
+    viewport: state.viewport,
+    error,
+  };
   await appendJsonLine(manifestPath, record);
   await writeStatus(runDir, state);
 }
 
-async function recordSkippedFrame({ state, runDir, manifestPath, index, scheduledAt, url, title, reason }) {
+async function recordSkippedFrame({
+  state,
+  runDir,
+  manifestPath,
+  index,
+  scheduledAt,
+  url,
+  title,
+  reason,
+}) {
   state.skippedFrameCount += 1;
   state.lastUpdatedAt = nowIso();
-  const record = { index, scheduledAt, capturedAt: null, path: null, status: "skipped", url, title: title ?? null, viewport: state.viewport, error: reason };
+  const record = {
+    index,
+    scheduledAt,
+    capturedAt: null,
+    path: null,
+    status: "skipped",
+    url,
+    title: title ?? null,
+    viewport: state.viewport,
+    error: reason,
+  };
   await appendJsonLine(manifestPath, record);
   await writeStatus(runDir, state);
 }
 
-async function captureWithPlaywright({ runDir, state, framesDir, manifestPath }) {
+async function captureWithPlaywright({
+  runDir,
+  state,
+  framesDir,
+  manifestPath,
+}) {
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ headless: !state.headed });
   let page;
@@ -808,7 +947,10 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
       if (process.env.TIMELAPSE_SIMULATE_INITIAL_NAVIGATION_FAILURE === "1") {
         throw new Error("simulated initial navigation failure");
       }
-      await page.goto(state.target, { waitUntil: state.waitUntil, timeout: 60_000 });
+      await page.goto(state.target, {
+        waitUntil: state.waitUntil,
+        timeout: 60_000,
+      });
     } catch (error) {
       const scheduledAt = new Date(state.startedAt).toISOString();
       await recordFailedFrame({
@@ -818,29 +960,51 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
         index: 1,
         scheduledAt,
         url: state.target,
-        error: `navigation failed: ${error?.message || error}`
+        error: `navigation failed: ${error?.message || error}`,
       });
       throw new Error(`navigation failed: ${error?.message || error}`);
     }
 
     const startedAtMs = new Date(state.startedAt).getTime();
     for (let index = 1; index <= state.targetFrames; index += 1) {
-      const scheduledAtMs = startedAtMs + Math.round((index - 1) * (state.intervalMs || 0));
+      const scheduledAtMs =
+        startedAtMs + Math.round((index - 1) * (state.intervalMs || 0));
       await waitUntilFrameTime(scheduledAtMs, {
-        maxWaitMs: Math.min(1_000, state.intervalMs || 1_000)
+        maxWaitMs: Math.min(1_000, state.intervalMs || 1_000),
       });
 
       const filename = path.join(framesDir, frameName(index));
-      const tempPath = path.join(framesDir, `.tmp-${process.pid}-${frameName(index)}`);
+      const tempPath = path.join(
+        framesDir,
+        `.tmp-${process.pid}-${frameName(index)}`,
+      );
       const scheduledAt = new Date(scheduledAtMs).toISOString();
       try {
         await page.screenshot({ path: tempPath, fullPage: false });
         await fsp.rename(tempPath, filename);
         const title = await safePageTitle(page);
-        await recordCapturedFrame({ state, runDir, manifestPath, index, scheduledAt, filename, url: page.url(), title });
+        await recordCapturedFrame({
+          state,
+          runDir,
+          manifestPath,
+          index,
+          scheduledAt,
+          filename,
+          url: page.url(),
+          title,
+        });
       } catch (error) {
         await removeIfExists(tempPath);
-        await recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url: page?.url?.() ?? state.target, title: await safePageTitle(page), error: error?.message || String(error) });
+        await recordFailedFrame({
+          state,
+          runDir,
+          manifestPath,
+          index,
+          scheduledAt,
+          url: page?.url?.() ?? state.target,
+          title: await safePageTitle(page),
+          error: error?.message || String(error),
+        });
       }
     }
   } finally {
@@ -848,7 +1012,10 @@ async function captureWithPlaywright({ runDir, state, framesDir, manifestPath })
       try {
         await browser.close();
       } catch (error) {
-        await appendLog(runDir, `browser close failed: ${error?.stack || error}`);
+        await appendLog(
+          runDir,
+          `browser close failed: ${error?.stack || error}`,
+        );
         throw error;
       }
     }
@@ -865,7 +1032,7 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
       index: 1,
       scheduledAt,
       url: state.target,
-      error: "navigation failed: simulated initial navigation failure"
+      error: "navigation failed: simulated initial navigation failure",
     });
     throw new Error("navigation failed: simulated initial navigation failure");
   }
@@ -873,23 +1040,52 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
     process.env.TIMELAPSE_SIMULATE_FRAME_FAILURE === "1" ? 2 : null;
   const skipIndex =
     process.env.TIMELAPSE_SIMULATE_FRAME_SKIP === "1" ? 3 : null;
-  const delayMs = Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAME_DELAY_MS || "", 10);
+  const delayMs = Number.parseInt(
+    process.env.TIMELAPSE_SIMULATE_FRAME_DELAY_MS || "",
+    10,
+  );
   const startedAtMs = new Date(state.startedAt).getTime();
   for (let index = 1; index <= state.targetFrames; index += 1) {
     if (Number.isFinite(delayMs) && delayMs > 0) {
       await setTimeoutPromise(delayMs);
     }
-    const scheduledAt = new Date(startedAtMs + (index - 1) * (state.intervalMs || 0)).toISOString();
+    const scheduledAt = new Date(
+      startedAtMs + (index - 1) * (state.intervalMs || 0),
+    ).toISOString();
     if (failIndex && index === failIndex) {
-      await recordFailedFrame({ state, runDir, manifestPath, index, scheduledAt, url: state.target, error: "simulated failure" });
+      await recordFailedFrame({
+        state,
+        runDir,
+        manifestPath,
+        index,
+        scheduledAt,
+        url: state.target,
+        error: "simulated failure",
+      });
       continue;
     }
     if (skipIndex && index === skipIndex) {
-      await recordSkippedFrame({ state, runDir, manifestPath, index, scheduledAt, url: state.target, reason: "simulated skip" });
+      await recordSkippedFrame({
+        state,
+        runDir,
+        manifestPath,
+        index,
+        scheduledAt,
+        url: state.target,
+        reason: "simulated skip",
+      });
       continue;
     }
     const filename = await writeFakeFrame(runDir, index);
-    await recordCapturedFrame({ state, runDir, manifestPath, index, scheduledAt, filename, url: state.target });
+    await recordCapturedFrame({
+      state,
+      runDir,
+      manifestPath,
+      index,
+      scheduledAt,
+      filename,
+      url: state.target,
+    });
   }
 }
 
@@ -919,7 +1115,7 @@ function buildInitialCaptureState({ target, options = {} }) {
       ? "computed from --video-length"
       : "provided by --interval";
     console.error(
-      `warning: requested interval ${timing.requestedIntervalMs}ms (${source}) is below ${backend} minimum ${timing.backendMinIntervalMs}ms; clamped to ${timing.intervalMs}ms`
+      `warning: requested interval ${timing.requestedIntervalMs}ms (${source}) is below ${backend} minimum ${timing.backendMinIntervalMs}ms; clamped to ${timing.intervalMs}ms`,
     );
   }
   const intervalMs = timing.intervalMs;
@@ -929,12 +1125,17 @@ function buildInitialCaptureState({ target, options = {} }) {
     ? { width: options.viewport.width, height: options.viewport.height }
     : { width: 1280, height: 720 };
   const targetFrames = (() => {
-    const fromEnv = Number.parseInt(process.env.TIMELAPSE_SIMULATE_FRAMES || "", 10);
+    const fromEnv = Number.parseInt(
+      process.env.TIMELAPSE_SIMULATE_FRAMES || "",
+      10,
+    );
     if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
     return timing.targetFrames;
   })();
   const estimatedDiskBytes = estimateDiskBytes(viewport, targetFrames);
-  const cleanup = options["keep-frames"] ? "never" : options.cleanup ?? "after-render";
+  const cleanup = options["keep-frames"]
+    ? "never"
+    : (options.cleanup ?? "after-render");
   const runDir = path.resolve(options.out ?? defaultRunDir(target));
   const startedAt = nowIso();
 
@@ -960,11 +1161,14 @@ function buildInitialCaptureState({ target, options = {} }) {
     viewport,
     estimatedDiskBytes,
     cleanup,
-    keepSamples: options["keep-samples"] === true ? 5 : Number(options["keep-samples"] ?? 0),
+    keepSamples:
+      options["keep-samples"] === true
+        ? 5
+        : Number(options["keep-samples"] ?? 0),
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
     headed: Boolean(options.headed),
-    lastUpdatedAt: startedAt
+    lastUpdatedAt: startedAt,
   };
 }
 
@@ -977,7 +1181,9 @@ async function runCaptureLoop({ runDir, state, framesDir, manifestPath }) {
 
   try {
     if (process.env.TIMELAPSE_SIMULATE_NAVIGATION_FAILURE === "1") {
-      throw new Error(`navigation failed: page could not be loaded: ${state.target}`);
+      throw new Error(
+        `navigation failed: page could not be loaded: ${state.target}`,
+      );
     }
     if (process.env.TIMELAPSE_SIMULATE_FRAMES) {
       await captureSimulated({ runDir, state, framesDir, manifestPath });
@@ -1002,7 +1208,7 @@ async function runCaptureLoop({ runDir, state, framesDir, manifestPath }) {
         scheduledAt: state.startedAt,
         url: state.target,
         title: null,
-        error: message
+        error: message,
       });
     }
     state.lastUpdatedAt = nowIso();
@@ -1023,12 +1229,14 @@ function stateFromConfig({ runDir, config, status }) {
     frameCount: status?.frames?.captured ?? 0,
     failedFrameCount: status?.frames?.failed ?? 0,
     skippedFrameCount: status?.frames?.skipped ?? status?.framesSkipped ?? 0,
-    latestFrame: typeof status?.latestFrame === "string" ? status.latestFrame : null,
+    latestFrame:
+      typeof status?.latestFrame === "string" ? status.latestFrame : null,
     latestFrameAt: status?.latestFrameTimestamp ?? null,
     latestFrameTimestamp: status?.latestFrameTimestamp ?? null,
     intervalMs: config.intervalMs,
     requestedIntervalMs: config.requestedIntervalMs ?? config.intervalMs,
-    backendMinIntervalMs: config.backendMinIntervalMs ?? backendMinIntervalMs(config.backend),
+    backendMinIntervalMs:
+      config.backendMinIntervalMs ?? backendMinIntervalMs(config.backend),
     intervalClamped: Boolean(config.intervalClamped),
     durationMs: config.durationMs,
     fps: config.fps,
@@ -1039,7 +1247,7 @@ function stateFromConfig({ runDir, config, status }) {
     keepLatest: Boolean(config.keepLatest),
     waitUntil: config.waitUntil ?? "domcontentloaded",
     headed: Boolean(config.headed),
-    lastUpdatedAt: nowIso()
+    lastUpdatedAt: nowIso(),
   };
 }
 
@@ -1067,10 +1275,15 @@ export async function commandCapture({ runDir } = {}) {
     parentPid: null,
     command,
     detached: true,
-    startedAt: state.startedAt
+    startedAt: state.startedAt,
   });
   try {
-    const captureStatus = await runCaptureLoop({ runDir: resolved, state, framesDir, manifestPath });
+    const captureStatus = await runCaptureLoop({
+      runDir: resolved,
+      state,
+      framesDir,
+      manifestPath,
+    });
     await writeJob(resolved, {
       runDir: resolved,
       state: captureStatus.state,
@@ -1080,11 +1293,11 @@ export async function commandCapture({ runDir } = {}) {
       command,
       detached: true,
       startedAt: state.startedAt,
-      finishedAt: nowIso()
+      finishedAt: nowIso(),
     });
     return {
       runDir: resolved,
-      status: captureStatus
+      status: captureStatus,
     };
   } catch (error) {
     await writeJob(resolved, {
@@ -1097,7 +1310,7 @@ export async function commandCapture({ runDir } = {}) {
       detached: true,
       startedAt: state.startedAt,
       finishedAt: nowIso(),
-      error: error?.message || String(error)
+      error: error?.message || String(error),
     });
     throw error;
   }
@@ -1108,7 +1321,7 @@ async function spawnDetachedCapture(runDir) {
   const child = spawn(command[0], command.slice(1), {
     detached: true,
     stdio: "ignore",
-    env: process.env
+    env: process.env,
   });
   child.unref();
   const job = {
@@ -1119,7 +1332,7 @@ async function spawnDetachedCapture(runDir) {
     parentPid: process.pid,
     command,
     detached: true,
-    startedAt: nowIso()
+    startedAt: nowIso(),
   };
   await writeJob(runDir, job);
   return job;
@@ -1132,20 +1345,23 @@ export async function commandStart({ target, options = {} } = {}) {
   if (!options.json) {
     console.log(
       `estimated disk: ${formatBytes(state.estimatedDiskBytes)} (${state.targetFrames} frames x ${formatBytes(
-        estimateFrameBytes(state.viewport)
-      )}/frame, approximate)`
+        estimateFrameBytes(state.viewport),
+      )}/frame, approximate)`,
     );
   }
 
   await writeStartArtifacts(state.runDir, state);
-  await appendLog(state.runDir, `start invoked target=${target} backend=${state.backend}`);
+  await appendLog(
+    state.runDir,
+    `start invoked target=${target} backend=${state.backend}`,
+  );
   const job = await spawnDetachedCapture(state.runDir);
 
   return {
     runDir: state.runDir,
     estimatedDiskBytes: state.estimatedDiskBytes,
     job,
-    status: buildStatusPayload({ ...state, runDir: state.runDir })
+    status: buildStatusPayload({ ...state, runDir: state.runDir }),
   };
 }
 
@@ -1154,14 +1370,18 @@ export function resolveStartTiming(options = {}) {
   const fps = Number(options.fps ?? 24);
   const backend = options.backend ?? "playwright-url";
   const minimumIntervalMs = backendMinIntervalMs(backend);
-  const explicitIntervalMs = typeof options.interval === "number"
-    ? options.interval
-    : options.interval?.ms;
+  const explicitIntervalMs =
+    typeof options.interval === "number"
+      ? options.interval
+      : options.interval?.ms;
   const videoLengthMs = options["video-length"]?.ms ?? null;
 
   if (videoLengthMs !== null) {
     const targetFrames = Math.max(1, Math.round((videoLengthMs / 1000) * fps));
-    const requestedIntervalMs = Math.max(1, Math.round(durationMs / targetFrames));
+    const requestedIntervalMs = Math.max(
+      1,
+      Math.round(durationMs / targetFrames),
+    );
     const intervalMs = Math.max(minimumIntervalMs, requestedIntervalMs);
     return {
       durationMs,
@@ -1172,7 +1392,7 @@ export function resolveStartTiming(options = {}) {
       intervalMs,
       backendMinIntervalMs: minimumIntervalMs,
       intervalClamped: intervalMs !== requestedIntervalMs,
-      computedFromVideoLength: true
+      computedFromVideoLength: true,
     };
   }
 
@@ -1186,10 +1406,11 @@ export function resolveStartTiming(options = {}) {
     intervalMs,
     backendMinIntervalMs: minimumIntervalMs,
     intervalClamped: intervalMs !== requestedIntervalMs,
-    targetFrames: durationMs > 0 && intervalMs > 0
-      ? Math.max(1, Math.ceil(durationMs / intervalMs))
-      : 3,
-    computedFromVideoLength: false
+    targetFrames:
+      durationMs > 0 && intervalMs > 0
+        ? Math.max(1, Math.ceil(durationMs / intervalMs))
+        : 3,
+    computedFromVideoLength: false,
   };
 }
 
@@ -1202,7 +1423,9 @@ async function runStartCli(parsed) {
   }
   console.log(`Started timelapse capture: ${result.runDir}`);
   console.log(`Status: timelapse-capture status ${shellQuote(result.runDir)}`);
-  console.log(`Peek:   timelapse-capture peek ${shellQuote(result.runDir)} --latest`);
+  console.log(
+    `Peek:   timelapse-capture peek ${shellQuote(result.runDir)} --latest`,
+  );
 }
 
 async function runCaptureCli(parsed) {
@@ -1233,30 +1456,31 @@ export async function commandStatus({ runDir }) {
   const [framesDiskUsageBytes, runDirBytes, summary] = await Promise.all([
     directorySize(path.join(resolved, "frames")),
     directorySize(resolved),
-    readJsonOptional(getSummaryPath(resolved))
+    readJsonOptional(getSummaryPath(resolved)),
   ]);
 
   const payload = buildStatusPayload({
     ...status,
     state: migrateLegacyState(status.state || inferStateFromStatus(status)),
-    runDir: resolved
+    runDir: resolved,
   });
   payload.diskUsage = { runDirBytes, framesBytes: framesDiskUsageBytes };
   payload.outputPath = summary?.render?.outputPath ?? null;
-  payload.cleanup = summary?.cleanup != null
-    ? {
-        success: summary.cleanup.success ?? null,
-        removed: summary.cleanup.removed ?? 0,
-        retained: summary.cleanup.retained ?? null,
-        bytesFreed: summary.cleanup.bytesFreed ?? 0
-      }
-    : null;
+  payload.cleanup =
+    summary?.cleanup != null
+      ? {
+          success: summary.cleanup.success ?? null,
+          removed: summary.cleanup.removed ?? 0,
+          retained: summary.cleanup.retained ?? null,
+          bytesFreed: summary.cleanup.bytesFreed ?? 0,
+        }
+      : null;
 
   return {
     status: payload,
     config,
     latestFrame,
-    framesDiskUsageBytes
+    framesDiskUsageBytes,
   };
 }
 
@@ -1265,25 +1489,32 @@ function printHumanStatus(status) {
   lines.push(`run-dir: ${status.runDir}`);
   lines.push(`state: ${status.state}`);
   lines.push(`elapsed: ${formatDuration(status.elapsedMs)}`);
-  if (status.state === "running") lines.push(`eta: ${formatDuration(status.etaMs)}`);
+  if (status.state === "running")
+    lines.push(`eta: ${formatDuration(status.etaMs)}`);
   lines.push(
-    `frames: ${status.frames.attempted} attempted, ${status.frames.captured} captured, ${status.frames.failed} failed, ${status.frames.skipped} skipped, ${status.frames.totalExpected} expected`
+    `frames: ${status.frames.attempted} attempted, ${status.frames.captured} captured, ${status.frames.failed} failed, ${status.frames.skipped} skipped, ${status.frames.totalExpected} expected`,
   );
-  if (status.latestFrame) lines.push(`latest successful frame: ${status.latestFrame}`);
-  if (status.latestFrameTimestamp) lines.push(`latest successful frame at: ${status.latestFrameTimestamp}`);
+  if (status.latestFrame)
+    lines.push(`latest successful frame: ${status.latestFrame}`);
+  if (status.latestFrameTimestamp)
+    lines.push(`latest successful frame at: ${status.latestFrameTimestamp}`);
   if (status.staleWarning?.isStale)
-    lines.push(`warning: latest successful frame is stale (${formatDuration(status.staleWarning.ageMs)} old)`);
+    lines.push(
+      `warning: latest successful frame is stale (${formatDuration(status.staleWarning.ageMs)} old)`,
+    );
   if (status.diskUsage)
     lines.push(
-      `disk usage: run-dir ${formatBytes(status.diskUsage.runDirBytes)}, frames ${formatBytes(status.diskUsage.framesBytes)}`
+      `disk usage: run-dir ${formatBytes(status.diskUsage.runDirBytes)}, frames ${formatBytes(status.diskUsage.framesBytes)}`,
     );
   if (status.estimatedDiskBytes != null)
-    lines.push(`estimated disk: ${formatBytes(status.estimatedDiskBytes)} (approximate)`);
+    lines.push(
+      `estimated disk: ${formatBytes(status.estimatedDiskBytes)} (approximate)`,
+    );
   if (status.outputPath) lines.push(`output: ${status.outputPath}`);
   if (status.cleanup) {
     const bytesFreed = status.cleanup.bytesFreed ?? 0;
     lines.push(
-      `cleanup: removed ${status.cleanup.removed ?? 0}, retained ${status.cleanup.retained ?? 0} (freed ${formatBytes(bytesFreed)})`
+      `cleanup: removed ${status.cleanup.removed ?? 0}, retained ${status.cleanup.retained ?? 0} (freed ${formatBytes(bytesFreed)})`,
     );
   }
   console.log(lines.join("\n"));
@@ -1302,10 +1533,12 @@ async function runStatusCli(parsed) {
 
 async function listFrameFiles(runDir) {
   const framesDir = path.join(runDir, "frames");
-  const entries = await fsp.readdir(framesDir, { withFileTypes: true }).catch((error) => {
-    if (error?.code === "ENOENT") return [];
-    throw error;
-  });
+  const entries = await fsp
+    .readdir(framesDir, { withFileTypes: true })
+    .catch((error) => {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    });
   return entries
     .filter((entry) => entry.isFile() && isFrameFile(entry.name))
     .map((entry) => entry.name)
@@ -1372,7 +1605,7 @@ export async function commandPeek({ runDir, options = {} }) {
       return { exists: true, path: retainedPath, pathCount: 1 };
     }
     throw new Error(
-      "No frames available. Raw frames were cleaned up. Use poster.png or latest-retained.png from the run directory."
+      "No frames available. Raw frames were cleaned up. Use poster.png or latest-retained.png from the run directory.",
     );
   }
 
@@ -1380,11 +1613,15 @@ export async function commandPeek({ runDir, options = {} }) {
   if (typeof options.index === "number") {
     index = Math.min(Math.max(options.index, 0), names.length - 1);
   } else if (typeof options.near === "string") {
-    const nearestName = await findNearestFrameName(resolved, names, options.near);
+    const nearestName = await findNearestFrameName(
+      resolved,
+      names,
+      options.near,
+    );
     const nearIndex = names.indexOf(nearestName);
     if (nearIndex === -1) {
       throw new Error(
-        `--near selected frame "${nearestName}" is not present in the frames directory.`
+        `--near selected frame "${nearestName}" is not present in the frames directory.`,
       );
     }
     index = nearIndex;
@@ -1400,13 +1637,16 @@ export async function commandPeek({ runDir, options = {} }) {
     pathCount: names.length,
     frame: {
       index: Number.parseInt(names[index].match(/\d+/)?.[0] || "0", 10),
-      path: path.join("frames", names[index])
-    }
+      path: path.join("frames", names[index]),
+    },
   };
 }
 
 async function runPeekCli(parsed) {
-  const result = await commandPeek({ runDir: parsed.runDir, options: parsed.options });
+  const result = await commandPeek({
+    runDir: parsed.runDir,
+    options: parsed.options,
+  });
   if (parsed.options.json) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -1436,7 +1676,11 @@ export function getOutputPath(runDir, config) {
 }
 
 function getConfiguredOutputPath(runDir, options = {}) {
-  const configured = options?.output?.path ?? options?.config?.output?.path ?? options?.config?.outputPath ?? null;
+  const configured =
+    options?.output?.path ??
+    options?.config?.output?.path ??
+    options?.config?.outputPath ??
+    null;
   if (!configured) return null;
   return path.resolve(runDir, String(configured));
 }
@@ -1454,7 +1698,7 @@ function getDefaultOutputPath(runDir) {
 async function resolveCleanupOutputPath(runDir, options = {}) {
   const [config, summary] = await Promise.all([
     readJsonOptional(path.join(runDir, "config.json")),
-    readJsonOptional(getSummaryPath(runDir))
+    readJsonOptional(getSummaryPath(runDir)),
   ]);
 
   return (
@@ -1492,7 +1736,9 @@ function safeFileSize(filePath) {
 }
 
 async function sumFileSizes(filePaths) {
-  const stats = await Promise.all(filePaths.map((filePath) => fsp.stat(filePath).catch(() => ({ size: 0 }))));
+  const stats = await Promise.all(
+    filePaths.map((filePath) => fsp.stat(filePath).catch(() => ({ size: 0 }))),
+  );
   return stats.reduce((total, stat) => total + stat.size, 0);
 }
 
@@ -1503,7 +1749,7 @@ export function validateMP4(outputPath) {
     duration: null,
     dimensions: null,
     hasVideoStream: false,
-    error: null
+    error: null,
   };
   if (!fs.existsSync(outputPath)) {
     result.error = "Output file does not exist";
@@ -1524,8 +1770,16 @@ export function validateMP4(outputPath) {
   try {
     probeJson = execFileSync(
       "ffprobe",
-      ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", outputPath],
-      { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }
+      [
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        outputPath,
+      ],
+      { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] },
     );
   } catch (error) {
     result.error = `ffprobe failed: ${error.message}`;
@@ -1546,8 +1800,12 @@ export function validateMP4(outputPath) {
     }
     result.hasVideoStream = true;
     result.dimensions = {
-      width: Number.isFinite(Number(stream.width)) ? Number(stream.width) : null,
-      height: Number.isFinite(Number(stream.height)) ? Number(stream.height) : null
+      width: Number.isFinite(Number(stream.width))
+        ? Number(stream.width)
+        : null,
+      height: Number.isFinite(Number(stream.height))
+        ? Number(stream.height)
+        : null,
     };
   } catch (error) {
     result.error = `ffprobe returned unreadable metadata: ${error.message}`;
@@ -1558,7 +1816,9 @@ export function validateMP4(outputPath) {
 function pickSamples(files, count) {
   if (count <= 0) return [];
   const indices = getSampleIndices(files.length, count);
-  return Array.from(indices).sort((a, b) => a - b).map((i) => files[i]);
+  return Array.from(indices)
+    .sort((a, b) => a - b)
+    .map((i) => files[i]);
 }
 
 function copySamplesSync(framesDir, runDir, count) {
@@ -1590,15 +1850,14 @@ export function cleanupFrames(runDir, options = {}) {
   } catch (error) {
     return { success: false, removed, bytesFreed, error: error.message };
   }
-  const files = fs.readdirSync(framesDir)
-    .filter(isFrameFile)
-    .sort();
+  const files = fs.readdirSync(framesDir).filter(isFrameFile).sort();
 
   const retained = new Set();
   let samplePaths = [];
 
   if (options["keep-samples"]) {
-    const sampleCount = options["keep-samples"] === true ? 2 : Number(options["keep-samples"]);
+    const sampleCount =
+      options["keep-samples"] === true ? 2 : Number(options["keep-samples"]);
     samplePaths = copySamplesSync(framesDir, runDir, sampleCount);
     // Samples are now in runDir/samples, so we don't need to retain any in framesDir
   } else if (options["keep-latest"]) {
@@ -1628,7 +1887,7 @@ export function cleanupFrames(runDir, options = {}) {
     removed,
     retained: samplePaths.length || retained.size,
     bytesFreed,
-    samples: samplePaths.length > 0 ? samplePaths : undefined
+    samples: samplePaths.length > 0 ? samplePaths : undefined,
   };
 }
 
@@ -1686,7 +1945,7 @@ function stageContiguousFrames(framesDir) {
     for (let i = 0; i < names.length; i++) {
       fs.linkSync(
         path.join(framesDir, names[i]),
-        path.join(stagingDir, frameName(i + 1))
+        path.join(stagingDir, frameName(i + 1)),
       );
     }
   } catch (err) {
@@ -1700,7 +1959,9 @@ function removeStagingDir(stagingDir) {
   try {
     fs.rmSync(stagingDir, { recursive: true, force: true });
   } catch (error) {
-    throw new Error(`failed to remove render staging directory ${stagingDir}: ${error.message}`);
+    throw new Error(
+      `failed to remove render staging directory ${stagingDir}: ${error.message}`,
+    );
   }
 }
 
@@ -1721,7 +1982,10 @@ function processOutputToString(output) {
 }
 
 function combinedProcessOutput(result) {
-  return [processOutputToString(result.stdout), processOutputToString(result.stderr)]
+  return [
+    processOutputToString(result.stdout),
+    processOutputToString(result.stderr),
+  ]
     .filter((output) => output.length > 0)
     .join("\n");
 }
@@ -1741,7 +2005,7 @@ export function renderFrames(runDir, options = {}) {
     metadata: null,
     cleanupResult: null,
     error: null,
-    errorCode: null
+    errorCode: null,
   };
 
   if (!fs.existsSync(runDir)) {
@@ -1766,10 +2030,13 @@ export function renderFrames(runDir, options = {}) {
     ffmpegCommand = [ffmpegPath];
 
     const resolvedRunDir = path.resolve(runDir);
-    if (outputPath !== resolvedRunDir && !outputPath.startsWith(resolvedRunDir + path.sep)) {
+    if (
+      outputPath !== resolvedRunDir &&
+      !outputPath.startsWith(resolvedRunDir + path.sep)
+    ) {
       throw new RenderError(
         `Configured output path resolves outside the run directory: ${outputPath}`,
-        "OUTPUT_PATH_OUTSIDE_RUNDIR"
+        "OUTPUT_PATH_OUTSIDE_RUNDIR",
       );
     }
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -1791,7 +2058,7 @@ export function renderFrames(runDir, options = {}) {
       "yuv420p",
       "-crf",
       "23",
-      outputPath
+      outputPath,
     ];
     ffmpegCommand = [ffmpegPath, ...ffmpegArgs];
     const renderMetadata = {
@@ -1802,25 +2069,37 @@ export function renderFrames(runDir, options = {}) {
       framerate: effectiveFramerate,
       sourceFrameCount,
       ffmpegCommand,
-      timestamp: nowIso()
+      timestamp: nowIso(),
     };
 
     try {
-      appendRenderLog(runDir, `ffmpeg command=${JSON.stringify(ffmpegCommand)}`);
+      appendRenderLog(
+        runDir,
+        `ffmpeg command=${JSON.stringify(ffmpegCommand)}`,
+      );
       const ffmpegResult = spawnSync(ffmpegPath, ffmpegArgs, {
         encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: ["ignore", "pipe", "pipe"],
       });
       const ffmpegOutput = combinedProcessOutput(ffmpegResult);
       if (ffmpegOutput) appendRenderLog(runDir, ffmpegOutput);
 
       if (ffmpegResult.error) {
-        throw new RenderError(`ffmpeg failed: ${ffmpegResult.error.message}`, "FFMPEG_FAILED");
+        throw new RenderError(
+          `ffmpeg failed: ${ffmpegResult.error.message}`,
+          "FFMPEG_FAILED",
+        );
       }
       if (ffmpegResult.status !== 0) {
-        const status = ffmpegResult.status == null ? "unknown" : ffmpegResult.status;
-        const signal = ffmpegResult.signal ? ` signal=${ffmpegResult.signal}` : "";
-        throw new RenderError(`ffmpeg failed: exit code ${status}${signal}`, "FFMPEG_FAILED");
+        const status =
+          ffmpegResult.status == null ? "unknown" : ffmpegResult.status;
+        const signal = ffmpegResult.signal
+          ? ` signal=${ffmpegResult.signal}`
+          : "";
+        throw new RenderError(
+          `ffmpeg failed: exit code ${status}${signal}`,
+          "FFMPEG_FAILED",
+        );
       }
     } catch (error) {
       if (error instanceof RenderError) throw error;
@@ -1831,7 +2110,10 @@ export function renderFrames(runDir, options = {}) {
 
     const validation = validateMP4(outputPath);
     if (validation.error) {
-      throw new RenderError(`Output is not a valid MP4: ${validation.error}`, "VALIDATION_FAILED");
+      throw new RenderError(
+        `Output is not a valid MP4: ${validation.error}`,
+        "VALIDATION_FAILED",
+      );
     }
 
     renderMetadata.bytes = validation.bytes;
@@ -1848,13 +2130,16 @@ export function renderFrames(runDir, options = {}) {
       ffmpegCommand,
       poster: posterRelPath,
       render: renderMetadata,
-      cleanup: null
+      cleanup: null,
     };
 
     writeSummarySync(runDir, summary);
 
     const effectiveCleanup = options.cleanup ?? "after-render";
-    const keepAll = options["keep-frames"] || options["keep-all"] || effectiveCleanup === "never";
+    const keepAll =
+      options["keep-frames"] ||
+      options["keep-all"] ||
+      effectiveCleanup === "never";
 
     if (!keepAll) {
       const cleanup = cleanupFrames(runDir, options);
@@ -1871,19 +2156,24 @@ export function renderFrames(runDir, options = {}) {
         source: options.cleanupSource || "default",
         samples: cleanup.samples,
         error: cleanup.error || null,
-        timestamp: nowIso()
+        timestamp: nowIso(),
       };
       result.cleanupResult = cleanup;
     } else {
       summary.cleanup = {
         success: true,
-        reason: effectiveCleanup === "never" ? "never" : (options["keep-frames"] ? "keep-frames" : "keep-all"),
+        reason:
+          effectiveCleanup === "never"
+            ? "never"
+            : options["keep-frames"]
+              ? "keep-frames"
+              : "keep-all",
         source: options.cleanupSource || "default",
         removed: 0,
         bytesFreed: 0,
         retained: sourceFrameCount,
         error: null,
-        timestamp: nowIso()
+        timestamp: nowIso(),
       };
     }
 
@@ -1903,7 +2193,7 @@ export function renderFrames(runDir, options = {}) {
     result.errorCode = error?.code ?? null;
     appendRenderLog(
       runDir,
-      `render attempt failed errorCode=${result.errorCode ?? "UNKNOWN"} error=${result.error}`
+      `render attempt failed errorCode=${result.errorCode ?? "UNKNOWN"} error=${result.error}`,
     );
 
     const status = readStatusSync(runDir) || {};
@@ -1926,7 +2216,7 @@ export function renderFrames(runDir, options = {}) {
         sourceFrameCount,
         framerate: effectiveFramerate,
         ffmpegCommand,
-        timestamp: nowIso()
+        timestamp: nowIso(),
       },
       cleanup: {
         success: false,
@@ -1934,8 +2224,8 @@ export function renderFrames(runDir, options = {}) {
         removed: 0,
         retained: 0,
         error: null,
-        timestamp: nowIso()
-      }
+        timestamp: nowIso(),
+      },
     };
     try {
       writeSummarySync(runDir, updated);
@@ -1952,18 +2242,28 @@ export async function commandRender({ runDir, options = {} }) {
   const configPath = path.join(resolved, "config.json");
   const [status, config] = await Promise.all([
     readJsonOptional(statusPath),
-    readJsonOptional(configPath)
+    readJsonOptional(configPath),
   ]);
 
   const currentState = status?.state || inferStateFromStatus(status || {});
-  if (["starting", "running", "rendering"].includes(currentState) && !options.force) {
-    throw new Error("Cannot render while capture is active. Use --force to override.");
+  if (
+    ["starting", "running", "rendering"].includes(currentState) &&
+    !options.force
+  ) {
+    throw new Error(
+      "Cannot render while capture is active. Use --force to override.",
+    );
   }
 
   const renderOptions = {
     ...options,
     config: options.config ?? config ?? undefined,
-    framerate: resolveRenderFramerate(options.framerate, options.fps, config?.fps, config?.framerate)
+    framerate: resolveRenderFramerate(
+      options.framerate,
+      options.fps,
+      config?.fps,
+      config?.framerate,
+    ),
   };
 
   let cleanupSource = "cli";
@@ -1989,10 +2289,15 @@ export async function commandRender({ runDir, options = {} }) {
     }
   }
   renderOptions.cleanupSource = cleanupSource;
-  if (options.force && ["starting", "running", "rendering"].includes(currentState)) {
+  if (
+    options.force &&
+    ["starting", "running", "rendering"].includes(currentState)
+  ) {
     const frames = await listFrameFiles(resolved);
     if (frames.length === 0) {
-      throw new Error("Cannot force render: no frames present in run directory");
+      throw new Error(
+        "Cannot force render: no frames present in run directory",
+      );
     }
     renderOptions["keep-frames"] = true;
   }
@@ -2007,12 +2312,15 @@ export async function commandRender({ runDir, options = {} }) {
     path: result.outputPath,
     output: result.outputPath,
     sourceFrameCount: result.metadata?.sourceFrameCount,
-    message: "Render successful"
+    message: "Render successful",
   };
 }
 
 async function runRenderCli(parsed) {
-  const result = await commandRender({ runDir: parsed.runDir, options: parsed.options });
+  const result = await commandRender({
+    runDir: parsed.runDir,
+    options: parsed.options,
+  });
   if (parsed.options.json) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -2026,7 +2334,7 @@ async function writeCleanupSummary(runDir, cleanup) {
   const existing = await readJsonOptional(getSummaryPath(runDir));
   await writeJsonAtomic(getSummaryPath(runDir), {
     ...existing,
-    cleanup: { ...cleanup, timestamp: nowIso() }
+    cleanup: { ...cleanup, timestamp: nowIso() },
   });
 }
 
@@ -2042,7 +2350,7 @@ export async function commandCleanup({ runDir, options = {} }) {
     const validation = validateMP4(outputPath);
     if (validation.error) {
       throw new Error(
-        `Refusing to delete frames: ${validation.error} (at ${outputPath}). Pass --force to override.`
+        `Refusing to delete frames: ${validation.error} (at ${outputPath}). Pass --force to override.`,
       );
     }
   }
@@ -2053,13 +2361,16 @@ export async function commandCleanup({ runDir, options = {} }) {
 
   const keepFrames = options["keep-frames"] || options["keep-all"];
   if (keepFrames) {
-    const result = { message: "Frames preserved (--keep-frames)", frameCount: frameFiles.length };
+    const result = {
+      message: "Frames preserved (--keep-frames)",
+      frameCount: frameFiles.length,
+    };
     await writeCleanupSummary(resolved, {
       success: true,
       removed: 0,
       retained: frameFiles.length,
       bytesFreed: 0,
-      reason: "keep-frames"
+      reason: "keep-frames",
     });
     return result;
   }
@@ -2075,21 +2386,27 @@ export async function commandCleanup({ runDir, options = {} }) {
     if (!removeResult.success) {
       throw new Error(removeResult.error);
     }
-    const result = { message: "Raw frames and latest.png cleaned up", removed: frameFiles.length, bytesFreed };
+    const result = {
+      message: "Raw frames and latest.png cleaned up",
+      removed: frameFiles.length,
+      bytesFreed,
+    };
     await writeCleanupSummary(resolved, {
       success: true,
       removed: frameFiles.length,
       retained: 0,
       bytesFreed,
       latestPngRemoved: latestPngExists,
-      reason: "frames"
+      reason: "frames",
     });
     return result;
   }
 
   if (options.all) {
     if (frameFiles.length > 0 && !options.force) {
-      throw new Error("Raw frames still exist. Use --force to delete the entire run directory.");
+      throw new Error(
+        "Raw frames still exist. Use --force to delete the entire run directory.",
+      );
     }
     await fsp.rm(resolved, { recursive: true, force: true });
     return { message: "Entire run directory deleted" };
@@ -2099,12 +2416,19 @@ export async function commandCleanup({ runDir, options = {} }) {
   if (keepSamples) {
     if (frameFiles.length === 0) {
       const result = { message: "No frames to sample", frameCount: 0 };
-      await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0, bytesFreed: 0 });
+      await writeCleanupSummary(resolved, {
+        success: true,
+        removed: 0,
+        retained: 0,
+        bytesFreed: 0,
+      });
       return result;
     }
 
     const count = keepSamples === true ? 2 : Number(keepSamples);
-    const bytesFreed = await sumFileSizes(frameFiles.map((file) => path.join(framesDir, file)));
+    const bytesFreed = await sumFileSizes(
+      frameFiles.map((file) => path.join(framesDir, file)),
+    );
     const samplePaths = copySamplesSync(framesDir, resolved, count);
 
     // Entirely remove frames directory and its remaining contents
@@ -2115,7 +2439,7 @@ export async function commandCleanup({ runDir, options = {} }) {
       removed: frameFiles.length,
       retained: samplePaths.length,
       bytesFreed,
-      samples: samplePaths
+      samples: samplePaths,
     };
     await writeCleanupSummary(resolved, {
       success: true,
@@ -2123,7 +2447,7 @@ export async function commandCleanup({ runDir, options = {} }) {
       retained: samplePaths.length,
       bytesFreed,
       samples: samplePaths,
-      reason: "keep-samples"
+      reason: "keep-samples",
     });
     return result;
   }
@@ -2132,20 +2456,34 @@ export async function commandCleanup({ runDir, options = {} }) {
   if (keepLatest) {
     if (frameFiles.length === 0) {
       const result = { message: "No frames to cleanup", frameCount: 0 };
-      await writeCleanupSummary(resolved, { success: true, removed: 0, retained: 0, bytesFreed: 0 });
+      await writeCleanupSummary(resolved, {
+        success: true,
+        removed: 0,
+        retained: 0,
+        bytesFreed: 0,
+      });
       return result;
     }
     const last = frameFiles[frameFiles.length - 1];
     const toDelete = frameFiles.filter((f) => f !== last);
-    const bytesFreed = await sumFileSizes(toDelete.map((p) => path.join(framesDir, p)));
-    await Promise.all(toDelete.map((p) => fsp.rm(path.join(framesDir, p), { force: true })));
+    const bytesFreed = await sumFileSizes(
+      toDelete.map((p) => path.join(framesDir, p)),
+    );
+    await Promise.all(
+      toDelete.map((p) => fsp.rm(path.join(framesDir, p), { force: true })),
+    );
     const result = {
       message: "Frames cleaned up (kept latest)",
       removed: toDelete.length,
       bytesFreed,
-      retained: 1
+      retained: 1,
     };
-    await writeCleanupSummary(resolved, { success: true, removed: toDelete.length, retained: 1, bytesFreed });
+    await writeCleanupSummary(resolved, {
+      success: true,
+      removed: toDelete.length,
+      retained: 1,
+      bytesFreed,
+    });
     return result;
   }
 
@@ -2156,19 +2494,26 @@ export async function commandCleanup({ runDir, options = {} }) {
   if (!removeResult.success) {
     throw new Error(removeResult.error);
   }
-  const result = { message: "Cleanup complete", removed: frameFiles.length, bytesFreed };
+  const result = {
+    message: "Cleanup complete",
+    removed: frameFiles.length,
+    bytesFreed,
+  };
   await writeCleanupSummary(resolved, {
     success: true,
     removed: frameFiles.length,
     retained: 0,
     bytesFreed,
-    reason: "default"
+    reason: "default",
   });
   return result;
 }
 
 async function runCleanupCli(parsed) {
-  const result = await commandCleanup({ runDir: parsed.runDir, options: parsed.options });
+  const result = await commandCleanup({
+    runDir: parsed.runDir,
+    options: parsed.options,
+  });
   console.log(result.message);
 }
 
@@ -2199,5 +2544,5 @@ export const __test__ = {
   waitUntilFrameTime,
   countFrameFiles,
   listFrameFiles,
-  listFrameFilesSync
+  listFrameFilesSync,
 };

@@ -637,7 +637,10 @@ test("peek --near selects first, middle, and last frame by timestamp proximity",
 test("render writes rendering then rendered states with fake ffmpeg", async () => {
   const { runDir } = await makeRun();
   try {
-    await fs.writeFile(path.join(runDir, "render.log"), "[prior] previous render\n");
+    await fs.writeFile(
+      path.join(runDir, "render.log"),
+      "[prior] previous render\n",
+    );
 
     await withFakeFFmpeg(async (manager) => {
       const result = runCli(["render", runDir, "--json"], {
@@ -670,11 +673,20 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
       assert.equal(status.state, "rendered");
       assert.ok(status.renderedAt);
 
-      const renderLog = await fs.readFile(path.join(runDir, "render.log"), "utf8");
+      const renderLog = await fs.readFile(
+        path.join(runDir, "render.log"),
+        "utf8",
+      );
       assert.match(renderLog, /^\[prior\] previous render\n\[/);
       assert.match(renderLog, /^\[[^\]]+\] render attempt started/m);
-      assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stdout: render started/m);
-      assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stderr: render details/m);
+      assert.match(
+        renderLog,
+        /^\[[^\]]+\] fake ffmpeg stdout: render started/m,
+      );
+      assert.match(
+        renderLog,
+        /^\[[^\]]+\] fake ffmpeg stderr: render details/m,
+      );
       assert.match(renderLog, /^\[[^\]]+\] render attempt succeeded/m);
 
       const framesDirExists = await fs.stat(path.join(runDir, "frames")).then(
@@ -682,7 +694,7 @@ test("render writes rendering then rendered states with fake ffmpeg", async () =
         (error) => {
           if (error.code === "ENOENT") return false;
           throw error;
-        }
+        },
       );
       assert.equal(framesDirExists, false);
     }, "success");
@@ -775,26 +787,29 @@ test("render uses fps persisted by start command", async () => {
         out: runDir,
         duration: { ms: 1000 },
         fps: 18,
-        cleanup: "never"
-      }
+        cleanup: "never",
+      },
     });
     await waitForTerminalStatus(runDir);
 
     await withFakeFFmpeg(async (manager) => {
       const result = runCli(["render", runDir, "--json"], {
-        PATH: manager.getPATHEnv()
+        PATH: manager.getPATHEnv(),
       });
       assert.equal(result.status, 0, result.stderr);
 
       const ffmpegArgs = JSON.parse(
-        await fs.readFile(path.join(manager.outputDir, "ffmpeg-args.json"), "utf8")
+        await fs.readFile(
+          path.join(manager.outputDir, "ffmpeg-args.json"),
+          "utf8",
+        ),
       );
       const framerateIdx = ffmpegArgs.indexOf("-framerate");
       assert.notEqual(framerateIdx, -1);
       assert.equal(ffmpegArgs[framerateIdx + 1], "18");
 
       const summary = JSON.parse(
-        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8")
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
       );
       assert.equal(summary.render.framerate, 18);
     }, "success-require-contiguous-input");
@@ -971,11 +986,20 @@ test("render writes render_failed when ffmpeg exits non-zero", async () => {
       assert.equal(status.state, "render_failed");
       assert.ok(status.error);
 
-      const renderLog = await fs.readFile(path.join(runDir, "render.log"), "utf8");
+      const renderLog = await fs.readFile(
+        path.join(runDir, "render.log"),
+        "utf8",
+      );
       assert.match(renderLog, /^\[[^\]]+\] render attempt started/m);
       assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stdout: render failed/m);
-      assert.match(renderLog, /^\[[^\]]+\] fake ffmpeg stderr: encoder failed/m);
-      assert.match(renderLog, /^\[[^\]]+\] render attempt failed errorCode=FFMPEG_FAILED/m);
+      assert.match(
+        renderLog,
+        /^\[[^\]]+\] fake ffmpeg stderr: encoder failed/m,
+      );
+      assert.match(
+        renderLog,
+        /^\[[^\]]+\] render attempt failed errorCode=FFMPEG_FAILED/m,
+      );
     }, "fail");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
@@ -1469,10 +1493,16 @@ test("cleanup --keep-samples reports one retained frame for a one-frame run", as
       const originalPath = process.env.PATH;
       process.env.PATH = manager.getPATHEnv();
       try {
-        const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+        const result = await commandCleanup({
+          runDir,
+          options: { "keep-samples": true },
+        });
         assert.equal(result.removed, 1);
         assert.equal(result.retained, 1);
-        const framesExist = await fs.stat(path.join(runDir, "frames")).then(() => true, () => false);
+        const framesExist = await fs.stat(path.join(runDir, "frames")).then(
+          () => true,
+          () => false,
+        );
         assert.equal(framesExist, false);
         const samples = await fs.readdir(path.join(runDir, "samples"));
         assert.deepEqual(samples.sort(), ["sample-000001.png"]);
@@ -1592,7 +1622,9 @@ test("start timing clamps explicit interval below backend minimum", () => {
 });
 
 test("start command clamps direct interval below backend minimum and persists clamp metadata", async () => {
-  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-direct-interval-"));
+  const runDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-direct-interval-"),
+  );
   try {
     const result = runCli(
       [
@@ -1874,10 +1906,9 @@ test("start with simulated initial navigation failure writes manifest diagnostic
     assert.equal(status.frames.failed, 1);
     assert.match(status.error, /navigation failed:/);
 
-    const manifest = (await fs.readFile(
-      path.join(runDir, "manifest.jsonl"),
-      "utf8",
-    ))
+    const manifest = (
+      await fs.readFile(path.join(runDir, "manifest.jsonl"), "utf8")
+    )
       .trim()
       .split(/\r?\n/)
       .filter(Boolean)
@@ -1964,11 +1995,13 @@ test("commandStart saves keepSamples (explicit) to config.json", async () => {
         out: runDir,
         duration: { ms: 1000 },
         "keep-samples": "7",
-        cleanup: "never"
-      }
+        cleanup: "never",
+      },
     });
 
-    const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
     assert.equal(config.keepSamples, 7);
   } finally {
     delete process.env.TIMELAPSE_SIMULATE_FRAMES;
@@ -1977,7 +2010,10 @@ test("commandStart saves keepSamples (explicit) to config.json", async () => {
 });
 
 test("commandStart saves keepSamples (default) to config.json", async () => {
-  const runDir = path.join(os.tmpdir(), "tlc-test-start-samples-default-" + Date.now());
+  const runDir = path.join(
+    os.tmpdir(),
+    "tlc-test-start-samples-default-" + Date.now(),
+  );
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
     await commandStart({
@@ -1986,11 +2022,13 @@ test("commandStart saves keepSamples (default) to config.json", async () => {
         out: runDir,
         duration: { ms: 1000 },
         "keep-samples": true,
-        cleanup: "never"
-      }
+        cleanup: "never",
+      },
     });
 
-    const config = JSON.parse(await fs.readFile(path.join(runDir, "config.json"), "utf8"));
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
     assert.equal(config.keepSamples, 5);
   } finally {
     delete process.env.TIMELAPSE_SIMULATE_FRAMES;
@@ -1999,7 +2037,10 @@ test("commandStart saves keepSamples (default) to config.json", async () => {
 });
 
 test("start retention cleanup:never is honored by render without render flags", async () => {
-  const runDir = path.join(os.tmpdir(), "tlc-test-start-render-never-" + Date.now());
+  const runDir = path.join(
+    os.tmpdir(),
+    "tlc-test-start-render-never-" + Date.now(),
+  );
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
     await commandStart({
@@ -2007,8 +2048,8 @@ test("start retention cleanup:never is honored by render without render flags", 
       options: {
         out: runDir,
         duration: { ms: 1000 },
-        cleanup: "never"
-      }
+        cleanup: "never",
+      },
     });
     await waitForTerminalStatus(runDir);
 
@@ -2024,7 +2065,9 @@ test("start retention cleanup:never is honored by render without render flags", 
 
     const frames = await fs.readdir(path.join(runDir, "frames"));
     assert.equal(frames.length, 3);
-    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
     assert.equal(summary.cleanup.reason, "never");
     assert.equal(summary.cleanup.source, "config");
   } finally {
@@ -2034,7 +2077,10 @@ test("start retention cleanup:never is honored by render without render flags", 
 });
 
 test("start retention keepLatest is honored by render without render flags", async () => {
-  const runDir = path.join(os.tmpdir(), "tlc-test-start-render-keep-latest-" + Date.now());
+  const runDir = path.join(
+    os.tmpdir(),
+    "tlc-test-start-render-keep-latest-" + Date.now(),
+  );
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
     await commandStart({
@@ -2042,8 +2088,8 @@ test("start retention keepLatest is honored by render without render flags", asy
       options: {
         out: runDir,
         duration: { ms: 1000 },
-        "keep-latest": true
-      }
+        "keep-latest": true,
+      },
     });
     await waitForTerminalStatus(runDir);
 
@@ -2059,7 +2105,9 @@ test("start retention keepLatest is honored by render without render flags", asy
 
     const frames = await fs.readdir(path.join(runDir, "frames"));
     assert.deepEqual(frames.sort(), ["frame-0003.png"]);
-    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
     assert.equal(summary.cleanup.reason, "keep-latest");
     assert.equal(summary.cleanup.source, "config");
   } finally {

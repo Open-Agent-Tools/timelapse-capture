@@ -48,7 +48,9 @@ async function waitForCompletedStatus(runDir, { timeoutMs = 5000 } = {}) {
 }
 
 test("status output includes attempted and skipped frame counters", async () => {
-  const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-status-skipped-"));
+  const outDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-status-skipped-"),
+  );
   try {
     const result = runCli(
       [
@@ -65,7 +67,7 @@ test("status output includes attempted and skipped frame counters", async () => 
       {
         TIMELAPSE_SIMULATE_FRAMES: "3",
         TIMELAPSE_SIMULATE_FRAME_FAILURE: "1", // fails index 2
-        TIMELAPSE_SIMULATE_FRAME_SKIP: "1",    // skips index 3
+        TIMELAPSE_SIMULATE_FRAME_SKIP: "1", // skips index 3
       },
     );
     assert.equal(result.status, 0, result.stderr);
@@ -74,7 +76,7 @@ test("status output includes attempted and skipped frame counters", async () => 
 
     const status = await waitForCompletedStatus(runDir);
     assert.equal(status.state, "completed");
-    
+
     // index 1: captured
     // index 2: failed
     // index 3: skipped
@@ -100,7 +102,7 @@ test("status output includes attempted and skipped frame counters", async () => 
       .split(/\r?\n/)
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-    
+
     assert.equal(manifestLines.length, 3);
     assert.equal(manifestLines[0].status, "captured");
     assert.equal(manifestLines[1].status, "failed");
