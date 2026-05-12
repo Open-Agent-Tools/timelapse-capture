@@ -294,6 +294,7 @@ timelapse-runs/<slug>-<timestamp>/
   config.json
   job.json
   manifest.json
+  manifest.jsonl
   status.json
   frames/
     frame-0001.png
@@ -304,8 +305,10 @@ timelapse-runs/<slug>-<timestamp>/
 
 Important paths:
 
-- `frames/`: raw screenshots captured before render cleanup.
+- `config.json`: capture configuration recorded at start (backend, interval, viewport, retention flags).
 - `job.json`: background process metadata, including the detached child PID and command.
+- `manifest.json`: start-time run metadata written once when the capture starts (run directory path, creation timestamp, initial state).
+- `manifest.jsonl`: per-frame capture log. One JSON record per capture attempt (captured, failed, or skipped), matching the schema in `docs/PRD.md` "Manifest Format".
 - `status.json`: current or final run status.
 - `output.mp4`: rendered video.
 - `run-summary.json`: render and cleanup metadata.

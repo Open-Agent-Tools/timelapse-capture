@@ -96,7 +96,7 @@ If render fails, read the error, run `timelapse-capture doctor`, and verify the 
 
 ## Retention Guidance
 
-Default behavior keeps raw frames during capture and removes them after a successful render. The MP4, status, manifest, config, job, and run summary remain in the run directory.
+Default behavior keeps raw frames during capture and removes them after a successful render. The MP4, status, manifest.json, manifest.jsonl, config, job, and run summary remain in the run directory.
 
 Use `--keep-frames` only when the user explicitly asks to preserve all screenshots or when recording a retention decision during cleanup:
 

@@ -43,6 +43,13 @@ test("README documents dogfood tester setup and capture workflow", async () => {
   assert.match(readme, /### .*ffprobe/i);
   // Rendered artifact path is documented
   assert.match(readme, /output\.mp4/);
+  // Both manifest files must be documented in the Artifacts section
+  assert.match(readme, /manifest\.jsonl/);
+  assert.match(readme, /manifest\.json/);
+  // manifest.jsonl must be described as the per-frame log near its filename
+  assert.match(readme, /manifest\.jsonl[\s\S]{0,400}per-frame/i);
+  // manifest.json must be described as start-time metadata near its filename
+  assert.match(readme, /manifest\.json[^l][\s\S]{0,400}(start-time|run metadata|capture start)/i);
 });
 
 test("skill requires doctor before capture and describes the agent workflow", async () => {
