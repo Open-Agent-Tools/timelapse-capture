@@ -752,10 +752,7 @@ test("frame filename width and render input pattern stay in sync", async () => {
       assert.equal(result.status, 0, result.stderr);
 
       const summary = JSON.parse(
-        await fs.readFile(
-          path.join(runDir, "run-summary.json"),
-          "utf8",
-        ),
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
       );
       const ffmpegArgs = summary.render.ffmpegCommand;
       const inputIndex = ffmpegArgs.indexOf("-i");
@@ -1606,7 +1603,9 @@ test("start command accepts positional URL and validates required flags", async 
 });
 
 test("start command uses PRD desktop default viewport when omitted", async () => {
-  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-default-viewport-"));
+  const runDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-default-viewport-"),
+  );
   try {
     const result = runCli(
       [
@@ -1625,7 +1624,10 @@ test("start command uses PRD desktop default viewport when omitted", async () =>
     assert.equal(result.status, 0, result.stderr);
 
     const startPayload = JSON.parse(result.stdout);
-    assert.deepEqual(startPayload.status.viewport, { width: 1440, height: 900 });
+    assert.deepEqual(startPayload.status.viewport, {
+      width: 1440,
+      height: 900,
+    });
 
     const config = JSON.parse(
       await fs.readFile(path.join(runDir, "config.json"), "utf8"),
@@ -1639,10 +1641,9 @@ test("start command uses PRD desktop default viewport when omitted", async () =>
     const status = await waitForTerminalStatus(runDir);
     assert.deepEqual(status.viewport, { width: 1440, height: 900 });
 
-    const manifest = (await fs.readFile(
-      path.join(runDir, "manifest.jsonl"),
-      "utf8",
-    ))
+    const manifest = (
+      await fs.readFile(path.join(runDir, "manifest.jsonl"), "utf8")
+    )
       .trim()
       .split(/\r?\n/)
       .filter(Boolean)
@@ -1654,7 +1655,9 @@ test("start command uses PRD desktop default viewport when omitted", async () =>
 });
 
 test("start command preserves explicit viewport override", async () => {
-  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-override-viewport-"));
+  const runDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-override-viewport-"),
+  );
   try {
     const result = runCli(
       [
@@ -1689,10 +1692,9 @@ test("start command preserves explicit viewport override", async () => {
     const status = await waitForTerminalStatus(runDir);
     assert.deepEqual(status.viewport, { width: 800, height: 600 });
 
-    const manifest = (await fs.readFile(
-      path.join(runDir, "manifest.jsonl"),
-      "utf8",
-    ))
+    const manifest = (
+      await fs.readFile(path.join(runDir, "manifest.jsonl"), "utf8")
+    )
       .trim()
       .split(/\r?\n/)
       .filter(Boolean)

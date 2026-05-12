@@ -332,7 +332,7 @@ function resolveStartTarget(positionalTarget, flagTarget) {
   if (positionalTarget && flagTarget && positionalTarget !== flagTarget) {
     throw new ParseError(
       "E_CONFLICTING_ARGUMENT",
-      "Conflicting start targets: positional target and --url differ."
+      "Conflicting start targets: positional target and --url differ.",
     );
   }
   return positionalTarget ?? flagTarget ?? null;
