@@ -12,7 +12,7 @@ test("sleepUntilFrameTime returns immediately when target is in the past", async
     wait: () => {
       waitCalls += 1;
     },
-    maxWaitMs: 200
+    maxWaitMs: 200,
   });
 
   assert.equal(waitCalls, 0);
@@ -23,12 +23,14 @@ test("sleepUntilFrameTime can be driven with mock timers without real sleep", as
   let done = false;
   mock.timers.enable({ apis: ["setTimeout"] });
 
-  const wait = __test__.waitUntilFrameTime(1_050, {
-    now,
-    maxWaitMs: 200
-  }).then(() => {
-    done = true;
-  });
+  const wait = __test__
+    .waitUntilFrameTime(1_050, {
+      now,
+      maxWaitMs: 200,
+    })
+    .then(() => {
+      done = true;
+    });
 
   await Promise.resolve();
   assert.equal(done, false);
@@ -50,7 +52,7 @@ test("sleepUntilFrameTime supports abort signals", async () => {
   const promise = __test__.waitUntilFrameTime(1_900, {
     now,
     maxWaitMs: 250,
-    signal: controller.signal
+    signal: controller.signal,
   });
   controller.abort();
   await assert.rejects(() => promise, /AbortError|This operation was aborted/i);

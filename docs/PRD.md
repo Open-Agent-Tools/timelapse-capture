@@ -508,4 +508,3 @@ Mitigations:
 - After successful render, raw frames are removed by default.
 - Frame cleanup preserves final video, manifest, logs, summary, poster, and configured samples.
 - Failed screenshot attempts are logged and do not stop the run unless a fatal backend error occurs.
-

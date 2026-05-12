@@ -10,13 +10,20 @@ const TARGET = "http://example.test/";
 const VIEWPORT = { width: 1280, height: 720 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function waitForTerminalStatus(runDir, expectedAttempts, { timeoutMs = 5000 } = {}) {
+async function waitForTerminalStatus(
+  runDir,
+  expectedAttempts,
+  { timeoutMs = 5000 } = {},
+) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const raw = await fs.readFile(path.join(runDir, "status.json"), "utf8");
     const status = JSON.parse(raw);
-    const job = JSON.parse(await fs.readFile(path.join(runDir, "job.json"), "utf8"));
-    const attempts = (status.frames?.captured ?? 0) + (status.frames?.failed ?? 0);
+    const job = JSON.parse(
+      await fs.readFile(path.join(runDir, "job.json"), "utf8"),
+    );
+    const attempts =
+      (status.frames?.captured ?? 0) + (status.frames?.failed ?? 0);
     if (
       (status.state === "completed" || status.state === "failed") &&
       (job.state === "completed" || job.state === "failed") &&
@@ -26,19 +33,29 @@ async function waitForTerminalStatus(runDir, expectedAttempts, { timeoutMs = 500
     }
     await sleep(25);
   }
-  assert.fail(`Timed out waiting for ${expectedAttempts} simulated attempts in ${runDir}`);
+  assert.fail(
+    `Timed out waiting for ${expectedAttempts} simulated attempts in ${runDir}`,
+  );
 }
 
 async function runSimulated(frames, extraEnv = {}) {
-  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-record-helpers-"));
+  const runDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-record-helpers-"),
+  );
   const savedEnv = {};
-  const envOverrides = { TIMELAPSE_SIMULATE_FRAMES: String(frames), ...extraEnv };
+  const envOverrides = {
+    TIMELAPSE_SIMULATE_FRAMES: String(frames),
+    ...extraEnv,
+  };
   for (const [k, v] of Object.entries(envOverrides)) {
     savedEnv[k] = process.env[k];
     process.env[k] = v;
   }
   try {
-    await commandStart({ target: TARGET, options: { out: runDir, interval: 0 } });
+    await commandStart({
+      target: TARGET,
+      options: { out: runDir, interval: 0 },
+    });
   } finally {
     for (const [k, v] of Object.entries(savedEnv)) {
       if (v === undefined) delete process.env[k];
@@ -51,7 +68,10 @@ async function runSimulated(frames, extraEnv = {}) {
 
 async function readManifest(runDir) {
   const raw = await fs.readFile(path.join(runDir, "manifest.jsonl"), "utf8");
-  return raw.trim().split("\n").map((line) => JSON.parse(line));
+  return raw
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
 }
 
 test("recordCapturedFrame: manifest records have required fields for all captured frames", async () => {
@@ -62,8 +82,14 @@ test("recordCapturedFrame: manifest records have required fields for all capture
     for (const [i, r] of records.entries()) {
       assert.equal(r.status, "captured", `record ${i} status`);
       assert.equal(r.index, i + 1, `record ${i} index`);
-      assert.ok(typeof r.capturedAt === "string", `record ${i} capturedAt is string`);
-      assert.ok(typeof r.scheduledAt === "string", `record ${i} scheduledAt is string`);
+      assert.ok(
+        typeof r.capturedAt === "string",
+        `record ${i} capturedAt is string`,
+      );
+      assert.ok(
+        typeof r.scheduledAt === "string",
+        `record ${i} scheduledAt is string`,
+      );
       assert.ok(typeof r.path === "string", `record ${i} path is string`);
       assert.equal(r.url, TARGET, `record ${i} url`);
       assert.ok("title" in r, `record ${i} has title field`);
@@ -79,7 +105,9 @@ test("recordCapturedFrame: manifest records have required fields for all capture
 test("recordCapturedFrame: latest-frame.json and latest.png are written after each frame", async () => {
   const runDir = await runSimulated(2);
   try {
-    const latestFrame = JSON.parse(await fs.readFile(path.join(runDir, "latest-frame.json"), "utf8"));
+    const latestFrame = JSON.parse(
+      await fs.readFile(path.join(runDir, "latest-frame.json"), "utf8"),
+    );
     assert.equal(latestFrame.index, 2);
     assert.equal(latestFrame.status, "captured");
     const stat = await fs.stat(path.join(runDir, "latest.png"));
@@ -90,7 +118,9 @@ test("recordCapturedFrame: latest-frame.json and latest.png are written after ea
 });
 
 test("recordFailedFrame: failure record has required fields and state is updated", async () => {
-  const runDir = await runSimulated(3, { TIMELAPSE_SIMULATE_FRAME_FAILURE: "1" });
+  const runDir = await runSimulated(3, {
+    TIMELAPSE_SIMULATE_FRAME_FAILURE: "1",
+  });
   try {
     const records = await readManifest(runDir);
     assert.equal(records.length, 3);
@@ -116,7 +146,9 @@ test("recordFailedFrame: failure record has required fields and state is updated
 test("recordCapturedFrame: state.frameCount increments correctly across frames", async () => {
   const runDir = await runSimulated(3);
   try {
-    const status = JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8"));
+    const status = JSON.parse(
+      await fs.readFile(path.join(runDir, "status.json"), "utf8"),
+    );
     assert.equal(status.frames.captured, 3);
     assert.equal(status.frames.failed, 0);
   } finally {

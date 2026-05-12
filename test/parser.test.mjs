@@ -5,7 +5,7 @@ import {
   ParseError,
   parseArgs,
   parseDuration,
-  parseViewport
+  parseViewport,
 } from "../src/timelapse-capture.mjs";
 
 test("parseDuration accepts combined and unit-formatted values", () => {
@@ -19,15 +19,15 @@ test("parseDuration accepts combined and unit-formatted values", () => {
 test("parseDuration rejects malformed values", () => {
   assert.throws(
     () => parseDuration(""),
-    (error) => error instanceof ParseError && error.code === "E_BAD_DURATION"
+    (error) => error instanceof ParseError && error.code === "E_BAD_DURATION",
   );
   assert.throws(
     () => parseDuration("abc"),
-    (error) => error instanceof ParseError && error.code === "E_BAD_DURATION"
+    (error) => error instanceof ParseError && error.code === "E_BAD_DURATION",
   );
   assert.throws(
     () => parseDuration("30x"),
-    (error) => error instanceof ParseError && error.code === "E_BAD_DURATION"
+    (error) => error instanceof ParseError && error.code === "E_BAD_DURATION",
   );
 });
 
@@ -35,15 +35,15 @@ test("parseViewport accepts valid viewport and rejects invalid dimensions", () =
   assert.deepEqual(parseViewport("1280x720"), {
     input: "1280x720",
     width: 1280,
-    height: 720
+    height: 720,
   });
   assert.throws(
     () => parseViewport("0x720"),
-    (error) => error instanceof ParseError && error.code === "E_BAD_VIEWPORT"
+    (error) => error instanceof ParseError && error.code === "E_BAD_VIEWPORT",
   );
   assert.throws(
     () => parseViewport("abc"),
-    (error) => error instanceof ParseError && error.code === "E_BAD_VIEWPORT"
+    (error) => error instanceof ParseError && error.code === "E_BAD_VIEWPORT",
   );
 });
 
@@ -68,31 +68,62 @@ test("parseArgs maps capture --run for the internal child entrypoint", () => {
 });
 
 test("parseArgs parses start target and required duration", () => {
-  const parsed = parseArgs(["start", "http://example.com", "--duration", "30s"]);
+  const parsed = parseArgs([
+    "start",
+    "http://example.com",
+    "--duration",
+    "30s",
+  ]);
   assert.equal(parsed.command, "start");
   assert.equal(parsed.target, "http://example.com");
   assert.equal(parsed.options.duration.ms, 30000);
 });
 
 test("parseArgs handles json boolean flags and short aliases", () => {
-  const enabled = parseArgs(["start", "http://example.com", "--duration", "30s", "--json"]);
+  const enabled = parseArgs([
+    "start",
+    "http://example.com",
+    "--duration",
+    "30s",
+    "--json",
+  ]);
   assert.equal(enabled.options.json, true);
 
-  const negated = parseArgs(["start", "http://example.com", "--duration", "30s", "--no-json"]);
+  const negated = parseArgs([
+    "start",
+    "http://example.com",
+    "--duration",
+    "30s",
+    "--no-json",
+  ]);
   assert.equal(negated.options.json, false);
 
-  const short = parseArgs(["start", "http://example.com", "--duration", "30s", "-j"]);
+  const short = parseArgs([
+    "start",
+    "http://example.com",
+    "--duration",
+    "30s",
+    "-j",
+  ]);
   assert.equal(short.options.json, true);
 });
 
 test("parseArgs validates unknown command and unknown flag", () => {
   assert.throws(
     () => parseArgs(["bogus"]),
-    (error) => error instanceof ParseError && error.code === "E_UNKNOWN_COMMAND"
+    (error) =>
+      error instanceof ParseError && error.code === "E_UNKNOWN_COMMAND",
   );
   assert.throws(
-    () => parseArgs(["start", "http://example.com", "--duration", "30s", "--unknown"]),
-    (error) => error instanceof ParseError && error.code === "E_UNKNOWN_FLAG"
+    () =>
+      parseArgs([
+        "start",
+        "http://example.com",
+        "--duration",
+        "30s",
+        "--unknown",
+      ]),
+    (error) => error instanceof ParseError && error.code === "E_UNKNOWN_FLAG",
   );
 });
 
@@ -103,32 +134,33 @@ test("parseArgs validates index and near values", () => {
     "--index",
     "5",
     "--near",
-    "2026-05-10T12:00:00Z"
+    "2026-05-10T12:00:00Z",
   ]);
   assert.equal(parsed.options.index, 5);
   assert.equal(parsed.options.near, "2026-05-10T12:00:00.000Z");
 
   assert.throws(
     () => parseArgs(["peek", "/tmp/run", "--index", "abc"]),
-    (error) => error instanceof ParseError && error.code === "E_BAD_INDEX"
+    (error) => error instanceof ParseError && error.code === "E_BAD_INDEX",
   );
   assert.throws(
     () => parseArgs(["peek", "/tmp/run", "--near", "not-a-date"]),
-    (error) => error instanceof ParseError && error.code === "E_BAD_TIMESTAMP"
+    (error) => error instanceof ParseError && error.code === "E_BAD_TIMESTAMP",
   );
 });
 
 test("parseArgs validates required arguments and arity", () => {
   assert.throws(
     () => parseArgs(["start"]),
-    (error) => error instanceof ParseError && error.code === "E_MISSING_ARGUMENT"
+    (error) =>
+      error instanceof ParseError && error.code === "E_MISSING_ARGUMENT",
   );
   assert.throws(
     () => parseArgs(["start", "http://example.com", "--duration"]),
-    (error) => error instanceof ParseError && error.code === "E_MISSING_VALUE"
+    (error) => error instanceof ParseError && error.code === "E_MISSING_VALUE",
   );
   assert.throws(
     () => parseArgs(["status", "/tmp/run", "extra"]),
-    (error) => error instanceof ParseError && error.code === "E_EXTRA_ARGUMENT"
+    (error) => error instanceof ParseError && error.code === "E_EXTRA_ARGUMENT",
   );
 });
