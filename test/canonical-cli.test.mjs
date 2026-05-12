@@ -10,6 +10,7 @@ import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 import {
   commandCleanup,
   commandRender,
+  commandStart,
   parseArgs,
   ParseError,
   resolveStartTiming,
@@ -1846,7 +1847,6 @@ test("start retention cleanup:never is honored by render without render flags", 
   const runDir = path.join(os.tmpdir(), "tlc-test-start-render-never-" + Date.now());
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
-    const { commandStart, commandRender } = await import("../src/timelapse-capture.mjs");
     await commandStart({
       target: "http://example.com",
       options: {
@@ -1855,12 +1855,7 @@ test("start retention cleanup:never is honored by render without render flags", 
         cleanup: "never"
       }
     });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const frames = await fs.readdir(path.join(runDir, "frames")).catch(() => []);
-      if (frames.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify({ state: "completed", frames: { captured: 3 } }));
+    await waitForTerminalStatus(runDir);
 
     await withFakeFFmpeg(async (manager) => {
       const originalPath = process.env.PATH;
@@ -1887,7 +1882,6 @@ test("start retention keepLatest is honored by render without render flags", asy
   const runDir = path.join(os.tmpdir(), "tlc-test-start-render-keep-latest-" + Date.now());
   try {
     process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
-    const { commandStart, commandRender } = await import("../src/timelapse-capture.mjs");
     await commandStart({
       target: "http://example.com",
       options: {
@@ -1896,12 +1890,7 @@ test("start retention keepLatest is honored by render without render flags", asy
         "keep-latest": true
       }
     });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const frames = await fs.readdir(path.join(runDir, "frames")).catch(() => []);
-      if (frames.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify({ state: "completed", frames: { captured: 3 } }));
+    await waitForTerminalStatus(runDir);
 
     await withFakeFFmpeg(async (manager) => {
       const originalPath = process.env.PATH;
