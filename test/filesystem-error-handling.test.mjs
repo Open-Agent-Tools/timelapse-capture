@@ -36,6 +36,62 @@ test("commandStatus treats missing frames directory as zero usage", async () => 
   }
 });
 
+test("commandStatus ignores ENOENT from frame stat during traversal", async () => {
+  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
+  const framesDir = path.join(runDir, "frames");
+  const framePath = path.join(framesDir, "frame-0001.png");
+  const originalStat = fsp.stat;
+
+  try {
+    await writeStatusRunDir(runDir);
+    await fsp.mkdir(framesDir, { recursive: true });
+    await fsp.writeFile(framePath, "frame");
+
+    mock.method(fsp, "stat", async (target) => {
+      if (target === framePath) {
+        const error = new Error("frame disappeared");
+        error.code = "ENOENT";
+        throw error;
+      }
+      return originalStat(target);
+    });
+
+    const result = await commandStatus({ runDir });
+    assert.equal(result.framesDiskUsageBytes, 0);
+  } finally {
+    mock.restoreAll();
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("commandStatus treats ENOTDIR from nested traversal as a benign race", async () => {
+  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
+  const framesDir = path.join(runDir, "frames");
+  const stalePath = path.join(framesDir, "stale-dir");
+  const originalReaddir = fsp.readdir;
+
+  try {
+    await writeStatusRunDir(runDir);
+    await fsp.mkdir(framesDir, { recursive: true });
+    await fsp.mkdir(stalePath, { recursive: true });
+
+    mock.method(fsp, "readdir", async (target, options) => {
+      if (target === stalePath) {
+        const error = new Error("not a directory anymore");
+        error.code = "ENOTDIR";
+        throw error;
+      }
+      return originalReaddir(target, options);
+    });
+
+    const result = await commandStatus({ runDir });
+    assert.equal(result.framesDiskUsageBytes, 0);
+  } finally {
+    mock.restoreAll();
+    await fsp.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("commandStatus surfaces non-ENOENT errors from frames traversal", async () => {
   const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), "tlc-fs-errors-status-"));
   const framesDir = path.join(runDir, "frames");

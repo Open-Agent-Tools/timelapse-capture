@@ -515,7 +515,7 @@ async function removeEmptyDir(dir) {
 async function reduceDir(dir, fn, init) {
   let acc = init;
   const entries = await fsp.readdir(dir, { withFileTypes: true }).catch((error) => {
-    if (error?.code === "ENOENT") return [];
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return [];
     throw error;
   });
   for (const entry of entries) {
