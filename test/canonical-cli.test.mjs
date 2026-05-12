@@ -1334,20 +1334,19 @@ test("cleanup --keep-samples reports one retained frame for a one-frame run", as
       const originalPath = process.env.PATH;
       process.env.PATH = manager.getPATHEnv();
       try {
-        const result = await commandCleanup({
-          runDir,
-          options: { "keep-samples": true },
-        });
-        assert.equal(result.removed, 0);
+        const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
+        assert.equal(result.removed, 1);
         assert.equal(result.retained, 1);
-        const frames = await fs.readdir(path.join(runDir, "frames"));
-        assert.deepEqual(frames.sort(), ["frame-000001.png"]);
+        const framesExist = await fs.stat(path.join(runDir, "frames")).then(() => true, () => false);
+        assert.equal(framesExist, false);
+        const samples = await fs.readdir(path.join(runDir, "samples"));
+        assert.deepEqual(samples.sort(), ["sample-000001.png"]);
 
         const summary = JSON.parse(
           await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
         );
         assert.equal(summary.cleanup.success, true);
-        assert.equal(summary.cleanup.removed, 0);
+        assert.equal(summary.cleanup.removed, 1);
         assert.equal(summary.cleanup.retained, 1);
       } finally {
         process.env.PATH = originalPath;

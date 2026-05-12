@@ -124,14 +124,15 @@ test("cleanup --keep-samples reports one retained frame for one-frame runs", asy
   try {
     await runWithFakeFFmpeg(async () => {
       const result = await commandCleanup({ runDir, options: { "keep-samples": true } });
-      assert.equal(result.removed, 0);
+      assert.equal(result.removed, 1);
       assert.equal(result.retained, 1);
 
       const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
-      assert.equal(summary.cleanup.removed, 0);
+      assert.equal(summary.cleanup.removed, 1);
       assert.equal(summary.cleanup.retained, 1);
       assert.equal(summary.cleanup.success, true);
-      assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png"]);
+      assert.equal(fs.existsSync(framesDir), false);
+      assert.deepEqual((await fsp.readdir(path.join(runDir, "samples"))).sort(), ["sample-000001.png"]);
     });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
@@ -221,14 +222,15 @@ test("cleanup --keep-samples keeps distinct first and last frames", async () => 
   try {
     await runWithFakeFFmpeg(async () => {
       const result = await commandCleanup({ runDir, options: { "keep-samples": 2 } });
-      assert.equal(result.removed, 1);
+      assert.equal(result.removed, 3);
       assert.equal(result.retained, 2);
-      assert.deepEqual((await fsp.readdir(framesDir)).sort(), ["frame-000001.png", "frame-000003.png"]);
 
       const summary = JSON.parse(await fsp.readFile(path.join(runDir, "run-summary.json"), "utf8"));
-      assert.equal(summary.cleanup.removed, 1);
+      assert.equal(summary.cleanup.removed, 3);
       assert.equal(summary.cleanup.retained, 2);
       assert.equal(summary.cleanup.success, true);
+      assert.equal(fs.existsSync(framesDir), false);
+      assert.deepEqual((await fsp.readdir(path.join(runDir, "samples"))).sort(), ["sample-000001.png", "sample-000002.png"]);
     });
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
