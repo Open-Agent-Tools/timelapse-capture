@@ -1841,3 +1841,85 @@ test("commandStart saves keepSamples (default) to config.json", async () => {
     await (await import("node:fs/promises")).rm(runDir, { recursive: true, force: true });
   }
 });
+
+test("start retention cleanup:never is honored by render without render flags", async () => {
+  const runDir = path.join(os.tmpdir(), "tlc-test-start-render-never-" + Date.now());
+  try {
+    process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
+    const { commandStart, commandRender } = await import("../src/timelapse-capture.mjs");
+    await commandStart({
+      target: "http://example.com",
+      options: {
+        out: runDir,
+        duration: { ms: 1000 },
+        cleanup: "never"
+      }
+    });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const frames = await fs.readdir(path.join(runDir, "frames")).catch(() => []);
+      if (frames.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify({ state: "completed", frames: { captured: 3 } }));
+
+    await withFakeFFmpeg(async (manager) => {
+      const originalPath = process.env.PATH;
+      process.env.PATH = manager.getPATHEnv();
+      try {
+        await commandRender({ runDir, options: {} });
+      } finally {
+        process.env.PATH = originalPath;
+      }
+    });
+
+    const frames = await fs.readdir(path.join(runDir, "frames"));
+    assert.equal(frames.length, 3);
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.reason, "never");
+    assert.equal(summary.cleanup.source, "config");
+  } finally {
+    delete process.env.TIMELAPSE_SIMULATE_FRAMES;
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("start retention keepLatest is honored by render without render flags", async () => {
+  const runDir = path.join(os.tmpdir(), "tlc-test-start-render-keep-latest-" + Date.now());
+  try {
+    process.env.TIMELAPSE_SIMULATE_FRAMES = "3";
+    const { commandStart, commandRender } = await import("../src/timelapse-capture.mjs");
+    await commandStart({
+      target: "http://example.com",
+      options: {
+        out: runDir,
+        duration: { ms: 1000 },
+        "keep-latest": true
+      }
+    });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const frames = await fs.readdir(path.join(runDir, "frames")).catch(() => []);
+      if (frames.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await fs.writeFile(path.join(runDir, "status.json"), JSON.stringify({ state: "completed", frames: { captured: 3 } }));
+
+    await withFakeFFmpeg(async (manager) => {
+      const originalPath = process.env.PATH;
+      process.env.PATH = manager.getPATHEnv();
+      try {
+        await commandRender({ runDir, options: {} });
+      } finally {
+        process.env.PATH = originalPath;
+      }
+    });
+
+    const frames = await fs.readdir(path.join(runDir, "frames"));
+    assert.deepEqual(frames.sort(), ["frame-0003.png"]);
+    const summary = JSON.parse(await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"));
+    assert.equal(summary.cleanup.reason, "keep-latest");
+    assert.equal(summary.cleanup.source, "config");
+  } finally {
+    delete process.env.TIMELAPSE_SIMULATE_FRAMES;
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
