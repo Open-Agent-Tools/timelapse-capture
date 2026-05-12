@@ -16,7 +16,7 @@ async function makeRun({ frameCount = 3 } = {}) {
   for (let index = 1; index <= frameCount; index += 1) {
     await fs.writeFile(
       path.join(framesDir, `frame-${String(index).padStart(4, "0")}.png`),
-      "fake-png-content"
+      "fake-png-content",
     );
   }
   await fs.writeFile(path.join(runDir, "output.mp4"), "placeholder");
@@ -26,28 +26,46 @@ async function makeRun({ frameCount = 3 } = {}) {
 test("cleanup --keep-samples moves retained frames to samples/ and removes frames/", async () => {
   const runDir = await makeRun({ frameCount: 5 });
   try {
-    const result = await commandCleanup({ runDir, options: { "keep-samples": true, force: true } });
-    
+    const result = await commandCleanup({
+      runDir,
+      options: { "keep-samples": true, force: true },
+    });
+
     // Check if samples directory exists
     const samplesDir = path.join(runDir, "samples");
-    const samplesExist = await fs.stat(samplesDir).then(() => true, () => false);
+    const samplesExist = await fs.stat(samplesDir).then(
+      () => true,
+      () => false,
+    );
     assert.ok(samplesExist, "samples/ directory should exist");
-    
+
     const samples = await fs.readdir(samplesDir);
     assert.equal(samples.length, 2, "Should have 2 samples (first and last)");
-    assert.ok(samples.includes("sample-000001.png"), "Should have sample-000001.png");
-    assert.ok(samples.includes("sample-000002.png"), "Should have sample-000002.png");
-    
+    assert.ok(
+      samples.includes("sample-000001.png"),
+      "Should have sample-000001.png",
+    );
+    assert.ok(
+      samples.includes("sample-000002.png"),
+      "Should have sample-000002.png",
+    );
+
     // Check if frames directory is gone
     const framesDir = path.join(runDir, "frames");
-    const framesExist = await fs.stat(framesDir).then(() => true, () => false);
+    const framesExist = await fs.stat(framesDir).then(
+      () => true,
+      () => false,
+    );
     assert.ok(!framesExist, "frames/ directory should be removed");
-    
+
     // Check summary
     const summaryPath = path.join(runDir, "run-summary.json");
     const summary = JSON.parse(await fs.readFile(summaryPath, "utf8"));
     assert.ok(summary.cleanup.samples, "summary should list samples");
-    assert.deepEqual(summary.cleanup.samples, ["samples/sample-000001.png", "samples/sample-000002.png"]);
+    assert.deepEqual(summary.cleanup.samples, [
+      "samples/sample-000001.png",
+      "samples/sample-000002.png",
+    ]);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -65,17 +83,20 @@ test("renderFrames with keep-samples copies samples and cleans up frames", async
       try {
         const result = renderFrames(runDir, { "keep-samples": 5 });
         assert.ok(result.success, `Render should succeed: ${result.error}`);
-        
+
         // Check samples
         const samplesDir = path.join(runDir, "samples");
         const samples = await fs.readdir(samplesDir);
         assert.equal(samples.length, 5, "Should have 5 samples");
-        
+
         // Check frames are gone
         const framesDir = path.join(runDir, "frames");
-        const framesExist = await fs.stat(framesDir).then(() => true, () => false);
+        const framesExist = await fs.stat(framesDir).then(
+          () => true,
+          () => false,
+        );
         assert.ok(!framesExist, "frames/ directory should be removed");
-        
+
         // Check summary
         const summaryPath = path.join(runDir, "run-summary.json");
         const summary = JSON.parse(await fs.readFile(summaryPath, "utf8"));
@@ -85,7 +106,7 @@ test("renderFrames with keep-samples copies samples and cleans up frames", async
           "samples/sample-000002.png",
           "samples/sample-000003.png",
           "samples/sample-000004.png",
-          "samples/sample-000005.png"
+          "samples/sample-000005.png",
         ]);
       } finally {
         process.env.PATH = originalPath;
