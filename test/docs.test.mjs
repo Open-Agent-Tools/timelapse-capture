@@ -49,7 +49,10 @@ test("README documents dogfood tester setup and capture workflow", async () => {
   // manifest.jsonl must be described as the per-frame log near its filename
   assert.match(readme, /manifest\.jsonl[\s\S]{0,400}per-frame/i);
   // manifest.json must be described as start-time metadata near its filename
-  assert.match(readme, /manifest\.json[^l][\s\S]{0,400}(start-time|run metadata|capture start)/i);
+  assert.match(
+    readme,
+    /manifest\.json[^l][\s\S]{0,400}(start-time|run metadata|capture start)/i,
+  );
   assert.doesNotMatch(readme, /latest-retained\.png/);
 });
 
@@ -126,10 +129,7 @@ test("dogfood-protocol.md covers install checklist, all three scenarios, feedbac
     /render "\$RUN_DIR"\s*\ntimelapse-capture cleanup "\$RUN_DIR" --keep-frames/,
   );
   assert.doesNotMatch(doc, /latest-retained\.png/);
-  assert.match(
-    doc,
-    /poster\.png.*run produced[\s\S]*at least one frame\./,
-  );
+  assert.match(doc, /poster\.png.*run produced[\s\S]*at least one frame\./);
 });
 
 test("CLAUDE.md contains concrete project guidance instead of template placeholders", async () => {
@@ -137,7 +137,10 @@ test("CLAUDE.md contains concrete project guidance instead of template placehold
 
   // Must NOT contain any template placeholder text
   assert.doesNotMatch(claudeMd, /_Add your build and test commands here_/);
-  assert.doesNotMatch(claudeMd, /_Add a brief overview of your project architecture_/);
+  assert.doesNotMatch(
+    claudeMd,
+    /_Add a brief overview of your project architecture_/,
+  );
   assert.doesNotMatch(claudeMd, /_Add your project-specific conventions here_/);
   assert.doesNotMatch(claudeMd, /# Example:/);
 

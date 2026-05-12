@@ -43,7 +43,7 @@ test("package.json scripts target the canonical entry and run Node's test runner
   assert.strictEqual(pkg.scripts.typecheck, "tsc --noEmit");
   assert.strictEqual(
     pkg.scripts.ci,
-    "npm run check && npm run typecheck && npm test",
+    "npm run check && npm run format:check && npm run typecheck && npm test",
   );
 });
 

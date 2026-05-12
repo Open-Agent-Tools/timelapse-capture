@@ -64,10 +64,7 @@ test("getOutputPath: wrapped config.output.path wins over legacy config.outputPa
 });
 
 test("getOutputPath: empty options falls back to output.mp4 default", () => {
-  assert.equal(
-    getOutputPath(RUN_DIR, {}),
-    path.resolve(RUN_DIR, "output.mp4"),
-  );
+  assert.equal(getOutputPath(RUN_DIR, {}), path.resolve(RUN_DIR, "output.mp4"));
 });
 
 test("getOutputPath: undefined options falls back to output.mp4 default", () => {

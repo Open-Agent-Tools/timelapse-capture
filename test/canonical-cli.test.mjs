@@ -920,9 +920,12 @@ test("render --output writes to the requested run-relative path", async () => {
     );
 
     await withFakeFFmpeg(async (manager) => {
-      const result = runCli(["render", runDir, "--output", cliOutput, "--json"], {
-        PATH: manager.getPATHEnv(),
-      });
+      const result = runCli(
+        ["render", runDir, "--output", cliOutput, "--json"],
+        {
+          PATH: manager.getPATHEnv(),
+        },
+      );
       assert.equal(result.status, 0, result.stderr);
 
       const payload = JSON.parse(result.stdout);

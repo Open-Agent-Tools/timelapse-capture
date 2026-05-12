@@ -24,5 +24,8 @@ fi
 echo "Running npm run check"
 npm run check
 
+echo "Running npm run format:check"
+npm run format:check
+
 echo "Running npm test"
 npm test
