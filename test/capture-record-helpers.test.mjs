@@ -3,46 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
+import { waitForTerminalStatus } from "./helpers/status-waiters.mjs";
 
 import { commandStart } from "../src/timelapse-capture.mjs";
 
 const TARGET = "http://example.test/";
 const VIEWPORT = { width: 1440, height: 900 };
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitForTerminalStatus(
-  runDir,
-  expectedAttempts,
-  { timeoutMs = 5000 } = {},
-) {
-  return pollUntil(
-    async () => {
-      const raw = await fs.readFile(path.join(runDir, "status.json"), "utf8");
-      const status = JSON.parse(raw);
-      const job = JSON.parse(
-        await fs.readFile(path.join(runDir, "job.json"), "utf8"),
-      );
-      return { status, job };
-    },
-    ({ status, job }) => {
-      const attempts =
-        (status.frames?.captured ?? 0) + (status.frames?.failed ?? 0);
-      return (
-        (status.state === "completed" || status.state === "failed") &&
-        (job.state === "completed" || job.state === "failed") &&
-        attempts >= expectedAttempts
-      );
-    },
-    {
-      timeoutMs,
-      intervalMs: 25,
-      onError: isTransientReadError,
-      timeoutMessage: `Timed out waiting for ${expectedAttempts} simulated attempts in ${runDir}`,
-      describeLastValue: ({ status, job }) => JSON.stringify({ status, job }),
-    },
-  ).then(({ status }) => status);
-}
 
 async function runSimulated(frames, extraEnv = {}) {
   const runDir = await fs.mkdtemp(
@@ -68,7 +34,7 @@ async function runSimulated(frames, extraEnv = {}) {
       else process.env[k] = v;
     }
   }
-  await waitForTerminalStatus(runDir, frames);
+  await waitForTerminalStatus(runDir, { expectedAttempts: frames });
   return runDir;
 }
 
