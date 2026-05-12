@@ -158,7 +158,11 @@ Runs repository checks and tests in sequence. If `ffmpeg` and `ffprobe` are not 
 `test/real-ffmpeg-check.test.mjs` is skipped when those binaries are missing.
 
 ```bash
-timelapse-capture start <url> [--duration <duration>] [--interval <duration> | --video-length <duration>] [--fps <number>] [--viewport <width>x<height>] [--json]
+timelapse-capture start <url>
+  [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
+  [--fps <24>] [--viewport <1280x720>] [--out <dir>] [--cleanup <mode>]
+  [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
+  [--json] [--force] [--headed] [--keep-frames] [--keep-latest]
 ```
 
 Starts a detached background process that captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
