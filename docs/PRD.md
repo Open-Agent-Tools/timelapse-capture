@@ -244,7 +244,7 @@ Requirements:
 - Optionally maintain `latest.png` as a symlink or copied image for simple access.
 - Provide `peek` commands for latest, index, and timestamp-nearest frame.
 - Return machine-readable output with `--json`.
-- Keep frame filenames sortable and stable, such as `frame-000001.png`.
+- Keep frame filenames sortable and stable, such as `frame-0001.png`.
 - Record failed capture attempts in the manifest so missing frames are explainable.
 - Allow peeking during capture without locking or corrupting the frame being written.
 
@@ -268,8 +268,8 @@ timelapse-runs/app-review/
   output.mp4
   poster.png
   frames/
-    frame-000001.png
-    frame-000002.png
+    frame-0001.png
+    frame-0002.png
   samples/
     sample-000001.png
 ```
@@ -299,7 +299,7 @@ Each line in `manifest.jsonl` should represent one capture attempt.
   "index": 42,
   "scheduledAt": "2026-04-30T14:03:25.000-05:00",
   "capturedAt": "2026-04-30T14:03:25.180-05:00",
-  "path": "frames/frame-000042.png",
+  "path": "frames/frame-0042.png",
   "status": "captured",
   "url": "http://localhost:3000",
   "title": "Dashboard",
@@ -403,7 +403,7 @@ Example render command shape:
 ```bash
 ffmpeg \
   -framerate 24 \
-  -i frames/frame-%06d.png \
+  -i frames/frame-%04d.png \
   -c:v libx264 \
   -pix_fmt yuv420p \
   output.mp4
