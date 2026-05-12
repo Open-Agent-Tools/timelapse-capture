@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const CLI = path.join(
@@ -22,27 +23,27 @@ function runCli(args, env = {}) {
   });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function pollStatus(
   runDir,
   predicate,
   { timeoutMs = 5000, intervalMs = 50 } = {},
 ) {
-  const started = Date.now();
-  let lastPayload;
-  while (Date.now() - started < timeoutMs) {
-    const result = runCli(["status", runDir, "--json"]);
-    if (result.status === 0) {
-      lastPayload = JSON.parse(result.stdout);
-      if (predicate(lastPayload.status)) {
-        return lastPayload;
+  return pollUntil(
+    async () => {
+      const result = runCli(["status", runDir, "--json"]);
+      if (result.status !== 0) {
+        throw new Error(result.stderr || "status command failed");
       }
-    }
-    await sleep(intervalMs);
-  }
-  assert.fail(
-    `Timed out waiting for status. Last payload: ${JSON.stringify(lastPayload)}`,
+      return JSON.parse(result.stdout);
+    },
+    (payload) => predicate(payload.status),
+    {
+      timeoutMs,
+      intervalMs,
+      onError: isTransientReadError,
+      timeoutMessage: "Timed out waiting for status",
+      describeLastValue: (payload) => JSON.stringify(payload),
+    },
   );
 }
 
@@ -51,15 +52,17 @@ async function pollJob(
   predicate,
   { timeoutMs = 5000, intervalMs = 50 } = {},
 ) {
-  const started = Date.now();
-  let job;
-  while (Date.now() - started < timeoutMs) {
-    job = JSON.parse(await fs.readFile(path.join(runDir, "job.json"), "utf8"));
-    if (predicate(job)) return job;
-    await sleep(intervalMs);
-  }
-  assert.fail(
-    `Timed out waiting for job metadata. Last job: ${JSON.stringify(job)}`,
+  return pollUntil(
+    async () =>
+      JSON.parse(await fs.readFile(path.join(runDir, "job.json"), "utf8")),
+    (job) => predicate(job),
+    {
+      timeoutMs,
+      intervalMs,
+      onError: isTransientReadError,
+      timeoutMessage: "Timed out waiting for job metadata",
+      describeLastValue: (job) => JSON.stringify(job),
+    },
   );
 }
 

@@ -7,6 +7,7 @@ import path from "node:path";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const CLI = path.join(
@@ -72,26 +73,25 @@ function runCli(args, env = {}) {
   });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function pollCliStatus(
   runDir,
   predicate,
   { timeoutMs = 15000, intervalMs = 100 } = {},
 ) {
-  const started = Date.now();
-  let lastPayload;
-  while (Date.now() - started < timeoutMs) {
-    const statusResult = runCli(["status", runDir, "--json"]);
-    assert.equal(statusResult.status, 0, statusResult.stderr);
-    lastPayload = JSON.parse(statusResult.stdout);
-    if (predicate(lastPayload.status)) {
-      return lastPayload;
-    }
-    await sleep(intervalMs);
-  }
-  assert.fail(
-    `Timed out waiting for capture status. Last payload: ${JSON.stringify(lastPayload)}`,
+  return pollUntil(
+    async () => {
+      const statusResult = runCli(["status", runDir, "--json"]);
+      assert.equal(statusResult.status, 0, statusResult.stderr);
+      return JSON.parse(statusResult.stdout);
+    },
+    (payload) => predicate(payload.status),
+    {
+      timeoutMs,
+      intervalMs,
+      onError: isTransientReadError,
+      timeoutMessage: "Timed out waiting for capture status",
+      describeLastValue: (payload) => JSON.stringify(payload),
+    },
   );
 }
 

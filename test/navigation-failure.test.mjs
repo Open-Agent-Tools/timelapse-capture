@@ -5,6 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const CLI = path.join(
@@ -21,34 +22,18 @@ function runCli(args, env = {}) {
   });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function waitForFailedStatus(runDir, { timeoutMs = 5000 } = {}) {
-  const started = Date.now();
-  let status;
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const statusPath = path.join(runDir, "status.json");
-      const jobPath = path.join(runDir, "job.json");
-
-      if (
-        await fs
-          .access(statusPath)
-          .then(() => true)
-          .catch(() => false)
-      ) {
-        status = JSON.parse(await fs.readFile(statusPath, "utf8"));
-        if (status.state === "failed") {
-          return status;
-        }
-      }
-    } catch (e) {
-      // ignore read errors during write
-    }
-    await sleep(50);
-  }
-  assert.fail(
-    `Timed out waiting for failed status. Last status: ${JSON.stringify(status)}`,
+  return pollUntil(
+    async () =>
+      JSON.parse(await fs.readFile(path.join(runDir, "status.json"), "utf8")),
+    (status) => status.state === "failed",
+    {
+      timeoutMs,
+      intervalMs: 50,
+      onError: isTransientReadError,
+      timeoutMessage: "Timed out waiting for failed status",
+      describeLastValue: (status) => JSON.stringify(status),
+    },
   );
 }
 
