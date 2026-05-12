@@ -894,9 +894,6 @@ function validateStartTarget(target) {
   } catch {
     throw new Error(`navigation failed: invalid URL: ${target}`);
   }
-  if (process.env.TIMELAPSE_SIMULATE_NAVIGATION_FAILURE === "1") {
-    throw new Error(`navigation failed: page could not be loaded: ${target}`);
-  }
 }
 
 function buildInitialCaptureState({ target, options = {} }) {
@@ -960,6 +957,9 @@ async function runCaptureLoop({ runDir, state, framesDir, manifestPath }) {
   await appendLog(runDir, `capture running pid=${process.pid}`);
 
   try {
+    if (process.env.TIMELAPSE_SIMULATE_NAVIGATION_FAILURE === "1") {
+      throw new Error(`navigation failed: page could not be loaded: ${state.target}`);
+    }
     if (process.env.TIMELAPSE_SIMULATE_FRAMES) {
       await captureSimulated({ runDir, state, framesDir, manifestPath });
     } else {
@@ -971,8 +971,21 @@ async function runCaptureLoop({ runDir, state, framesDir, manifestPath }) {
     await appendLog(runDir, `capture finished state=${state.state}`);
     return buildStatusPayload({ ...state, runDir });
   } catch (error) {
+    const message = error?.message || String(error);
     state.state = state.frameCount > 0 ? "completed" : "failed";
-    state.error = error?.message || String(error);
+    state.error = message;
+    if (state.frameCount === 0 && state.failedFrameCount === 0) {
+      await recordFailedFrame({
+        state,
+        runDir,
+        manifestPath,
+        index: 1,
+        scheduledAt: state.startedAt,
+        url: state.target,
+        title: null,
+        error: message
+      });
+    }
     state.lastUpdatedAt = nowIso();
     await writeStatus(runDir, state);
     await appendLog(runDir, `capture failed: ${error?.stack || error}`);

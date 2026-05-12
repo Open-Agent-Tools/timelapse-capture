@@ -1781,7 +1781,7 @@ test("peek --latest returns remaining frame after cleanup --keep-latest", async 
   }
 });
 
-test("start with simulated navigation failure reports 'navigation failed:' error", async () => {
+test("start with simulated initial navigation failure writes manifest diagnostics", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-nav-fail-"));
   try {
     const result = runCli(
@@ -1794,11 +1794,67 @@ test("start with simulated navigation failure reports 'navigation failed:' error
         "1s",
         "--out",
         runDir,
+        "--json",
       ],
       { TIMELAPSE_SIMULATE_NAVIGATION_FAILURE: "1" },
     );
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /navigation failed:/);
+    assert.equal(result.status, 0, result.stderr);
+
+    const startPayload = JSON.parse(result.stdout);
+    assert.equal(startPayload.runDir, runDir);
+
+    const status = await waitForTerminalStatus(runDir);
+    const job = JSON.parse(
+      await fs.readFile(path.join(runDir, "job.json"), "utf8"),
+    );
+    assert.equal(status.state, "failed");
+    assert.equal(job.state, "failed");
+    assert.equal(status.frames.captured, 0);
+    assert.equal(status.frames.failed, 1);
+    assert.match(status.error, /navigation failed:/);
+
+    const manifest = (await fs.readFile(
+      path.join(runDir, "manifest.jsonl"),
+      "utf8",
+    ))
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.equal(manifest.length, 1);
+    assert.equal(manifest[0].index, 1);
+    assert.equal(manifest[0].status, "failed");
+    assert.equal(manifest[0].capturedAt, null);
+    assert.equal(manifest[0].path, null);
+    assert.equal(manifest[0].url, "http://example.test/");
+    assert.equal(manifest[0].title, null);
+    assert.deepEqual(manifest[0].viewport, { width: 1280, height: 720 });
+    assert.match(manifest[0].error, /navigation failed:/);
+    assert.equal(manifest[0].error, status.error);
+
+    const renderResult = runCli(["render", runDir]);
+    assert.notEqual(renderResult.status, 0);
+    assert.match(renderResult.stderr, /No frames found to render|no frames/i);
+
+    for (const artifact of [
+      "manifest.jsonl",
+      "status.json",
+      "capture.log",
+      "render.log",
+      "run-summary.json",
+    ]) {
+      await fs.access(path.join(runDir, artifact));
+    }
+
+    const renderLog = await fs.readFile(
+      path.join(runDir, "render.log"),
+      "utf8",
+    );
+    assert.match(renderLog, /render attempt failed/);
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
+    assert.match(summary.lastRenderAttempt.error, /No frames found to render/i);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
