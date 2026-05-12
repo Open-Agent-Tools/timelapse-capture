@@ -98,6 +98,7 @@ test("cleanup --keep-frames retains all frames and keeps peek available", async 
       commandCleanup({ runDir, options: { "keep-frames": true } }),
     );
     assert.equal(result.message, "Frames preserved (--keep-frames)");
+    assert.equal(result.frameCount, 3);
     assert.deepEqual((await fs.readdir(path.join(runDir, "frames"))).sort(), [
       "frame-0001.png",
       "frame-0002.png",
@@ -375,6 +376,40 @@ test("render picks up keepSamples from config.json", async () => {
       await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
     );
     assert.equal(summary.cleanup.retained, 4);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup default records reason=default in summary", async () => {
+  const runDir = await makeRun();
+  try {
+    await runWithFakeFFmpeg(() =>
+      commandCleanup({ runDir, options: {} }),
+    );
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
+    assert.equal(summary.cleanup.reason, "default");
+    assert.equal(summary.cleanup.success, true);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup --keep-samples on empty frames records reason=keep-samples", async () => {
+  const runDir = await makeRun({ frameCount: 0 });
+  try {
+    const result = await runWithFakeFFmpeg(() =>
+      commandCleanup({ runDir, options: { "keep-samples": true } }),
+    );
+    assert.equal(result.message, "No frames to sample");
+    const summary = JSON.parse(
+      await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+    );
+    assert.equal(summary.cleanup.reason, "keep-samples");
+    assert.equal(summary.cleanup.removed, 0);
+    assert.equal(summary.cleanup.success, true);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
