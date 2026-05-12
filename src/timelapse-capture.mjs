@@ -47,6 +47,7 @@ const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set([
 const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
 const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
 const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
+const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
 const BACKEND_MIN_INTERVAL_MS = Object.freeze({
   "playwright-url": 1000,
 });
@@ -633,9 +634,9 @@ function formatBytes(bytes) {
 }
 
 function estimateFrameBytes(viewport) {
-  return Math.ceil(
-    ((viewport?.width || 1280) * (viewport?.height || 720) * 3) / 4,
-  );
+  const width = viewport?.width || DEFAULT_VIEWPORT.width;
+  const height = viewport?.height || DEFAULT_VIEWPORT.height;
+  return Math.ceil((width * height * 3) / 4);
 }
 
 function estimateDiskBytes(viewport, targetFrames) {
@@ -816,6 +817,9 @@ function buildStatusPayload(state) {
     requestedIntervalMs: state.requestedIntervalMs ?? state.intervalMs,
     backendMinIntervalMs: state.backendMinIntervalMs ?? null,
     intervalClamped: Boolean(state.intervalClamped),
+    viewport: state.viewport
+      ? { width: state.viewport.width, height: state.viewport.height }
+      : null,
     estimatedDiskBytes: state.estimatedDiskBytes ?? null,
     error: state.error || null,
   };
@@ -1123,7 +1127,7 @@ function buildInitialCaptureState({ target, options = {} }) {
   const fps = timing.fps;
   const viewport = options.viewport
     ? { width: options.viewport.width, height: options.viewport.height }
-    : { width: 1280, height: 720 };
+    : { width: DEFAULT_VIEWPORT.width, height: DEFAULT_VIEWPORT.height };
   const targetFrames = (() => {
     const fromEnv = Number.parseInt(
       process.env.TIMELAPSE_SIMULATE_FRAMES || "",

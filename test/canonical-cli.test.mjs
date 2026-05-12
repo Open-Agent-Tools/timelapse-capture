@@ -1541,6 +1541,104 @@ test("start command accepts positional URL and validates required flags", async 
   }
 });
 
+test("start command uses PRD desktop default viewport when omitted", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-default-viewport-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "1s",
+        "--interval",
+        "1s",
+        "--out",
+        runDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "1" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const startPayload = JSON.parse(result.stdout);
+    assert.deepEqual(startPayload.status.viewport, { width: 1440, height: 900 });
+
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
+    assert.deepEqual(config.viewport, { width: 1440, height: 900 });
+    assert.equal(
+      config.estimatedDiskBytes,
+      Math.max(1, config.targetFrames) * Math.ceil((1440 * 900 * 3) / 4) + 4096,
+    );
+
+    const status = await waitForTerminalStatus(runDir);
+    assert.deepEqual(status.viewport, { width: 1440, height: 900 });
+
+    const manifest = (await fs.readFile(
+      path.join(runDir, "manifest.jsonl"),
+      "utf8",
+    ))
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(manifest[0].viewport, { width: 1440, height: 900 });
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("start command preserves explicit viewport override", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-override-viewport-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "1s",
+        "--interval",
+        "1s",
+        "--viewport",
+        "800x600",
+        "--out",
+        runDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "1" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const startPayload = JSON.parse(result.stdout);
+    assert.deepEqual(startPayload.status.viewport, { width: 800, height: 600 });
+
+    const config = JSON.parse(
+      await fs.readFile(path.join(runDir, "config.json"), "utf8"),
+    );
+    assert.deepEqual(config.viewport, { width: 800, height: 600 });
+    assert.equal(
+      config.estimatedDiskBytes,
+      Math.max(1, config.targetFrames) * Math.ceil((800 * 600 * 3) / 4) + 4096,
+    );
+
+    const status = await waitForTerminalStatus(runDir);
+    assert.deepEqual(status.viewport, { width: 800, height: 600 });
+
+    const manifest = (await fs.readFile(
+      path.join(runDir, "manifest.jsonl"),
+      "utf8",
+    ))
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(manifest[0].viewport, { width: 800, height: 600 });
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("start parser accepts video length and fps options", () => {
   const parsed = parseArgs([
     "start",
@@ -1920,7 +2018,7 @@ test("start with simulated initial navigation failure writes manifest diagnostic
     assert.equal(manifest[0].path, null);
     assert.equal(manifest[0].url, "http://example.test/");
     assert.equal(manifest[0].title, null);
-    assert.deepEqual(manifest[0].viewport, { width: 1280, height: 720 });
+    assert.deepEqual(manifest[0].viewport, { width: 1440, height: 900 });
     assert.match(manifest[0].error, /navigation failed:/);
     assert.equal(manifest[0].error, status.error);
 
