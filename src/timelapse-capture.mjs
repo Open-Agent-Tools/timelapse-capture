@@ -1593,6 +1593,96 @@ async function readCapturedFrameRecords(runDir, frameNames) {
   return records;
 }
 
+function pickRecordByFrameName(records, frameName) {
+  if (!Array.isArray(records) || records.length === 0) return null;
+  return records.find((record) => record.name === frameName) ?? null;
+}
+
+function buildPeekFallbackPayload(resolvedRunDir, source, absolutePath) {
+  return {
+    exists: true,
+    path: absolutePath,
+    framePath: absolutePath,
+    pathCount: 1,
+    frame: null,
+    selection: {
+      source,
+      metadataAvailable: false,
+    },
+    fallback: {
+      source,
+      path: absolutePath,
+    },
+  };
+}
+
+function buildPeekFramePayload(runDir, frameName, pathCount, record) {
+  const framePath = path.join(runDir, "frames", frameName);
+  const relativeFramePath = path.join("frames", frameName);
+  const fallbackIndex = Number.parseInt(frameName.match(/\d+/)?.[0] || "0", 10);
+  const frameIndex =
+    Number.isInteger(record?.index) && record.index > 0 ? record.index : fallbackIndex;
+  const capturedAt = record?.capturedAt ?? null;
+  const scheduledAt = record?.scheduledAt ?? null;
+  const status = record?.status ?? null;
+  const url = record?.url ?? null;
+  const title = Object.prototype.hasOwnProperty.call(record ?? {}, "title")
+    ? record.title
+    : null;
+  const viewport = record?.viewport ?? null;
+  const error = Object.prototype.hasOwnProperty.call(record ?? {}, "error")
+    ? record.error
+    : null;
+
+  const selection = record
+    ? {
+        source: "frames",
+        metadataAvailable: true,
+        index: frameIndex,
+        path: relativeFramePath,
+        capturedAt,
+        scheduledAt,
+        url,
+        title,
+        viewport,
+        status,
+        error,
+      }
+    : {
+        source: "frames",
+        metadataAvailable: false,
+        reason: "no-manifest-record",
+        index: frameIndex,
+        path: relativeFramePath,
+        capturedAt: null,
+        scheduledAt: null,
+        url: null,
+        title: null,
+        viewport: null,
+        status: null,
+        error: null,
+      };
+
+  return {
+    exists: true,
+    path: framePath,
+    framePath,
+    pathCount,
+    frame: {
+      index: frameIndex,
+      path: relativeFramePath,
+      capturedAt,
+      scheduledAt,
+      status,
+      url,
+      title,
+      viewport,
+      error,
+    },
+    selection,
+  };
+}
+
 async function findNearestFrameName(runDir, names, nearIso) {
   const targetMs = Date.parse(nearIso);
   const records = await readCapturedFrameRecords(runDir, names);
@@ -1611,15 +1701,20 @@ async function findNearestFrameName(runDir, names, nearIso) {
 export async function commandPeek({ runDir, options = {} }) {
   const resolved = path.resolve(runDir);
   const names = await listFrameFiles(resolved);
+  const records = await readCapturedFrameRecords(resolved, names);
 
   if (!names.length) {
     const posterPath = path.join(resolved, "poster.png");
     const retainedPath = path.join(resolved, "latest-retained.png");
     if (fs.existsSync(posterPath)) {
-      return { exists: true, path: posterPath, pathCount: 1 };
+      return buildPeekFallbackPayload(resolved, "poster", posterPath);
     }
     if (fs.existsSync(retainedPath)) {
-      return { exists: true, path: retainedPath, pathCount: 1 };
+      return buildPeekFallbackPayload(
+        resolved,
+        "latest-retained",
+        retainedPath,
+      );
     }
     throw new Error(
       "No frames available. Raw frames were cleaned up. Use poster.png or latest-retained.png from the run directory.",
@@ -1646,17 +1741,14 @@ export async function commandPeek({ runDir, options = {} }) {
     index = names.length - 1;
   }
 
-  const framePath = path.join(resolved, "frames", names[index]);
-  return {
-    exists: true,
-    path: framePath,
-    framePath,
-    pathCount: names.length,
-    frame: {
-      index: Number.parseInt(names[index].match(/\d+/)?.[0] || "0", 10),
-      path: path.join("frames", names[index]),
-    },
-  };
+  const selectedName = names[index];
+  const selectedRecord = pickRecordByFrameName(records, selectedName);
+  return buildPeekFramePayload(
+    resolved,
+    selectedName,
+    names.length,
+    selectedRecord,
+  );
 }
 
 async function runPeekCli(parsed) {
