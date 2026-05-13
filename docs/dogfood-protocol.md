@@ -5,9 +5,9 @@ This document gives a tester a complete protocol for exercising
 surface install friction, unclear commands, artifacts that are hard to find,
 and whether the rendered video is actually useful for review.
 
-The protocol assumes a fresh checkout. A tester should not have to read
-`README.md`, `docs/PRD.md`, or `skill/SKILL.md` before starting; they should
-follow the steps below and only consult those files when stuck.
+The protocol does not require cloning the repository. A tester should not have
+to read `README.md`, `docs/PRD.md`, or `skill/SKILL.md` before starting; they
+should follow the steps below and only consult those files when stuck.
 
 ## Tester Install Steps
 
@@ -18,50 +18,35 @@ template at the end of this document.
 1. Confirm system prerequisites:
    - Node.js 20 or newer (`node --version`).
    - `npm` available on `PATH` (`npm --version`).
-   - `ffmpeg` and `ffprobe` available on `PATH`
-     (`ffmpeg -version`, `ffprobe -version`). On macOS install with
-     `brew install ffmpeg`; on Debian or Ubuntu use
-     `sudo apt-get install ffmpeg`.
 
-   **Expected:** Each command prints a version string and exits 0. No "command
-   not found" errors.
+   **Expected:** Each command prints a version string and exits 0.
 
-2. Clone the repository and install dependencies from the repository root:
+2. Install `timelapse-capture` with one command:
 
    ```bash
-   git clone <repo-url> timelapse-capture
-   cd timelapse-capture
-   npm install
+   npm install -g github:Open-Agent-Tools/timelapse-capture
    ```
 
-   **Expected:** `npm install` completes without errors. A `node_modules/`
-   directory is created.
+   **Expected:** npm downloads the package, installs dependencies, and
+   automatically runs `npx playwright install chromium` to install the Chromium
+   browser. The `timelapse-capture` binary becomes available on `PATH`. If
+   `ffmpeg` or `ffprobe` are missing the installer prints the platform-specific
+   install command — follow it now.
 
-3. Install the Playwright Chromium browser:
+3. Install FFmpeg if step 2 flagged it as missing:
 
    ```bash
-   npx playwright install chromium
+   # macOS
+   brew install ffmpeg
+
+   # Debian / Ubuntu
+   sudo apt-get install ffmpeg
    ```
 
-   **Expected:** Playwright downloads and installs the Chromium browser without
-   errors.
+   **Expected:** `ffmpeg -version` and `ffprobe -version` each print a version
+   string and exit 0.
 
-4. Make the CLI runnable. Pick one of the two forms and use it consistently
-   for every scenario:
-
-   ```bash
-   # Option A: link the binary once
-   npm link
-   timelapse-capture doctor
-
-   # Option B: run through npm without linking
-   npm start -- doctor
-   ```
-
-   **Expected:** The command runs without "command not found" and prints
-   `doctor` output.
-
-5. Run `doctor` and confirm every check reports `[PASS]`:
+4. Run `doctor` and confirm every check reports `[PASS]`:
 
    ```bash
    timelapse-capture doctor
@@ -71,7 +56,7 @@ template at the end of this document.
    If anything fails, follow the printed `fix:` line and re-run `doctor` until
    it is clean. Do not start a scenario while `doctor` is failing.
 
-6. Start a local web server you can target. Any small static or app server
+5. Start a local web server you can target. Any small static or app server
    that responds at `http://localhost:3000` works. A minimal option:
 
    ```bash

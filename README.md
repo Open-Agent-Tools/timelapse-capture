@@ -6,45 +6,40 @@ Fire-and-forget visual timelapse capture for long-running app review.
 
 ## Installation
 
-Requirements:
-
-- Node.js 20 or newer
-- npm
-- Playwright Chromium
-- `ffmpeg` and `ffprobe` available on `PATH`
-
-Install project dependencies from the repository root:
+Requires Node.js 20 or newer and `ffmpeg`/`ffprobe` on `PATH`.
 
 ```bash
-npm install
+npm install -g github:Open-Agent-Tools/timelapse-capture
 ```
 
-Install the Chromium browser used by Playwright:
+This installs the CLI globally, then automatically installs the Playwright
+Chromium browser. If `ffmpeg` or `ffprobe` are missing, the installer prints
+the platform-specific install command.
+
+Install FFmpeg if the installer flagged it as missing:
 
 ```bash
-npx playwright install chromium
-```
-
-Install FFmpeg with your system package manager if `ffmpeg` or `ffprobe` is missing.
-
-```bash
-# macOS with Homebrew
+# macOS
 brew install ffmpeg
 
-# Debian or Ubuntu
-sudo apt-get update
+# Debian / Ubuntu
 sudo apt-get install ffmpeg
 ```
 
-For local command-line use from this checkout, either run through npm:
+Confirm everything is ready:
 
 ```bash
-npm start -- doctor
+timelapse-capture doctor
 ```
 
-Or link the binary once:
+### From source
+
+Clone the repository and link the binary:
 
 ```bash
+git clone https://github.com/Open-Agent-Tools/timelapse-capture.git
+cd timelapse-capture
+npm install          # also runs postinstall → playwright install chromium
 npm link
 timelapse-capture doctor
 ```
