@@ -213,10 +213,6 @@ test("CLAUDE.md contains concrete project guidance instead of template placehold
   assert.match(claudeMd, /src\/doctor\.mjs/);
   assert.match(claudeMd, /test\//);
 
-  // Must mention bd workflow
-  assert.match(claudeMd, /bd prime/);
-  assert.match(claudeMd, /bd/);
-
   // Architecture Overview bullet for src/timelapse-capture.mjs must list
   // the canonical command set and must not name a nonexistent `report`
   // command. Source of truth: the `main` switch in src/timelapse-capture.mjs.

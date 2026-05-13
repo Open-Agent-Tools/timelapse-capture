@@ -59,6 +59,10 @@ Desktop.ini
 .claude/
 .codex/
 .foreman/
+.beads/
+.dolt/
+*.db
+.beads-credential-key
 
 # Local working notes
 TODO.md
@@ -70,8 +74,3 @@ captures/
 *.webm
 *.gif
 
-# Beads / Dolt files (added by bd init)
-.beads/
-.dolt/
-*.db
-.beads-credential-key
