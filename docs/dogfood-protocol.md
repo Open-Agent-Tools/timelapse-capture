@@ -24,7 +24,7 @@ template at the end of this document.
 2. Install `timelapse-capture` with one command:
 
    ```bash
-   npm install -g github:Open-Agent-Tools/timelapse-capture
+   npm install -g https://github.com/Open-Agent-Tools/timelapse-capture/releases/latest/download/timelapse-capture.tgz
    ```
 
    **Expected:** npm downloads the package, installs dependencies, and
