@@ -6,7 +6,7 @@
     "timelapse-capture": "./src/timelapse-capture.mjs"
   },
   "scripts": {
-    "prepare": "node -e \"if(process.env.npm_config_global==='true'&&!process.env.CI){const x=require('child_process').execSync;try{x('npx playwright install chromium',{stdio:'inherit'})}catch(e){process.stderr.write('Run: npx playwright install chromium\\n')}const h=c=>{try{x((process.platform==='win32'?'where ':'which ')+c,{stdio:'ignore'});return true}catch(e){return false}};if(!h('ffmpeg')||!h('ffprobe')){const f={darwin:'brew install ffmpeg',linux:'sudo apt-get install ffmpeg'};console.log('\\nffmpeg/ffprobe not found: '+(f[process.platform]||'https://ffmpeg.org/download.html'))}}\"",
+    "postinstall": "node -e \"if(process.env.npm_config_global==='true'&&!process.env.CI){const x=require('child_process').execSync;try{x('npx playwright install chromium',{stdio:'inherit'})}catch(e){process.stderr.write('Run: npx playwright install chromium\\n')}const h=c=>{try{x((process.platform==='win32'?'where ':'which ')+c,{stdio:'ignore'});return true}catch(e){return false}};if(!h('ffmpeg')||!h('ffprobe')){const f={darwin:'brew install ffmpeg',linux:'sudo apt-get install ffmpeg'};console.log('\\nffmpeg/ffprobe not found: '+(f[process.platform]||'https://ffmpeg.org/download.html'))}}\"",
     "start": "node ./src/timelapse-capture.mjs",
     "check": "node --check ./src/timelapse-capture.mjs && node --check ./src/doctor.mjs",
     "check:local": "bash ./scripts/local-check.sh",
