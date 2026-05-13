@@ -63,6 +63,8 @@ Desktop.ini
 .dolt/
 *.db
 .beads-credential-key
+CLAUDE.md
+AGENTS.md
 
 # Local working notes
 TODO.md
