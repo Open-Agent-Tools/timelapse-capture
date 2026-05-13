@@ -155,7 +155,7 @@ Runs repository checks and tests in sequence. If `ffmpeg` and `ffprobe` are not 
 ```bash
 timelapse-capture start <url>
   [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
-  [--fps <24>] [--viewport <1280x720>] [--out <dir>] [--cleanup <mode>]
+  [--fps <24>] [--viewport <1440x900>] [--out <dir>] [--cleanup <mode>]
   [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
   [--json] [--force] [--headed] [--keep-frames] [--keep-latest]
 ```
@@ -179,9 +179,11 @@ Returns one frame path. `--latest` selects the newest frame, `--index` selects a
 
 ```bash
 timelapse-capture render <run-dir>
+  [--output <file>] [--keep-frames | --keep-samples [N] | --keep-latest | --keep-all]
+  [--json] [--force]
 ```
 
-Renders `output.mp4` from captured frames. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata.
+Renders `output.mp4` from captured frames. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata. Pass a retention flag to control what survives the render step.
 
 ```bash
 timelapse-capture cleanup <run-dir> [--keep-frames | --keep-samples | --keep-latest | --frames | --all] [--force]
@@ -190,7 +192,7 @@ timelapse-capture cleanup <run-dir> [--keep-frames | --keep-samples | --keep-lat
 Deletes raw frame PNGs for a completed run.
 
 - `--keep-frames`: preserve all raw frames (no files removed)
-- `--keep-samples`: remove all but the first and last frame
+- `--keep-samples [N]`: remove all but N evenly-distributed representative frames (default: 2, which are first and last)
 - `--keep-latest`: remove all but the most recent frame
 - `--frames`: remove raw frames and `latest.png`, preserve `output.mp4` and other artifacts
 - `--all`: remove the entire run directory; requires `--force` if raw frames still exist
@@ -296,6 +298,7 @@ timelapse-runs/<slug>-<timestamp>/
   manifest.jsonl
   status.json
   latest-frame.json
+  latest.png
   capture.log
   render.log
   frames/
@@ -316,6 +319,7 @@ Important paths:
 - `manifest.jsonl`: per-frame capture log. One JSON record per capture attempt (captured, failed, or skipped), matching the schema in `docs/PRD.md` "Manifest Format".
 - `status.json`: current or final run status.
 - `latest-frame.json`: latest captured frame metadata, including path, timestamp, frame index, URL, viewport, and capture status for `status` and `peek`.
+- `latest.png`: copy of the most recently captured frame, updated after each successful capture. Removed by default after render (along with raw frames).
 - `capture.log`: append-only log of capture lifecycle events from the background capture process.
 - `render.log`: append-only log of `render` invocations, including ffmpeg or ffprobe output and exit codes.
 - `samples/`: retained sample frames copied by `render` or `cleanup` when `--keep-samples` is used, named `sample-NNNNNN.png`.

@@ -143,7 +143,7 @@ Behavior:
 - Starts capture in the background.
 - Writes a PID file or job metadata file.
 - Writes initial `status.json`.
-- Writes `latest.png` as a symlink or small pointer file once the first frame exists.
+- Writes `latest.png` as a copied image file once the first frame exists, updated after each successful capture.
 - Returns immediately with the run path and status command.
 
 ### Status
