@@ -323,7 +323,7 @@ Important paths:
 - `latest-frame.json`: latest captured frame metadata, including path, timestamp, frame index, URL, viewport, and capture status for `status` and `peek`.
 - `capture.log`: append-only log of capture lifecycle events from the background capture process.
 - `render.log`: append-only log of `render` invocations, including ffmpeg or ffprobe output and exit codes.
-- `samples/`: retained sample frames copied during render when `--keep-samples` is used, named `sample-NNNNNN.png`.
+- `samples/`: retained sample frames copied by `render` or `cleanup` when `--keep-samples` is used, named `sample-NNNNNN.png`.
 - `output.mp4`: rendered video.
 - `run-summary.json`: render and cleanup metadata.
 - `poster.png`: retained single-frame artifact when render completed after at least one captured frame.
