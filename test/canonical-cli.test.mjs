@@ -2428,6 +2428,70 @@ test("start with simulated initial navigation failure writes manifest diagnostic
       await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
     );
     assert.match(summary.lastRenderAttempt.error, /No frames found to render/i);
+
+    const humanStatus = runCli(["status", runDir]);
+    assert.equal(humanStatus.status, 0, humanStatus.stderr);
+    assert.match(humanStatus.stdout, /^state: render_failed$/m);
+    assert.match(humanStatus.stdout, /^error: .*No frames found to render/im);
+    assert.doesNotMatch(humanStatus.stdout, /\bat .+\(.+:\d+:\d+\)/);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --human output surfaces the recorded error for failed runs", async () => {
+  const runDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-nav-fail-human-"),
+  );
+  try {
+    const startResult = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "1s",
+        "--interval",
+        "1s",
+        "--out",
+        runDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_NAVIGATION_FAILURE: "1" },
+    );
+    assert.equal(startResult.status, 0, startResult.stderr);
+
+    const status = await waitForTerminalStatus(runDir);
+    assert.equal(status.state, "failed");
+    assert.match(status.error, /navigation failed:/);
+
+    const humanResult = runCli(["status", runDir]);
+    assert.equal(humanResult.status, 0, humanResult.stderr);
+    assert.match(humanResult.stdout, /^state: failed$/m);
+    assert.match(humanResult.stdout, /^error: navigation failed:/m);
+    assert.match(
+      humanResult.stdout,
+      new RegExp(
+        `^error: .*${status.error.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}`,
+        "m",
+      ),
+    );
+    assert.doesNotMatch(humanResult.stdout, /\bat .+\(.+:\d+:\d+\)/);
+
+    const jsonResult = runCli(["status", runDir, "--json"]);
+    assert.equal(jsonResult.status, 0, jsonResult.stderr);
+    const jsonPayload = JSON.parse(jsonResult.stdout);
+    assert.equal(jsonPayload.status.error, status.error);
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("status --human output omits error line when no error is recorded", async () => {
+  const { runDir } = await makeRun({ state: "completed" });
+  try {
+    const result = runCli(["status", runDir]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stdout, /^error: /m);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

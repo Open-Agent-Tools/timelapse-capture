@@ -1571,6 +1571,11 @@ function printHumanStatus(status) {
     lines.push(
       `estimated disk: ${formatBytes(status.estimatedDiskBytes)} (approximate)`,
     );
+  if (
+    (status.state === "failed" || status.state === "render_failed") &&
+    status.error
+  )
+    lines.push(`error: ${status.error}`);
   if (status.outputPath) lines.push(`output: ${status.outputPath}`);
   if (status.cleanup) {
     const bytesFreed = status.cleanup.bytesFreed ?? 0;
