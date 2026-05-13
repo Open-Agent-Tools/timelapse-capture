@@ -128,8 +128,14 @@ const COMMAND_SCHEMAS = {
 
 const SHORT_FLAGS = { j: "json", f: "force", h: "help" };
 
-const isMain =
-  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
+const isMain = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === __filename;
+  } catch {
+    return path.resolve(process.argv[1]) === __filename;
+  }
+})();
 
 if (isMain) {
   main(process.argv.slice(2)).catch((error) => {
