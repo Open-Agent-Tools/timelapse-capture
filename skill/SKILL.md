@@ -40,10 +40,18 @@ Follow this order for every capture:
 4. Record the returned run directory.
 5. Run `timelapse-capture status <run-dir>` to monitor progress.
 6. Run `timelapse-capture peek <run-dir> --latest` for inspection only.
-7. After capture completes, run `timelapse-capture render <run-dir>`.
+7. Wait for `status` to report `state: rendered` — render runs automatically when capture completes.
 8. Report artifact paths, especially the run directory and `output.mp4`.
 
-The required command sequence is start -> status -> peek -> render -> report artifact paths, with `doctor` before the start command.
+The required command sequence is start -> status -> peek -> wait for rendered -> report artifact paths, with `doctor` before the start command.
+
+To cancel a capture in progress:
+
+```bash
+timelapse-capture stop <run-dir>
+```
+
+`stop` sends SIGTERM to the background process and marks the run as failed. Any frames captured before the stop remain in the run directory and can be rendered manually.
 
 ## CLI Example
 
@@ -57,7 +65,8 @@ timelapse-capture start http://localhost:3000 \
 
 timelapse-capture status ./timelapse-runs/localhost-3000-20260507-121530
 timelapse-capture peek ./timelapse-runs/localhost-3000-20260507-121530 --latest
-timelapse-capture render ./timelapse-runs/localhost-3000-20260507-121530
+# render runs automatically; poll status until state: rendered
+timelapse-capture status ./timelapse-runs/localhost-3000-20260507-121530
 ```
 
 If the caller has not linked the binary, use npm from the repository root:
@@ -80,9 +89,13 @@ Then inspect only the returned image path. Do not load the full `frames/` direct
 
 ## Rendering
 
-Run render after the status command reports completion:
+Render runs automatically when capture completes. The status will transition: `running` → `completed` → `rendering` → `rendered`. Poll `status` until `state: rendered` before reporting the artifact path.
+
+To skip auto-render and produce the MP4 manually:
 
 ```bash
+timelapse-capture start <url> --no-render ...
+# then after status reports completed:
 timelapse-capture render <run-dir>
 ```
 

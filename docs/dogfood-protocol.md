@@ -94,25 +94,18 @@ directory understandable without raw frames.
    real screenshot of the target URL — not blank or all white. Record the
    wall-clock time you peeked.
 
-3. Wait for the capture to finish. Poll status until state is `completed`:
+3. Wait for the run to finish. Render runs automatically when capture
+   completes. Poll status until state is `rendered`:
 
    ```bash
    timelapse-capture status "$RUN_DIR"
    ```
 
-   **Expected:** `state` field reads `completed`. The output also shows a
-   non-zero captured frame count, an elapsed time, and a disk-usage figure.
+   **Expected:** `state` field reads `rendered`. The output shows a non-zero
+   captured frame count, an elapsed time, and an `output:` path pointing to
+   `output.mp4`.
 
-4. Render the MP4:
-
-   ```bash
-   timelapse-capture render "$RUN_DIR"
-   ```
-
-   **Expected:** `output.mp4` is created inside `$RUN_DIR` and the command
-   exits 0.
-
-5. Open the rendered video and confirm it plays:
+4. Open the rendered video and confirm it plays:
 
    ```bash
    open "$RUN_DIR/output.mp4"   # macOS
@@ -122,7 +115,7 @@ directory understandable without raw frames.
    **Expected:** The video plays without errors and shows visible motion or
    page changes that match what was visible at peek time.
 
-6. Inspect the run directory after the default render cleanup:
+5. Inspect the run directory after the auto-render cleanup:
 
    ```bash
    ls "$RUN_DIR"
@@ -143,25 +136,30 @@ directory understandable without raw frames.
 Goal: confirm `--keep-frames` retention preserves raw frames after render and
 that `peek` still works on the kept frames.
 
-1. Start a fresh capture; `--duration` short enough to finish quickly:
+1. Start a fresh capture with `--no-render` so the raw frames are available
+   when you render manually in step 3:
 
    ```bash
    timelapse-capture start http://localhost:3000 \
      --duration 15s \
      --interval 1s \
-     --viewport 1440x900
+     --viewport 1440x900 \
+     --no-render
    ```
 
-   **Expected:** A new `run-dir` is printed. Record it as `RUN_DIR`.
+   **Expected:** A new `run-dir` is printed. The output also shows a
+   `Render:` line with the manual render command. Record the run-dir as
+   `RUN_DIR`.
 
-2. Wait for `status` to report a terminal capture state:
+2. Wait for `status` to report `completed`:
 
    ```bash
    timelapse-capture status "$RUN_DIR"
    ```
 
-   **Expected:** `state` reads `completed` (or another terminal state). Frame
-   count is non-zero.
+   **Expected:** `state` reads `completed`. Frame count is non-zero. The
+   `status` output also prints the render command as a reminder since
+   auto-render is off.
 
 3. Render and explicitly keep frames:
 
@@ -278,6 +276,58 @@ Run:
    any captured frames or logs are still present. Nothing was silently wiped
    by a failed render.
 
+## Scenario 4: Stop a Running Capture
+
+Goal: confirm `stop` terminates a live capture cleanly and leaves a
+diagnosable run directory.
+
+1. Start a long capture:
+
+   ```bash
+   timelapse-capture start http://localhost:3000 \
+     --duration 5m \
+     --interval 1s \
+     --viewport 1440x900
+   ```
+
+   **Expected:** A `run-dir` is printed. Record it as `RUN_DIR`.
+
+2. Confirm the capture is running:
+
+   ```bash
+   timelapse-capture status "$RUN_DIR"
+   ```
+
+   **Expected:** `state` reads `running` and `frames.captured` is non-zero.
+
+3. Stop the capture:
+
+   ```bash
+   timelapse-capture stop "$RUN_DIR"
+   ```
+
+   **Expected:** The command prints `Stopped: <run-dir> (pid <N>)` and exits 0.
+
+4. Confirm the run directory reflects the stop:
+
+   ```bash
+   timelapse-capture status "$RUN_DIR"
+   ```
+
+   **Expected:** `state` reads `failed` and `error` reads
+   `stopped by user request`. The `frames/` directory and manifest are intact —
+   nothing was silently deleted.
+
+5. Render from the partial capture if any frames were collected:
+
+   ```bash
+   timelapse-capture render "$RUN_DIR"
+   ```
+
+   **Expected:** If frames exist, `output.mp4` is created from whatever was
+   captured. If no frames exist, `render` exits with a clear message about
+   empty input.
+
 ## Tester Feedback Template
 
 Copy this template into a plain text file or issue comment after running the
@@ -299,7 +349,7 @@ Install option used: A (npm link) | B (npm start --)
 - Time from clone to a clean doctor run: ____ minutes.
 
 # Command Clarity
-- For each command you ran (doctor, start, status, peek, render, cleanup),
+- For each command you ran (doctor, start, stop, status, peek, render, cleanup),
   was the help text and arguments obvious?
 - Were there flags you expected but did not find?
 - Were there flags you tried that were silently ignored?

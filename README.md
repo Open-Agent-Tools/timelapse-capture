@@ -122,10 +122,10 @@ timelapse-capture peek ./timelapse-runs/localhost-3000-20260507-121530 --latest
 
 `peek` returns a single image path. Open or inspect that one image; do not load the whole `frames/` directory into an agent context.
 
-5. Render the MP4:
+5. Wait for the run to finish. `render` runs automatically when capture completes — poll `status` until `state` reads `rendered`:
 
 ```bash
-timelapse-capture render ./timelapse-runs/localhost-3000-20260507-121530
+timelapse-capture status ./timelapse-runs/localhost-3000-20260507-121530
 ```
 
 6. Inspect the video:
@@ -165,11 +165,19 @@ Use `--interval <duration>` to set capture cadence directly, or use `--video-len
 
 `start` writes the initial run artifacts and returns before capture finishes. Use `status` with the printed run directory to follow progress. The internal child process runs `timelapse-capture capture --run <run-dir>`.
 
+By default, `render` runs automatically when capture completes. Pass `--no-render` to skip auto-render and produce the MP4 manually with `render` later.
+
+```bash
+timelapse-capture stop <run-dir> [--json]
+```
+
+Sends `SIGTERM` to the background capture process and marks the run as failed with `"stopped by user request"`. Only works on runs in `starting` or `running` state.
+
 ```bash
 timelapse-capture status <run-dir> [--json]
 ```
 
-Reports run state, captured and failed frame counts, latest successful frame, elapsed time, estimated remaining time, output path, cleanup summary, and disk usage.
+Reports run state, captured and failed frame counts, latest successful frame, elapsed time, estimated remaining time, output path, cleanup summary, and disk usage. When a run has completed and auto-render is off (`--no-render` was passed to `start`), `status` prints the render command as a hint.
 
 ```bash
 timelapse-capture peek <run-dir> [--latest | --index <n> | --near <iso>] [--json]
@@ -183,7 +191,7 @@ timelapse-capture render <run-dir>
   [--json] [--force]
 ```
 
-Renders `output.mp4` from captured frames. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata. Pass a retention flag to control what survives the render step.
+Renders `output.mp4` from captured frames. Runs automatically when capture completes unless `--no-render` was passed to `start`. Call manually when `--no-render` is in use or to re-render an existing run. By default, successful render removes raw frame PNGs and keeps the MP4 plus run metadata. Pass a retention flag to control what survives the render step.
 
 ```bash
 timelapse-capture cleanup <run-dir> [--keep-frames | --keep-samples | --keep-latest | --frames | --all] [--force]
