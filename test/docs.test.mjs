@@ -90,6 +90,11 @@ test("README documents dogfood tester setup and capture workflow", async () => {
   // Both manifest files must be documented in the Artifacts section
   assert.match(readme, /manifest\.jsonl/);
   assert.match(readme, /manifest\.json/);
+  assert.match(readme, /latest-frame\.json/);
+  assert.match(readme, /capture\.log/);
+  assert.match(readme, /render\.log/);
+  assert.match(readme, /samples\//);
+  assert.match(readme, /poster\.png/);
   // manifest.jsonl must be described as the per-frame log near its filename
   assert.match(readme, /manifest\.jsonl[\s\S]{0,400}per-frame/i);
   // manifest.json must be described as start-time metadata near its filename

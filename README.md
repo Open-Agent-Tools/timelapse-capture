@@ -300,10 +300,16 @@ timelapse-runs/<slug>-<timestamp>/
   manifest.json
   manifest.jsonl
   status.json
+  latest-frame.json
+  capture.log
+  render.log
   frames/
     frame-0001.png
     frame-0002.png
+  samples/
+    sample-000001.png
   output.mp4
+  poster.png
   run-summary.json
 ```
 
@@ -314,6 +320,10 @@ Important paths:
 - `manifest.json`: start-time run metadata written once when the capture starts (run directory path, creation timestamp, initial state).
 - `manifest.jsonl`: per-frame capture log. One JSON record per capture attempt (captured, failed, or skipped), matching the schema in `docs/PRD.md` "Manifest Format".
 - `status.json`: current or final run status.
+- `latest-frame.json`: latest captured frame metadata, including path, timestamp, frame index, URL, viewport, and capture status for `status` and `peek`.
+- `capture.log`: append-only log of capture lifecycle events from the background capture process.
+- `render.log`: append-only log of `render` invocations, including ffmpeg or ffprobe output and exit codes.
+- `samples/`: retained sample frames copied during render when `--keep-samples` is used, named `sample-NNNNNN.png`.
 - `output.mp4`: rendered video.
 - `run-summary.json`: render and cleanup metadata.
 - `poster.png`: retained single-frame artifact when render completed after at least one captured frame.
