@@ -19,6 +19,10 @@
   "dependencies": {
     "playwright": "^1.59.1"
   },
+  "files": [
+    "src/",
+    "scripts/"
+  ],
   "engines": {
     "node": ">=20"
   },
