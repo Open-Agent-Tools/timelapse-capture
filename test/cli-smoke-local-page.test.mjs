@@ -166,6 +166,7 @@ if (!SKIP_SMOKE) {
           "500ms",
           "--out",
           outDir,
+          "--no-render",
           "--json",
         ],
         { CI: "1" },

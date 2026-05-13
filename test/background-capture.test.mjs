@@ -7,6 +7,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { pollUntil, isTransientReadError } from "./helpers/polling.mjs";
+import { withFakeFFmpeg } from "./helpers/fake-ffmpeg.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const CLI = path.join(
@@ -69,54 +70,57 @@ async function pollJob(
 test("start detaches a background capture child and status observes progress", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-background-"));
   try {
-    const result = runCli(
-      [
-        "start",
-        "http://example.test/",
-        "--duration",
-        "1s",
-        "--interval",
-        "250ms",
-        "--out",
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(
+        [
+          "start",
+          "http://example.test/",
+          "--duration",
+          "1s",
+          "--interval",
+          "250ms",
+          "--out",
+          runDir,
+          "--json",
+        ],
+        {
+          TIMELAPSE_SIMULATE_FRAMES: "4",
+          TIMELAPSE_SIMULATE_FRAME_DELAY_MS: "500",
+          PATH: manager.getPATHEnv(),
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const startPayload = JSON.parse(result.stdout);
+      assert.equal(startPayload.runDir, runDir);
+      assert.equal(startPayload.status.state, "starting");
+
+      const job = JSON.parse(
+        await fs.readFile(path.join(runDir, "job.json"), "utf8"),
+      );
+      assert.equal(typeof job.pid, "number");
+      assert.ok(job.pid > 0);
+      assert.deepEqual(job.command.slice(-3), ["capture", "--run", runDir]);
+      assert.equal(job.detached, true);
+
+      await pollStatus(
         runDir,
-        "--json",
-      ],
-      {
-        TIMELAPSE_SIMULATE_FRAMES: "4",
-        TIMELAPSE_SIMULATE_FRAME_DELAY_MS: "500",
-      },
-    );
+        (status) =>
+          status.state === "running" &&
+          status.frames.captured > 0 &&
+          status.frames.captured < status.frames.totalExpected,
+      );
 
-    assert.equal(result.status, 0, result.stderr);
-
-    const startPayload = JSON.parse(result.stdout);
-    assert.equal(startPayload.runDir, runDir);
-    assert.equal(startPayload.status.state, "starting");
-
-    const job = JSON.parse(
-      await fs.readFile(path.join(runDir, "job.json"), "utf8"),
-    );
-    assert.equal(typeof job.pid, "number");
-    assert.ok(job.pid > 0);
-    assert.deepEqual(job.command.slice(-3), ["capture", "--run", runDir]);
-    assert.equal(job.detached, true);
-
-    await pollStatus(
-      runDir,
-      (status) =>
-        status.state === "running" &&
-        status.frames.captured > 0 &&
-        status.frames.captured < status.frames.totalExpected,
-    );
-
-    const completed = await pollStatus(
-      runDir,
-      (status) => status.state === "completed" && status.frames.captured === 4,
-      { timeoutMs: 8000 },
-    );
-    assert.equal(completed.status.frames.failed, 0);
-    assert.ok(fsSync.existsSync(path.join(runDir, "latest.png")));
-    await pollJob(runDir, (current) => current.state === "completed");
+      const rendered = await pollStatus(
+        runDir,
+        (status) => status.state === "rendered",
+        { timeoutMs: 12000 },
+      );
+      assert.equal(rendered.status.frames.failed, 0);
+      assert.ok(fsSync.existsSync(path.join(runDir, "output.mp4")));
+      await pollJob(runDir, (current) => current.state === "completed");
+    }, "success");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

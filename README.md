@@ -157,7 +157,7 @@ timelapse-capture start <url>
   [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
   [--fps <24>] [--viewport <1440x900>] [--out <dir>] [--cleanup <mode>]
   [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
-  [--json] [--force] [--headed] [--keep-frames] [--keep-latest]
+  [--json] [--force] [--headed] [--keep-frames] [--keep-latest] [--no-render]
 ```
 
 Starts a detached background process that captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.

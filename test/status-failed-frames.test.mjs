@@ -19,6 +19,7 @@ test("failed frame attempts preserve prior successful latestFrame", async () => 
         "1s",
         "--out",
         outDir,
+        "--no-render",
         "--json",
       ],
       {

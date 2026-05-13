@@ -85,7 +85,13 @@ const COMMAND_SCHEMAS = {
       "headed",
       "keep-frames",
       "keep-latest",
+      "no-render",
     ],
+  },
+  stop: {
+    positional: ["runDir"],
+    valueFlags: [],
+    boolFlags: ["json", "help"],
   },
   capture: {
     positional: [],
@@ -180,6 +186,8 @@ export async function main(argv) {
   switch (parsed.command) {
     case "start":
       return runStartCli(parsed);
+    case "stop":
+      return runStopCli(parsed);
     case "capture":
       return runCaptureCli(parsed);
     case "status":
@@ -236,9 +244,14 @@ export function parseArgs(argv) {
     }
 
     if (token.startsWith("--no-") && !token.includes("=")) {
-      const key = token.slice(5);
-      assertBoolFlag(command, schema, key, token);
-      options[key] = false;
+      const noKey = token.slice(2); // e.g. "no-render"
+      if (schema.boolFlags.includes(noKey)) {
+        options[noKey] = true;
+      } else {
+        const key = token.slice(5); // e.g. "render"
+        assertBoolFlag(command, schema, key, token);
+        options[key] = false;
+      }
       continue;
     }
 
@@ -775,6 +788,7 @@ async function writeStartArtifacts(runDir, state) {
     keepLatest: state.keepLatest,
     waitUntil: state.waitUntil,
     headed: state.headed,
+    autoRender: state.autoRender ?? true,
     createdAt: nowIso(),
   };
   const job = {
@@ -1230,6 +1244,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
     headed: Boolean(options.headed),
+    autoRender: !options["no-render"],
     lastUpdatedAt: startedAt,
   };
 }
@@ -1362,6 +1377,16 @@ export async function commandCapture({ runDir } = {}) {
       startedAt: state.startedAt,
       finishedAt: nowIso(),
     });
+    if (config.autoRender !== false && captureStatus.state === "completed") {
+      try {
+        await commandRender({ runDir: resolved });
+      } catch (_err) {
+        await appendLog(
+          resolved,
+          `auto-render failed: ${_err?.message || String(_err)}`,
+        );
+      }
+    }
     return {
       runDir: resolved,
       status: captureStatus,
@@ -1493,10 +1518,75 @@ async function runStartCli(parsed) {
   console.log(
     `Peek:   timelapse-capture peek ${shellQuote(result.runDir)} --latest`,
   );
+  if (parsed.options["no-render"]) {
+    console.log(
+      `Render: timelapse-capture render ${shellQuote(result.runDir)}`,
+    );
+  }
 }
 
 async function runCaptureCli(parsed) {
   await commandCapture({ runDir: parsed.options.run });
+}
+
+// ---------- Stop ----------
+
+export async function commandStop({ runDir } = {}) {
+  if (!runDir) {
+    throw new ParseError("E_MISSING_ARGUMENT", "Missing run directory.");
+  }
+  const resolved = path.resolve(runDir);
+  const jobPath = path.join(resolved, "job.json");
+  const statusPath = path.join(resolved, "status.json");
+
+  const [job, status] = await Promise.all([
+    readJsonOptional(jobPath),
+    readJsonOptional(statusPath),
+  ]);
+
+  if (!job) {
+    throw new Error(`No job metadata found: ${jobPath}`);
+  }
+
+  const currentState = status?.state;
+  if (!["starting", "running"].includes(currentState)) {
+    throw new Error(
+      `Cannot stop run in state "${currentState}". Only starting or running runs can be stopped.`,
+    );
+  }
+
+  const pid = job.pid;
+  if (!pid) {
+    throw new Error("No PID found in job metadata.");
+  }
+
+  let killed = false;
+  try {
+    process.kill(pid, "SIGTERM");
+    killed = true;
+  } catch (err) {
+    if (err.code !== "ESRCH") throw err;
+  }
+
+  const updatedStatus = {
+    ...(status || {}),
+    state: "failed",
+    error: "stopped by user request",
+    stoppedAt: nowIso(),
+  };
+  await writeJsonAtomic(statusPath, updatedStatus);
+  await appendLog(resolved, `stop invoked pid=${pid} killed=${killed}`);
+
+  return { runDir: resolved, pid, killed };
+}
+
+async function runStopCli(parsed) {
+  const result = await commandStop({ runDir: parsed.runDir });
+  if (parsed.options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.log(`Stopped: ${result.runDir} (pid ${result.pid})`);
 }
 
 // ---------- Status ----------
@@ -1599,6 +1689,14 @@ async function runStatusCli(parsed) {
     return;
   }
   printHumanStatus(result.status);
+  if (
+    result.status.state === "completed" &&
+    result.config?.autoRender === false
+  ) {
+    console.log(
+      `Render: timelapse-capture render ${shellQuote(parsed.runDir)}`,
+    );
+  }
 }
 
 // ---------- Peek ----------
@@ -2782,9 +2880,10 @@ function printHelp() {
 Usage:
   timelapse-capture start <url>
     [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
-    [--fps <24>] [--viewport <1280x720>] [--out <dir>] [--cleanup <mode>]
+    [--fps <24>] [--viewport <1440x900>] [--out <dir>] [--cleanup <mode>]
     [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
-    [--json] [--force] [--headed] [--keep-frames] [--keep-latest]
+    [--json] [--force] [--headed] [--keep-frames] [--keep-latest] [--no-render]
+  timelapse-capture stop <run-dir> [--json]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir>
     [--latest | --index <n> | --near <iso>] [--json]
@@ -2801,6 +2900,7 @@ Usage:
 export const __test__ = {
   SIMULATION_FRAME_PNG,
   COMMAND_SCHEMAS,
+  commandStop,
   frameName,
   slugify,
   formatBytes,

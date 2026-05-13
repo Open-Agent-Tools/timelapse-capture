@@ -976,6 +976,7 @@ test("render uses fps persisted by start command", async () => {
         duration: { ms: 1000 },
         fps: 18,
         cleanup: "never",
+        "no-render": true,
       },
     });
     await waitForTerminalStatus(runDir);
@@ -2594,6 +2595,7 @@ test("start retention cleanup:never is honored by render without render flags", 
         out: runDir,
         duration: { ms: 1000 },
         cleanup: "never",
+        "no-render": true,
       },
     });
     await waitForTerminalStatus(runDir);
@@ -2634,6 +2636,7 @@ test("start retention keepLatest is honored by render without render flags", asy
         out: runDir,
         duration: { ms: 1000 },
         "keep-latest": true,
+        "no-render": true,
       },
     });
     await waitForTerminalStatus(runDir);

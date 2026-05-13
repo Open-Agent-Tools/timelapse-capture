@@ -26,7 +26,7 @@ async function runSimulated(frames, extraEnv = {}) {
   try {
     await commandStart({
       target: TARGET,
-      options: { out: runDir, interval: 0 },
+      options: { out: runDir, interval: 0, "no-render": true },
     });
   } finally {
     for (const [k, v] of Object.entries(savedEnv)) {

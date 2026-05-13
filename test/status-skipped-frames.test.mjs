@@ -21,6 +21,7 @@ test("status output includes attempted and skipped frame counters", async () => 
         "1s",
         "--out",
         outDir,
+        "--no-render",
         "--json",
       ],
       {

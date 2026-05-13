@@ -65,8 +65,14 @@ export async function waitForTerminalStatus(
         (status.frames?.captured ?? 0) +
           (status.frames?.failed ?? 0) +
           (status.frames?.skipped ?? 0);
+      const TERMINAL = new Set([
+        "completed",
+        "failed",
+        "rendered",
+        "render_failed",
+      ]);
       return (
-        (status.state === "completed" || status.state === "failed") &&
+        TERMINAL.has(status.state) &&
         (job.state === "completed" || job.state === "failed") &&
         (expectedAttempts === undefined || attempts >= expectedAttempts)
       );
