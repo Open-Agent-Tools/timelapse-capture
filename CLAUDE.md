@@ -62,9 +62,9 @@ bd close <id>         # Complete work
 npm install                 # Install dependencies (requires Node.js 20+)
 npm run check               # Syntax-check src/timelapse-capture.mjs and src/doctor.mjs
 npm run typecheck           # TypeScript type-check (tsc --noEmit)
-npm test                    # Run the full Node test suite (test/**/*.test.mjs)
+npm test                    # Run the full Node test suite (test/**/*.test.{js,mjs})
 npm run check:local         # Local integration check; skips ffmpeg/ffprobe checks if absent
-npm run ci                  # check + typecheck + test (what CI runs)
+npm run ci                  # check + format:check + typecheck + test (what CI runs)
 ```
 
 ## Architecture Overview

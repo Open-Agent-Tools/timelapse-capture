@@ -198,6 +198,11 @@ test("CLAUDE.md contains concrete project guidance instead of template placehold
   assert.match(claudeMd, /npm run typecheck/);
   assert.match(claudeMd, /npm test/);
   assert.match(claudeMd, /npm run check:local/);
+  assert.match(claudeMd, /npm test\s+#[^\n]*test\/\*\*\/\*\.test\.\{js,mjs\}/);
+  assert.match(
+    claudeMd,
+    /npm run ci\s+#[^\n]*check \+ format:check \+ typecheck \+ test/,
+  );
 
   // Must reference canonical source files
   assert.match(claudeMd, /src\/timelapse-capture\.mjs/);
