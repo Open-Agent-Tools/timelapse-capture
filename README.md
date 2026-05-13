@@ -332,6 +332,15 @@ Important paths:
 
 This project tracks issues with [beads](https://github.com/gastownhall/beads). The local `.beads/` directory is gitignored — after cloning, run `bd init` once to bootstrap it with the git hooks and config that aren't checked in. See `CLAUDE.md` for the full contributor workflow.
 
+### Quality Gates
+
+This project has no remote CI workflow, so contributors must run `npm run ci` locally before opening a PR. That command runs the same local-only quality gates expected for every change:
+
+- `npm run check`: syntax-checks the CLI and doctor entry points.
+- `npm run format:check`: verifies Prettier formatting across the repository.
+- `npm run typecheck`: runs TypeScript with `tsc --noEmit`.
+- `npm test`: runs the full Node test suite.
+
 ## Project Layout
 
 ```text

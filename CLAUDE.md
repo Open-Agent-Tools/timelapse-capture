@@ -64,8 +64,10 @@ npm run check               # Syntax-check src/timelapse-capture.mjs and src/doc
 npm run typecheck           # TypeScript type-check (tsc --noEmit)
 npm test                    # Run the full Node test suite (test/**/*.test.{js,mjs})
 npm run check:local         # Local integration check; skips ffmpeg/ffprobe checks if absent
-npm run ci                  # check + format:check + typecheck + test (what CI runs)
+npm run ci                  # check + format:check + typecheck + test (local-only; no remote CI enforces this)
 ```
+
+This project has no remote CI workflow; contributors must run `npm run ci` themselves before pushing or opening a PR.
 
 ## Architecture Overview
 
