@@ -94,6 +94,10 @@ test("README documents dogfood tester setup and capture workflow", async () => {
   assert.match(readme, /capture\.log/);
   assert.match(readme, /render\.log/);
   assert.match(readme, /samples\//);
+  assert.match(
+    readme,
+    /- `samples\/`: retained sample frames copied by `render` or `cleanup` when `--keep-samples` is used, named `sample-NNNNNN\.png`\./,
+  );
   assert.match(readme, /poster\.png/);
   // manifest.jsonl must be described as the per-frame log near its filename
   assert.match(readme, /manifest\.jsonl[\s\S]{0,400}per-frame/i);
