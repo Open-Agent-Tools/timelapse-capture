@@ -2574,7 +2574,7 @@ test("commandStart saves keepSamples (default) to config.json", async () => {
     const config = JSON.parse(
       await fs.readFile(path.join(runDir, "config.json"), "utf8"),
     );
-    assert.equal(config.keepSamples, 5);
+    assert.equal(config.keepSamples, 2);
   } finally {
     delete process.env.TIMELAPSE_SIMULATE_FRAMES;
     await fs.rm(runDir, { recursive: true, force: true });

@@ -1219,7 +1219,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     cleanup,
     keepSamples:
       options["keep-samples"] === true
-        ? 5
+        ? 2
         : Number(options["keep-samples"] ?? 0),
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
