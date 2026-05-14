@@ -1,8 +1,6 @@
-# timelapse-capture
-
 Fire-and-forget visual timelapse capture for long-running app review.
 
-`timelapse-capture` captures a browser URL as a sequence of screenshots, lets a person or agent inspect individual frames with `peek`, renders the frames into `output.mp4`, and removes raw frames after a successful render by default.
+timelapse-capture turns long-running app behavior into short, reviewable videos. Instead of babysitting a dashboard, background job, flaky UI, or multi-hour review session, you point it at a URL, choose a duration and interval, and it captures screenshots in the background. Agents can peek at a single frame while the run is still active, and when it finishes, the tool renders an MP4, keeps useful metadata, and cleans up bulky raw frames by default. It gives engineers, reviewers, and AI agents a lightweight visual audit trail without needing a full test harness or live supervision.
 
 ## Installation
 
