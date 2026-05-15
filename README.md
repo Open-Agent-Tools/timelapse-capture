@@ -156,6 +156,7 @@ timelapse-capture start <url>
   [--fps <24>] [--viewport <1440x900>] [--out <dir>] [--cleanup <mode>]
   [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
   [--json] [--force] [--headed] [--keep-frames] [--keep-latest] [--no-render]
+  [--block-websockets]
 ```
 
 Starts a detached background process that captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
@@ -164,6 +165,8 @@ Use `--interval <duration>` to set capture cadence directly, or use `--video-len
 `start` writes the initial run artifacts and returns before capture finishes. Use `status` with the printed run directory to follow progress. The internal child process runs `timelapse-capture capture --run <run-dir>`.
 
 By default, `render` runs automatically when capture completes. Pass `--no-render` to skip auto-render and produce the MP4 manually with `render` later.
+
+Pass `--block-websockets` when capturing a live SPA whose own WebSocket feed shares an upstream broadcaster with other clients. A CPU-saturated headless renderer can stop draining inbound WS frames, which back-pressures the upstream sender and stalls its other clients (e.g. real browser tabs talking to the same dashboard bridge). The flag installs a `window.WebSocket` stub before page scripts run, so the captured page never opens a real socket. The page captures whatever its initial / WS-disconnected state renders to — useful for visual timelapses, unsuitable when the SPA needs live data to render meaningful pixels.
 
 ```bash
 timelapse-capture stop <run-dir> [--json]

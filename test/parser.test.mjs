@@ -145,6 +145,25 @@ test("parseArgs handles json boolean flags and short aliases", () => {
   assert.equal(short.options.json, true);
 });
 
+test("parseArgs accepts start --block-websockets as a boolean flag", () => {
+  const enabled = parseArgs([
+    "start",
+    "http://example.com",
+    "--duration",
+    "30s",
+    "--block-websockets",
+  ]);
+  assert.equal(enabled.options["block-websockets"], true);
+
+  const omitted = parseArgs([
+    "start",
+    "http://example.com",
+    "--duration",
+    "30s",
+  ]);
+  assert.equal(omitted.options["block-websockets"], undefined);
+});
+
 test("parseArgs validates unknown command and unknown flag", () => {
   assert.throws(
     () => parseArgs(["bogus"]),

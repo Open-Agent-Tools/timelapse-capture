@@ -193,6 +193,62 @@ test("start writes config.json with canonical field names only", async () => {
   }
 });
 
+test("start --block-websockets persists in config.json; default is false", async () => {
+  const enabledRunDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-block-ws-on-"),
+  );
+  const defaultRunDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "tlc-block-ws-off-"),
+  );
+  try {
+    const enabled = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "2s",
+        "--interval",
+        "1s",
+        "--out",
+        enabledRunDir,
+        "--block-websockets",
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "2" },
+    );
+    assert.equal(enabled.status, 0, enabled.stderr);
+    const enabledConfig = JSON.parse(
+      await fs.readFile(path.join(enabledRunDir, "config.json"), "utf8"),
+    );
+    assert.equal(enabledConfig.blockWebsockets, true);
+    await waitForTerminalStatus(enabledRunDir);
+
+    const defaultRun = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "2s",
+        "--interval",
+        "1s",
+        "--out",
+        defaultRunDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "2" },
+    );
+    assert.equal(defaultRun.status, 0, defaultRun.stderr);
+    const defaultConfig = JSON.parse(
+      await fs.readFile(path.join(defaultRunDir, "config.json"), "utf8"),
+    );
+    assert.equal(defaultConfig.blockWebsockets, false);
+    await waitForTerminalStatus(defaultRunDir);
+  } finally {
+    await fs.rm(enabledRunDir, { recursive: true, force: true });
+    await fs.rm(defaultRunDir, { recursive: true, force: true });
+  }
+});
+
 test("start command accepts --url target", async () => {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-start-url-"));
   try {

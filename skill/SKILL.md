@@ -75,6 +75,8 @@ If the caller has not linked the binary, use npm from the repository root:
 npm start -- doctor
 ```
 
+If the target SPA opens a WebSocket that is also consumed by other clients (e.g. a dashboard bridge fanning to a real browser tab plus this capture), add `--block-websockets` to `start`. The flag stubs `window.WebSocket` before page scripts run, so a CPU-saturated headless renderer cannot wedge the upstream sender. Captured frames will show the SPA's WS-disconnected state — fine for visual timelapses, not for SPAs that need live data to paint.
+
 ## Frame Inspection
 
 Use `peek` to select exactly one frame:

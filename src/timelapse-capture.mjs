@@ -86,6 +86,7 @@ const COMMAND_SCHEMAS = {
       "keep-frames",
       "keep-latest",
       "no-render",
+      "block-websockets",
     ],
   },
   stop: {
@@ -788,6 +789,7 @@ async function writeStartArtifacts(runDir, state) {
     keepLatest: state.keepLatest,
     waitUntil: state.waitUntil,
     headed: state.headed,
+    blockWebsockets: Boolean(state.blockWebsockets),
     autoRender: state.autoRender ?? true,
     createdAt: nowIso(),
   };
@@ -1003,6 +1005,68 @@ async function recordSkippedFrame({
   await writeStatus(runDir, state);
 }
 
+// Replaces window.WebSocket with a stub that never opens a real connection.
+// Runs in the page context via Playwright addInitScript, before any page script.
+// Prevents capture from holding open a live WS to the captured app while the
+// headless renderer is CPU-saturated and not draining frames (would otherwise
+// backpressure the upstream sender and stall its other clients).
+function blockWebsocketsInitScript() {
+  if (!window.WebSocket) return;
+  const CONNECTING = 0;
+  const OPEN = 1;
+  const CLOSING = 2;
+  const CLOSED = 3;
+  class StubWebSocket extends EventTarget {
+    constructor(url) {
+      super();
+      this.url = String(url);
+      this.readyState = CONNECTING;
+      this.bufferedAmount = 0;
+      this.extensions = "";
+      this.protocol = "";
+      this.binaryType = "blob";
+      this.onopen = null;
+      this.onclose = null;
+      this.onerror = null;
+      this.onmessage = null;
+      queueMicrotask(() => {
+        this.readyState = CLOSED;
+        const errorEvent = new Event("error");
+        let closeEvent;
+        try {
+          closeEvent = new CloseEvent("close", {
+            code: 1006,
+            reason: "blocked by timelapse-capture",
+            wasClean: false,
+          });
+        } catch {
+          closeEvent = new Event("close");
+          closeEvent.code = 1006;
+          closeEvent.reason = "blocked by timelapse-capture";
+          closeEvent.wasClean = false;
+        }
+        try {
+          this.onerror && this.onerror(errorEvent);
+        } catch {}
+        this.dispatchEvent(errorEvent);
+        try {
+          this.onclose && this.onclose(closeEvent);
+        } catch {}
+        this.dispatchEvent(closeEvent);
+      });
+    }
+    send() {}
+    close() {
+      this.readyState = CLOSED;
+    }
+  }
+  StubWebSocket.CONNECTING = CONNECTING;
+  StubWebSocket.OPEN = OPEN;
+  StubWebSocket.CLOSING = CLOSING;
+  StubWebSocket.CLOSED = CLOSED;
+  window.WebSocket = StubWebSocket;
+}
+
 async function captureWithPlaywright({
   runDir,
   state,
@@ -1014,6 +1078,9 @@ async function captureWithPlaywright({
   let page;
   try {
     page = await browser.newPage({ viewport: state.viewport });
+    if (state.blockWebsockets) {
+      await page.addInitScript(blockWebsocketsInitScript);
+    }
     try {
       if (process.env.TIMELAPSE_SIMULATE_INITIAL_NAVIGATION_FAILURE === "1") {
         throw new Error("simulated initial navigation failure");
@@ -1244,6 +1311,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     keepLatest: Boolean(options["keep-latest"]),
     waitUntil: options["wait-until"] ?? "domcontentloaded",
     headed: Boolean(options.headed),
+    blockWebsockets: Boolean(options["block-websockets"]),
     autoRender: !options["no-render"],
     lastUpdatedAt: startedAt,
   };
@@ -1329,6 +1397,7 @@ function stateFromConfig({ runDir, config, status }) {
     keepLatest: Boolean(config.keepLatest),
     waitUntil: config.waitUntil ?? "domcontentloaded",
     headed: Boolean(config.headed),
+    blockWebsockets: Boolean(config.blockWebsockets),
     lastUpdatedAt: nowIso(),
   };
 }
@@ -2883,6 +2952,7 @@ Usage:
     [--fps <24>] [--viewport <1440x900>] [--out <dir>] [--cleanup <mode>]
     [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
     [--json] [--force] [--headed] [--keep-frames] [--keep-latest] [--no-render]
+    [--block-websockets]
   timelapse-capture stop <run-dir> [--json]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir>
