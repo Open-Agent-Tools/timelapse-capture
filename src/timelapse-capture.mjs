@@ -1435,18 +1435,23 @@ export async function commandCapture({ runDir } = {}) {
       framesDir,
       manifestPath,
     });
+    const willAutoRender =
+      config.autoRender !== false && captureStatus.state === "completed";
+    // While auto-render is in progress, surface job.state="rendering" so that
+    // consumers polling for a terminal job.state don't see "completed" before
+    // the run dir actually stops being written to.
     await writeJob(resolved, {
       runDir: resolved,
-      state: captureStatus.state,
+      state: willAutoRender ? "rendering" : captureStatus.state,
       framesPath: framesDir,
       pid: process.pid,
       parentPid: null,
       command,
       detached: true,
       startedAt: state.startedAt,
-      finishedAt: nowIso(),
+      finishedAt: willAutoRender ? null : nowIso(),
     });
-    if (config.autoRender !== false && captureStatus.state === "completed") {
+    if (willAutoRender) {
       try {
         await commandRender({ runDir: resolved });
       } catch (_err) {
@@ -1455,6 +1460,17 @@ export async function commandCapture({ runDir } = {}) {
           `auto-render failed: ${_err?.message || String(_err)}`,
         );
       }
+      await writeJob(resolved, {
+        runDir: resolved,
+        state: captureStatus.state,
+        framesPath: framesDir,
+        pid: process.pid,
+        parentPid: null,
+        command,
+        detached: true,
+        startedAt: state.startedAt,
+        finishedAt: nowIso(),
+      });
     }
     return {
       runDir: resolved,

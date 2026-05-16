@@ -33,7 +33,8 @@ test("initial navigation failure should leave diagnostic manifest record", async
     const startPayload = JSON.parse(result.stdout);
     const runDir = startPayload.runDir;
 
-    const status = await waitForFailedStatus(runDir);
+    // Cold Playwright/Chromium launch can take >5s; allow headroom.
+    const status = await waitForFailedStatus(runDir, { timeoutMs: 30_000 });
     assert.equal(status.state, "failed");
     assert.match(status.error, /navigation failed/);
 
@@ -91,7 +92,9 @@ test("initial navigation failure simulation (playwright backend) should leave di
     const startPayload = JSON.parse(result.stdout);
     const runDir = startPayload.runDir;
 
-    const status = await waitForFailedStatus(runDir);
+    // Cold Playwright/Chromium launch can take >5s even when the navigation
+    // failure is simulated, since the throw happens after newPage().
+    const status = await waitForFailedStatus(runDir, { timeoutMs: 30_000 });
     assert.equal(status.state, "failed");
     assert.match(status.error, /simulated initial navigation failure/);
 

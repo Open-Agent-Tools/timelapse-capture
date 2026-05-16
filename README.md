@@ -150,6 +150,10 @@ Runs repository checks and tests in sequence. If `ffmpeg` and `ffprobe` are not 
 `npm run check:local` will emit explicit skip messages and still continue to run non-binary tests.
 `test/real-ffmpeg-check.test.mjs` is skipped when those binaries are missing.
 
+### Local quality gates
+
+There is no remote CI for this repository; contributors must run `npm run ci` themselves before pushing or opening a PR. It runs `check`, `format:check`, `typecheck`, and the full Node test suite locally.
+
 ```bash
 timelapse-capture start <url>
   [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
