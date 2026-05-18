@@ -16,7 +16,7 @@ step as a checkpoint — if it fails, capture the failure in the feedback
 template at the end of this document.
 
 1. Confirm system prerequisites:
-   - Node.js 20 or newer (`node --version`).
+   - Node.js 22 or newer (`node --version`).
    - `npm` available on `PATH` (`npm --version`).
 
    **Expected:** Each command prints a version string and exits 0.

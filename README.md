@@ -4,7 +4,7 @@ timelapse-capture turns long-running app behavior into short, reviewable videos.
 
 ## Installation
 
-Requires Node.js 20 or newer and `ffmpeg`/`ffprobe` on `PATH`.
+Requires Node.js 22 or newer and `ffmpeg`/`ffprobe` on `PATH`.
 
 ```bash
 npm install -g https://github.com/Open-Agent-Tools/timelapse-capture/releases/latest/download/timelapse-capture.tgz
@@ -52,7 +52,7 @@ timelapse-capture doctor
 
 The command checks:
 
-- `node`: the current Node.js executable satisfies Node.js 20 or newer.
+- `node`: the current Node.js executable satisfies Node.js 22 or newer.
 - `playwright`: the Playwright package can be imported from this checkout.
 - `chromium`: Playwright can launch Chromium in headless mode.
 - `ffmpeg`: the renderer can find and run `ffmpeg`.
@@ -61,7 +61,7 @@ The command checks:
 Successful output looks like this:
 
 ```text
-[PASS] node: Node.js 20.11.1 satisfies >= 20.0.0
+[PASS] node: Node.js 22.11.0 satisfies >= 22.0.0
 [PASS] playwright: Playwright package can be imported
 [PASS] chromium: Chromium can be launched by Playwright
 [PASS] ffmpeg: ffmpeg 7.1 is available
@@ -215,7 +215,7 @@ Deletes raw frame PNGs for a completed run.
 
 ### `doctor` reports Node.js is too old
 
-Install Node.js 20 or newer, open a new shell, and run:
+Install Node.js 22 or newer, open a new shell, and run:
 
 ```bash
 node --version

@@ -1,7 +1,7 @@
 import { execFileSync as nodeExecFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 
-const MIN_NODE_VERSION = "20.0.0";
+const MIN_NODE_VERSION = "22.0.0";
 const localRequire = createRequire(import.meta.url);
 
 function checkResult({
@@ -69,8 +69,8 @@ export async function checkNode({ version = process.versions.node } = {}) {
     status: "fail",
     message: `Node.js ${version} is below required version ${MIN_NODE_VERSION}`,
     details,
-    error: "Node.js 20 or newer is required.",
-    fix: "Install Node.js 20 or newer, then run doctor again.",
+    error: "Node.js 22 or newer is required.",
+    fix: "Install Node.js 22 or newer, then run doctor again.",
   });
 }
 

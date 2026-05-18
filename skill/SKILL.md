@@ -11,7 +11,7 @@ Use this skill for long-running visual observation where a human reviewer wants 
 
 Before using the CLI, confirm the environment has:
 
-- Node.js 20 or newer
+- Node.js 22 or newer
 - Project dependencies installed with `npm install`
 - Playwright Chromium installed with `npx playwright install chromium`
 - `ffmpeg` and `ffprobe` available on `PATH`
