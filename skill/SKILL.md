@@ -37,9 +37,9 @@ Follow this order for every capture:
 1. Collect the target URL, duration, interval, viewport, and any retention requirement.
 2. Run `timelapse-capture doctor` and stop if it fails.
 3. Run `timelapse-capture start <url>` with the chosen duration, interval, and viewport.
-4. Record the returned run directory.
-5. Run `timelapse-capture status <run-dir>` to monitor progress.
-6. Run `timelapse-capture peek <run-dir> --latest` for inspection only.
+4. Record the returned run directory and printed alias (e.g. `cheeky-monkey-427`).
+5. Run `timelapse-capture status <run-dir-or-alias>` to monitor progress. With no argument, status defaults to the most recent run in `./timelapse-runs/`.
+6. Run `timelapse-capture peek <run-dir-or-alias> --latest` for inspection only.
 7. Wait for `status` to report `state: rendered` — render runs automatically when capture completes.
 8. Report artifact paths, especially the run directory and `output.mp4`.
 

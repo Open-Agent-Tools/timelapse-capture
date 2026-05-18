@@ -6,6 +6,8 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { commandDoctor, formatDoctorHuman } from "./doctor.mjs";
+import { aliasFor } from "./aliases.mjs";
+import { resolveRunDir } from "./run-resolver.mjs";
 import { setTimeout as setTimeoutPromise } from "node:timers/promises";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -318,7 +320,8 @@ export function parseArgs(argv) {
   const expected = schema.positional.length;
   const startTarget =
     command === "start" ? resolveStartTarget(positional[0], options.url) : null;
-  if (positional.length < expected && startTarget === null) {
+  const runDirOptional = schema.positional[0] === "runDir";
+  if (positional.length < expected && startTarget === null && !runDirOptional) {
     const msg =
       command === "start"
         ? "Missing URL. Pass it positionally (start <url>) or via --url."
@@ -1594,19 +1597,17 @@ export function resolveStartTiming(options = {}) {
 async function runStartCli(parsed) {
   const target = parsed.target;
   const result = await commandStart({ target, options: parsed.options });
+  const alias = aliasFor(path.basename(result.runDir));
   if (parsed.options.json) {
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify({ ...result, alias }, null, 2));
     return;
   }
   console.log(`Started timelapse capture: ${result.runDir}`);
-  console.log(`Status: timelapse-capture status ${shellQuote(result.runDir)}`);
-  console.log(
-    `Peek:   timelapse-capture peek ${shellQuote(result.runDir)} --latest`,
-  );
+  console.log(`Alias:  ${alias}`);
+  console.log(`Status: timelapse-capture status ${alias}`);
+  console.log(`Peek:   timelapse-capture peek ${alias} --latest`);
   if (parsed.options["no-render"]) {
-    console.log(
-      `Render: timelapse-capture render ${shellQuote(result.runDir)}`,
-    );
+    console.log(`Render: timelapse-capture render ${alias}`);
   }
 }
 
@@ -1666,7 +1667,8 @@ export async function commandStop({ runDir } = {}) {
 }
 
 async function runStopCli(parsed) {
-  const result = await commandStop({ runDir: parsed.runDir });
+  const runDir = resolveRunDir(parsed.runDir);
+  const result = await commandStop({ runDir });
   if (parsed.options.json) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -1726,9 +1728,10 @@ export async function commandStatus({ runDir }) {
   };
 }
 
-function printHumanStatus(status) {
+function printHumanStatus(status, opts = {}) {
   const lines = [];
   lines.push(`run-dir: ${status.runDir}`);
+  if (opts.alias) lines.push(`alias: ${opts.alias}`);
   lines.push(`state: ${status.state}`);
   lines.push(`elapsed: ${formatDuration(status.elapsedMs)}`);
   if (status.state === "running")
@@ -1768,19 +1771,20 @@ function printHumanStatus(status) {
 }
 
 async function runStatusCli(parsed) {
-  const result = await commandStatus({ runDir: parsed.runDir });
+  const runDir = resolveRunDir(parsed.runDir);
+  const alias = aliasFor(path.basename(path.resolve(runDir)));
+  const result = await commandStatus({ runDir });
+  result.alias = alias;
   if (parsed.options.json) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  printHumanStatus(result.status);
+  printHumanStatus(result.status, { alias });
   if (
     result.status.state === "completed" &&
     result.config?.autoRender === false
   ) {
-    console.log(
-      `Render: timelapse-capture render ${shellQuote(parsed.runDir)}`,
-    );
+    console.log(`Render: timelapse-capture render ${alias}`);
   }
 }
 
@@ -1984,8 +1988,9 @@ export async function commandPeek({ runDir, options = {} }) {
 }
 
 async function runPeekCli(parsed) {
+  const runDir = resolveRunDir(parsed.runDir);
   const result = await commandPeek({
-    runDir: parsed.runDir,
+    runDir,
     options: parsed.options,
   });
   if (parsed.options.json) {
@@ -2737,8 +2742,9 @@ export async function commandRender({ runDir, options = {} }) {
 }
 
 async function runRenderCli(parsed) {
+  const runDir = resolveRunDir(parsed.runDir);
   const result = await commandRender({
-    runDir: parsed.runDir,
+    runDir,
     options: parsed.options,
   });
   if (parsed.options.json) {
@@ -2950,8 +2956,9 @@ export async function commandCleanup({ runDir, options = {} }) {
 }
 
 async function runCleanupCli(parsed) {
+  const runDir = resolveRunDir(parsed.runDir);
   const result = await commandCleanup({
-    runDir: parsed.runDir,
+    runDir,
     options: parsed.options,
   });
   console.log(result.message);

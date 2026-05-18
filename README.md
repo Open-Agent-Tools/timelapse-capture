@@ -100,6 +100,8 @@ timelapse-capture start http://localhost:3000 \
 
 The command starts a detached background capture process, prints a `run-dir`, and returns immediately. Save that path for the next commands. The default location is under `./timelapse-runs/`.
 
+`start` also prints a short **alias** like `cheeky-monkey-427` (deterministically derived from the run directory name). Any command that takes a `<run-dir>` argument also accepts the alias when the run lives under `./timelapse-runs/`. With no argument at all, commands default to the most recently modified run in `./timelapse-runs/`.
+
 3. Check capture progress:
 
 ```bash
