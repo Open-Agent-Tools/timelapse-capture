@@ -14,6 +14,19 @@ This installs the CLI globally and automatically installs the Playwright
 Chromium browser. If `ffmpeg` or `ffprobe` are missing, the installer prints
 the platform-specific install command.
 
+To install the latest unreleased code from `main` (useful for testing
+fixes before a release is cut), use the tarball URL instead of the bare
+repo URL — recent npm versions have a reify bug that silently fails on
+`npm install -g <git-url>`:
+
+```bash
+npm install -g https://github.com/Open-Agent-Tools/timelapse-capture/tarball/main
+```
+
+The same form (`/tarball/<branch-or-commit-sha>`) is also the reinstall
+path; `npm install -g` over an existing global install updates it in
+place.
+
 Install FFmpeg if the installer flagged it as missing:
 
 ```bash
