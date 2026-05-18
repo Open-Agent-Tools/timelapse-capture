@@ -21,17 +21,17 @@ const __dirname = path.dirname(__filename);
 const CLI = path.join(__dirname, "..", "src", "timelapse-capture.mjs");
 
 test("checkNode passes for supported Node versions", async () => {
-  const result = await checkNode({ version: "22.1.0" });
+  const result = await checkNode({ version: "24.1.0" });
   assert.equal(result.name, "node");
   assert.equal(result.status, "pass");
-  assert.equal(result.details.minimumVersion, "22.0.0");
+  assert.equal(result.details.minimumVersion, "24.0.0");
 });
 
 test("checkNode fails with fix instructions for old Node versions", async () => {
-  const result = await checkNode({ version: "20.11.0" });
+  const result = await checkNode({ version: "22.11.0" });
   assert.equal(result.status, "fail");
-  assert.match(result.error, /Node\.js 22 or newer/);
-  assert.match(result.fix, /Install Node\.js 22/);
+  assert.match(result.error, /Node\.js 24 or newer/);
+  assert.match(result.fix, /Install Node\.js 24/);
 });
 
 test("checkBinary reports parsed version output", async () => {

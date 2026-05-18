@@ -59,7 +59,7 @@ test("README documents dogfood tester setup and capture workflow", async () => {
   const readme = await readProjectFile("README.md");
   const requiredSnippets = [
     "## Installation",
-    "Node.js 22",
+    "Node.js 24",
     "npm install",
     "npx playwright install chromium",
     "ffmpeg",
@@ -113,7 +113,7 @@ test("skill requires doctor before capture and describes the agent workflow", as
   const skill = await readProjectFile("skill", "SKILL.md");
 
   assert.match(skill, /## Prerequisites/);
-  assert.match(skill, /Node\.js 22/);
+  assert.match(skill, /Node\.js 24/);
   assert.match(skill, /npm install/);
   assert.match(skill, /npx playwright install chromium/);
   assert.match(skill, /ffmpeg/);
@@ -148,7 +148,7 @@ test("dogfood-protocol.md covers install checklist, all three scenarios, feedbac
 
   // Install checklist
   assert.match(doc, /## Tester Install Steps/);
-  assert.match(doc, /Node\.js 22/);
+  assert.match(doc, /Node\.js 24/);
   assert.match(doc, /npm install/);
   assert.match(doc, /npx playwright install chromium/);
   assert.match(doc, /ffmpeg/);
