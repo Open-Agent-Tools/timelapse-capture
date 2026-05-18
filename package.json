@@ -1,6 +1,6 @@
 {
   "name": "timelapse-capture",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Fire-and-forget visual timelapse capture for long-running app review.",
   "bin": {
     "timelapse-capture": "./src/timelapse-capture.mjs"
