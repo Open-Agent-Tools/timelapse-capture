@@ -150,9 +150,9 @@ Runs repository checks and tests in sequence. If `ffmpeg` and `ffprobe` are not 
 `npm run check:local` will emit explicit skip messages and still continue to run non-binary tests.
 `test/real-ffmpeg-check.test.mjs` is skipped when those binaries are missing.
 
-### Local quality gates
+### Quality gates
 
-There is no remote CI for this repository; contributors must run `npm run ci` themselves before pushing or opening a PR. It runs `check`, `format:check`, `typecheck`, and the full Node test suite locally.
+GitHub Actions runs the same preflight (`npm run ci`) on every push and pull request to `main` via `.github/workflows/ci.yml`. Contributors are still encouraged to run `npm run ci` locally before pushing — it runs `check`, `format:check`, `typecheck`, and the full Node test suite, so failures show up before CI does.
 
 ```bash
 timelapse-capture start <url>

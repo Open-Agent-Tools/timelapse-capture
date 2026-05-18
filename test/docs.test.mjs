@@ -186,7 +186,13 @@ test("dogfood-protocol.md covers install checklist, all three scenarios, feedbac
 });
 
 test("CLAUDE.md contains concrete project guidance instead of template placeholders", async () => {
-  const claudeMd = await readProjectFile("CLAUDE.md");
+  let claudeMd;
+  try {
+    claudeMd = await readProjectFile("CLAUDE.md");
+  } catch (error) {
+    if (error.code === "ENOENT") return; // CLAUDE.md is gitignored; only present locally.
+    throw error;
+  }
 
   // Must NOT contain any template placeholder text
   assert.doesNotMatch(claudeMd, /_Add your build and test commands here_/);

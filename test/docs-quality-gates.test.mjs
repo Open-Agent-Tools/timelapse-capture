@@ -6,22 +6,32 @@ const claudePath = new URL("../CLAUDE.md", import.meta.url);
 const readmePath = new URL("../README.md", import.meta.url);
 const pkgPath = new URL("../package.json", import.meta.url);
 
-test("docs explain that quality gates are local-only because there is no remote CI", async () => {
-  const [claudeMd, readmeMd] = await Promise.all([
-    fs.readFile(claudePath, "utf8"),
-    fs.readFile(readmePath, "utf8"),
-  ]);
+async function readIfExists(url) {
+  try {
+    return await fs.readFile(url, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
 
-  assert.match(claudeMd, /no remote CI/i);
-  assert.match(readmeMd, /no remote CI/i);
+test("README documents the quality gates and references npm run ci", async () => {
+  const readmeMd = await fs.readFile(readmePath, "utf8");
+
   assert.match(readmeMd, /npm run ci/);
+  assert.match(readmeMd, /quality gates/i);
 });
 
 test("CLAUDE.md npm run ci description matches package.json gates exactly", async () => {
   const [claudeMd, pkgText] = await Promise.all([
-    fs.readFile(claudePath, "utf8"),
+    readIfExists(claudePath),
     fs.readFile(pkgPath, "utf8"),
   ]);
+
+  if (claudeMd === null) {
+    // CLAUDE.md is gitignored — only present in local checkouts.
+    return;
+  }
 
   const pkg = JSON.parse(pkgText);
   const ciScript = pkg.scripts?.ci;
