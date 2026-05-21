@@ -126,6 +126,46 @@ test("start detaches a background capture child and status observes progress", a
   }
 });
 
+test("stop signals graceful exit and capture proceeds to auto-render", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-stop-graceful-"));
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      // Start an indefinite run (no --duration) so the loop wouldn't terminate
+      // on its own within the test window.
+      const result = runCli(
+        ["start", "http://example.test/", "--out", runDir, "--json"],
+        {
+          TIMELAPSE_SIMULATE_FRAMES: "10000",
+          TIMELAPSE_SIMULATE_FRAME_DELAY_MS: "100",
+          PATH: manager.getPATHEnv(),
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const startPayload = JSON.parse(result.stdout);
+      assert.equal(startPayload.runDir, runDir);
+
+      await pollStatus(
+        runDir,
+        (status) => status.state === "running" && status.frames.captured >= 2,
+      );
+
+      const stop = runCli(["stop", runDir, "--json"]);
+      assert.equal(stop.status, 0, stop.stderr);
+
+      const rendered = await pollStatus(
+        runDir,
+        (status) => status.state === "rendered",
+        { timeoutMs: 12000 },
+      );
+      assert.ok(rendered.status.frames.captured >= 1);
+      assert.ok(fsSync.existsSync(path.join(runDir, "output.mp4")));
+      await pollJob(runDir, (current) => current.state === "completed");
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
 test("capture --run validates missing run directories", () => {
   const missing = path.join(
     os.tmpdir(),

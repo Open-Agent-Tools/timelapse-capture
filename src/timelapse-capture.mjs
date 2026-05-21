@@ -49,6 +49,10 @@ const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
 const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
 const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
 const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
+// No-flags `start` runs for up to 12h at a cadence that yields 1 minute of
+// output video per hour of capture (at fps=24 that's 2500ms between frames).
+const INDEFINITE_DURATION_MS = 12 * 60 * 60 * 1000;
+const INDEFINITE_VIDEO_LENGTH_PER_HOUR_MS = 60 * 1000;
 const DEFAULT_BACKEND = "playwright-url";
 const BACKEND_MIN_INTERVAL_MS = Object.freeze({
   [DEFAULT_BACKEND]: 1000,
@@ -145,6 +149,11 @@ const isMain = (() => {
     return path.resolve(process.argv[1]) === __filename;
   }
 })();
+
+// Set by SIGTERM/SIGINT inside the capture child process. The capture loops
+// check this between frames so `stop` results in a graceful exit + auto-render
+// rather than aborting mid-run.
+let captureStopRequested = false;
 
 if (isMain) {
   main(process.argv.slice(2)).catch((error) => {
@@ -341,7 +350,13 @@ export function parseArgs(argv) {
   }
 
   if (command === "start" && !options.duration) {
-    throw new ParseError("E_MISSING_VALUE", "Missing --duration.");
+    if (options.interval !== undefined || options["video-length"]) {
+      throw new ParseError(
+        "E_INDEFINITE_FLAG_CONFLICT",
+        "--interval and --video-length require --duration. Omit --duration to run with the default 12h cap and 1-min-per-hour rate.",
+      );
+    }
+    options.indefinite = true;
   }
   if (
     command === "start" &&
@@ -794,6 +809,7 @@ async function writeStartArtifacts(runDir, state) {
     headed: state.headed,
     blockWebsockets: Boolean(state.blockWebsockets),
     autoRender: state.autoRender ?? true,
+    indefinite: Boolean(state.indefinite),
     createdAt: nowIso(),
   };
   const job = {
@@ -1108,11 +1124,13 @@ async function captureWithPlaywright({
 
     const startedAtMs = new Date(state.startedAt).getTime();
     for (let index = 1; index <= state.targetFrames; index += 1) {
+      if (captureStopRequested) break;
       const scheduledAtMs =
         startedAtMs + Math.round((index - 1) * (state.intervalMs || 0));
       await waitUntilFrameTime(scheduledAtMs, {
         maxWaitMs: Math.min(1_000, state.intervalMs || 1_000),
       });
+      if (captureStopRequested) break;
 
       const filename = path.join(framesDir, frameName(index));
       const relativeFramePath = `frames/${frameName(index)}`;
@@ -1189,6 +1207,7 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
   );
   const startedAtMs = new Date(state.startedAt).getTime();
   for (let index = 1; index <= state.targetFrames; index += 1) {
+    if (captureStopRequested) break;
     if (Number.isFinite(delayMs) && delayMs > 0) {
       await setTimeoutPromise(delayMs);
     }
@@ -1316,6 +1335,7 @@ function buildInitialCaptureState({ target, options = {} }) {
     headed: Boolean(options.headed),
     blockWebsockets: Boolean(options["block-websockets"]),
     autoRender: !options["no-render"],
+    indefinite: Boolean(timing.indefinite),
     lastUpdatedAt: startedAt,
   };
 }
@@ -1401,6 +1421,7 @@ function stateFromConfig({ runDir, config, status }) {
     waitUntil: config.waitUntil ?? "domcontentloaded",
     headed: Boolean(config.headed),
     blockWebsockets: Boolean(config.blockWebsockets),
+    indefinite: Boolean(config.indefinite),
     lastUpdatedAt: nowIso(),
   };
 }
@@ -1421,6 +1442,13 @@ export async function commandCapture({ runDir } = {}) {
   const manifestPath = path.join(resolved, "manifest.jsonl");
   const command = [process.execPath, __filename, "capture", "--run", resolved];
   const state = stateFromConfig({ runDir: resolved, config, status });
+
+  const onStopSignal = () => {
+    captureStopRequested = true;
+  };
+  process.on("SIGTERM", onStopSignal);
+  process.on("SIGINT", onStopSignal);
+
   await writeJob(resolved, {
     runDir: resolved,
     state: "running",
@@ -1493,6 +1521,9 @@ export async function commandCapture({ runDir } = {}) {
       error: error?.message || String(error),
     });
     throw error;
+  } finally {
+    process.removeListener("SIGTERM", onStopSignal);
+    process.removeListener("SIGINT", onStopSignal);
   }
 }
 
@@ -1546,10 +1577,34 @@ export async function commandStart({ target, options = {} } = {}) {
 }
 
 export function resolveStartTiming(options = {}) {
-  const durationMs = options.duration?.ms ?? 0;
   const fps = Number(options.fps ?? 24);
   const backend = normalizeBackend(options.backend ?? DEFAULT_BACKEND);
   const minimumIntervalMs = backendMinIntervalMs(backend);
+
+  if (options.indefinite) {
+    const durationMs = INDEFINITE_DURATION_MS;
+    const requestedIntervalMs = Math.max(
+      1,
+      Math.round(
+        (60 * 60 * 1000) / ((INDEFINITE_VIDEO_LENGTH_PER_HOUR_MS / 1000) * fps),
+      ),
+    );
+    const intervalMs = Math.max(minimumIntervalMs, requestedIntervalMs);
+    return {
+      durationMs,
+      videoLengthMs: null,
+      fps,
+      requestedIntervalMs,
+      intervalMs,
+      backendMinIntervalMs: minimumIntervalMs,
+      intervalClamped: intervalMs !== requestedIntervalMs,
+      targetFrames: Math.max(1, Math.ceil(durationMs / intervalMs)),
+      computedFromVideoLength: false,
+      indefinite: true,
+    };
+  }
+
+  const durationMs = options.duration?.ms ?? 0;
   const explicitIntervalMs =
     typeof options.interval === "number"
       ? options.interval
@@ -1606,6 +1661,12 @@ async function runStartCli(parsed) {
   console.log(`Alias:  ${alias}`);
   console.log(`Status: timelapse-capture status ${alias}`);
   console.log(`Peek:   timelapse-capture peek ${alias} --latest`);
+  if (parsed.options.indefinite) {
+    console.log(`Stop:   timelapse-capture stop ${alias}`);
+    console.log(
+      "Indefinite mode: capturing 1 min of video per hour, capped at 12h.",
+    );
+  }
   if (parsed.options["no-render"]) {
     console.log(`Render: timelapse-capture render ${alias}`);
   }
@@ -1654,13 +1715,6 @@ export async function commandStop({ runDir } = {}) {
     if (err.code !== "ESRCH") throw err;
   }
 
-  const updatedStatus = {
-    ...(status || {}),
-    state: "failed",
-    error: "stopped by user request",
-    stoppedAt: nowIso(),
-  };
-  await writeJsonAtomic(statusPath, updatedStatus);
   await appendLog(resolved, `stop invoked pid=${pid} killed=${killed}`);
 
   return { runDir: resolved, pid, killed };
@@ -1673,7 +1727,11 @@ async function runStopCli(parsed) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  console.log(`Stopped: ${result.runDir} (pid ${result.pid})`);
+  const alias = aliasFor(path.basename(path.resolve(result.runDir)));
+  console.log(`Stop requested: ${result.runDir} (pid ${result.pid})`);
+  console.log(
+    `Capture will finalize and auto-render. Poll: timelapse-capture status ${alias}`,
+  );
 }
 
 // ---------- Status ----------
@@ -2976,6 +3034,10 @@ Usage:
     [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
     [--json] [--force] [--headed] [--keep-frames] [--keep-latest] [--no-render]
     [--block-websockets]
+
+  With no --duration, capture runs until 'stop' or a 12h cap, producing
+  ~1 minute of video per hour of capture (at the default fps=24).
+  --interval and --video-length are not allowed without --duration.
   timelapse-capture stop <run-dir> [--json]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir>

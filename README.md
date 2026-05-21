@@ -181,6 +181,8 @@ timelapse-capture start <url>
 Starts a detached background process that captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
 Use `--interval <duration>` to set capture cadence directly, or use `--video-length <duration>` with `--fps <number>` to derive the interval from the requested output video length.
 
+With no `--duration`, `start` runs in **indefinite mode**: it captures until `stop` is called (or 12 hours elapse, whichever comes first) at a rate that produces ~1 minute of video per hour of capture (2500ms between frames at the default `fps=24`). `--interval` and `--video-length` are not allowed without `--duration` — omit `--duration` to get the indefinite defaults.
+
 `start` writes the initial run artifacts and returns before capture finishes. Use `status` with the printed run directory to follow progress. The internal child process runs `timelapse-capture capture --run <run-dir>`.
 
 By default, `render` runs automatically when capture completes. Pass `--no-render` to skip auto-render and produce the MP4 manually with `render` later.
@@ -191,7 +193,7 @@ Pass `--block-websockets` when capturing a live SPA whose own WebSocket feed sha
 timelapse-capture stop <run-dir> [--json]
 ```
 
-Sends `SIGTERM` to the background capture process and marks the run as failed with `"stopped by user request"`. Only works on runs in `starting` or `running` state.
+Sends `SIGTERM` to the background capture process. The capture child catches the signal, finishes the current frame, exits the capture loop gracefully, and proceeds to auto-render whatever was captured. Only works on runs in `starting` or `running` state. Poll `status` to observe the run reach `rendered`.
 
 ```bash
 timelapse-capture status <run-dir> [--json]

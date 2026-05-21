@@ -1812,17 +1812,30 @@ test("start command rejects missing URL clearly", async () => {
   assert.match(result.stderr, /Missing URL/);
 });
 
-test("start command accepts positional URL and validates required flags", async () => {
-  const workdir = await fs.mkdtemp(
-    path.join(os.tmpdir(), "tlc-start-positional-"),
+test("start command without --duration enters indefinite mode with 12h cap", async () => {
+  const parsed = parseArgs(["start", "http://example.com"]);
+  assert.equal(parsed.options.indefinite, true);
+
+  const timing = resolveStartTiming(parsed.options);
+  assert.equal(timing.indefinite, true);
+  assert.equal(timing.durationMs, 12 * 60 * 60 * 1000);
+  assert.equal(timing.intervalMs, 2500);
+  assert.equal(timing.targetFrames, 17280);
+});
+
+test("start command without --duration rejects --interval and --video-length", () => {
+  assert.throws(
+    () => parseArgs(["start", "http://example.com", "--interval", "5s"]),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_INDEFINITE_FLAG_CONFLICT",
   );
-  try {
-    const result = runCli(["start", "http://example.com"], { PWD: workdir });
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Missing --duration/);
-  } finally {
-    await fs.rm(workdir, { recursive: true, force: true });
-  }
+  assert.throws(
+    () => parseArgs(["start", "http://example.com", "--video-length", "1m"]),
+    (error) =>
+      error instanceof ParseError &&
+      error.code === "E_INDEFINITE_FLAG_CONFLICT",
+  );
 });
 
 test("start command uses PRD desktop default viewport when omitted", async () => {
@@ -1966,7 +1979,7 @@ test("start parser rejects video length and interval together", () => {
   );
 });
 
-test("start parser still requires duration with video length", () => {
+test("start parser rejects video length without duration", () => {
   const result = runCli([
     "start",
     "http://example.test",
@@ -1974,7 +1987,7 @@ test("start parser still requires duration with video length", () => {
     "1m",
   ]);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Missing --duration/);
+  assert.match(result.stderr, /E_INDEFINITE_FLAG_CONFLICT/);
 });
 
 test("start timing derives interval from target video length", () => {
