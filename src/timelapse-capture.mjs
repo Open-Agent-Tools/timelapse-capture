@@ -11,7 +11,7 @@ import { resolveRunDir } from "./run-resolver.mjs";
 import { setTimeout as setTimeoutPromise } from "node:timers/promises";
 
 const __filename = fileURLToPath(import.meta.url);
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";
 
 export const CANONICAL_STATES = Object.freeze([
   "starting",
@@ -176,6 +176,10 @@ export async function main(argv) {
   const head = tokens[0];
   if (head === "help" || head === "--help" || head === "-h") {
     return printHelp();
+  }
+  if (head === "--version" || head === "-V") {
+    console.log(VERSION);
+    return;
   }
 
   let parsed;
