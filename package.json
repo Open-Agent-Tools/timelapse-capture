@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "description": "Fire-and-forget visual timelapse capture for long-running app review.",
   "bin": {
-    "timelapse-capture": "./src/timelapse-capture.mjs"
+    "timelapse-capture": "src/timelapse-capture.mjs"
   },
   "scripts": {
     "postinstall": "node -e \"if(process.env.npm_config_global==='true'&&!process.env.CI){const x=require('child_process').execSync;try{x('npx playwright install chromium',{stdio:'inherit'})}catch(e){process.stderr.write('Run: npx playwright install chromium\\n')}const h=c=>{try{x((process.platform==='win32'?'where ':'which ')+c,{stdio:'ignore'});return true}catch(e){return false}};if(!h('ffmpeg')||!h('ffprobe')){const f={darwin:'brew install ffmpeg',linux:'sudo apt-get install ffmpeg'};console.log('\\nffmpeg/ffprobe not found: '+(f[process.platform]||'https://ffmpeg.org/download.html'))}}\"",
@@ -25,7 +25,25 @@
   "engines": {
     "node": ">=24"
   },
+  "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Open-Agent-Tools/timelapse-capture.git"
+  },
+  "homepage": "https://github.com/Open-Agent-Tools/timelapse-capture#readme",
+  "bugs": {
+    "url": "https://github.com/Open-Agent-Tools/timelapse-capture/issues"
+  },
+  "keywords": [
+    "timelapse",
+    "screenshot",
+    "capture",
+    "playwright",
+    "visual-testing",
+    "monitoring",
+    "cli"
+  ],
   "devDependencies": {
     "prettier": "^3.8.3",
     "typescript": "^6.0.3"
