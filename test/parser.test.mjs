@@ -6,6 +6,8 @@ import {
   parseArgs,
   parseDuration,
   parseViewport,
+  parseFormat,
+  parseQuality,
 } from "../src/timelapse-capture.mjs";
 
 test("parseDuration accepts combined and unit-formatted values", () => {
@@ -45,6 +47,47 @@ test("parseViewport accepts valid viewport and rejects invalid dimensions", () =
     () => parseViewport("abc"),
     (error) => error instanceof ParseError && error.code === "E_BAD_VIEWPORT",
   );
+});
+
+test("parseFormat normalizes aliases and rejects unknown formats", () => {
+  assert.equal(parseFormat("png"), "png");
+  assert.equal(parseFormat("jpeg"), "jpeg");
+  assert.equal(parseFormat("jpg"), "jpeg");
+  assert.equal(parseFormat("JPEG"), "jpeg");
+  assert.throws(
+    () => parseFormat("gif"),
+    (error) => error instanceof ParseError && error.code === "E_BAD_FORMAT",
+  );
+  assert.throws(
+    () => parseFormat("webp"),
+    (error) => error instanceof ParseError && error.code === "E_BAD_FORMAT",
+  );
+});
+
+test("parseQuality accepts 1-100 integers and rejects everything else", () => {
+  assert.equal(parseQuality("1"), 1);
+  assert.equal(parseQuality("90"), 90);
+  assert.equal(parseQuality("100"), 100);
+  for (const bad of ["0", "101", "abc", "50.5", "-5", ""]) {
+    assert.throws(
+      () => parseQuality(bad),
+      (error) => error instanceof ParseError && error.code === "E_BAD_QUALITY",
+      `expected ${JSON.stringify(bad)} to be rejected`,
+    );
+  }
+});
+
+test("parseArgs threads --format and --quality through the start schema", () => {
+  const parsed = parseArgs([
+    "start",
+    "http://example.test/",
+    "--format",
+    "jpg",
+    "--quality",
+    "75",
+  ]);
+  assert.equal(parsed.options.format, "jpeg");
+  assert.equal(parsed.options.quality, 75);
 });
 
 test("parseArgs maps positional arguments for core run-dir commands", () => {

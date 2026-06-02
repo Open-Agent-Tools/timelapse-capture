@@ -65,7 +65,7 @@ test("recordCapturedFrame: manifest records have required fields for all capture
       assert.ok(typeof r.path === "string", `record ${i} path is string`);
       assert.equal(
         r.path,
-        `frames/frame-${String(i + 1).padStart(4, "0")}.png`,
+        `frames/frame-${String(i + 1).padStart(4, "0")}.jpeg`,
         `record ${i} path is run-relative with forward slashes`,
       );
       assert.equal(r.url, TARGET, `record ${i} url`);
@@ -79,7 +79,7 @@ test("recordCapturedFrame: manifest records have required fields for all capture
   }
 });
 
-test("recordCapturedFrame: latest-frame.json and latest.png are written after each frame", async () => {
+test("recordCapturedFrame: latest-frame.json and latest.jpeg are written after each frame", async () => {
   const runDir = await runSimulated(2);
   try {
     const latestFrame = JSON.parse(
@@ -87,9 +87,9 @@ test("recordCapturedFrame: latest-frame.json and latest.png are written after ea
     );
     assert.equal(latestFrame.index, 2);
     assert.equal(latestFrame.status, "captured");
-    assert.equal(latestFrame.path, "frames/frame-0002.png");
-    const stat = await fs.stat(path.join(runDir, "latest.png"));
-    assert.ok(stat.size > 0, "latest.png exists and is non-empty");
+    assert.equal(latestFrame.path, "frames/frame-0002.jpeg");
+    const stat = await fs.stat(path.join(runDir, "latest.jpeg"));
+    assert.ok(stat.size > 0, "latest.jpeg exists and is non-empty");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -101,7 +101,7 @@ test("status.json latestFrame field is run-relative", async () => {
     const status = JSON.parse(
       await fs.readFile(path.join(runDir, "status.json"), "utf8"),
     );
-    assert.equal(status.latestFrame, "frames/frame-0002.png");
+    assert.equal(status.latestFrame, "frames/frame-0002.jpeg");
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }

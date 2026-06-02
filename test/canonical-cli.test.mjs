@@ -23,18 +23,25 @@ const FRAME_PNG_1x1 = Buffer.from(
   "hex",
 );
 
-async function makeRun({ frameCount = 3, state = "completed" } = {}) {
+async function makeRun({
+  frameCount = 3,
+  state = "completed",
+  format = "png",
+} = {}) {
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-canonical-"));
   const framesDir = path.join(runDir, "frames");
   await fs.mkdir(framesDir);
 
+  const ext = format === "jpeg" ? "jpeg" : "png";
+  const frameBytes =
+    format === "jpeg" ? __test__.SIMULATION_FRAME_JPEG : FRAME_PNG_1x1;
   const captured = [];
   for (let index = 1; index <= frameCount; index += 1) {
     const relative = path.join(
       "frames",
-      `frame-${String(index).padStart(4, "0")}.png`,
+      `frame-${String(index).padStart(4, "0")}.${ext}`,
     );
-    await fs.writeFile(path.join(runDir, relative), FRAME_PNG_1x1);
+    await fs.writeFile(path.join(runDir, relative), frameBytes);
     captured.push({
       index,
       scheduledAt: new Date(
@@ -61,6 +68,8 @@ async function makeRun({ frameCount = 3, state = "completed" } = {}) {
     targetFrames: frameCount,
     fps: 24,
     viewport: { width: 1280, height: 720 },
+    format: ext,
+    quality: ext === "jpeg" ? 90 : null,
     outDir: runDir,
     cleanup: "after-render",
     keepSamples: 0,
@@ -865,6 +874,8 @@ test("frame filename width and render input pattern stay in sync", async () => {
     assert.equal(__test__.frameName(1), "frame-0001.png");
     assert.equal(__test__.frameName(42), "frame-0042.png");
     assert.match(__test__.frameName(1), /^frame-\d{4}\.png$/);
+    assert.equal(__test__.frameName(1, "jpeg"), "frame-0001.jpeg");
+    assert.equal(__test__.frameName(42, "png"), "frame-0042.png");
 
     await withFakeFFmpeg(async (manager) => {
       const result = runCli(["render", runDir, "--json"], {
@@ -880,6 +891,70 @@ test("frame filename width and render input pattern stay in sync", async () => {
       assert.notEqual(inputIndex, -1);
       assert.equal(path.basename(ffmpegArgs[inputIndex + 1]), "frame-%04d.png");
     }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("render of a jpeg run uses a jpeg input pattern and jpeg poster", async () => {
+  const { runDir } = await makeRun({ frameCount: 3, format: "jpeg" });
+  try {
+    await withFakeFFmpeg(async (manager) => {
+      const result = runCli(["render", runDir, "--json", "--keep-frames"], {
+        PATH: manager.getPATHEnv(),
+      });
+      assert.equal(result.status, 0, result.stderr);
+
+      const summary = JSON.parse(
+        await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
+      );
+      const ffmpegArgs = summary.render.ffmpegCommand;
+      const inputIndex = ffmpegArgs.indexOf("-i");
+      assert.notEqual(inputIndex, -1);
+      assert.equal(
+        path.basename(ffmpegArgs[inputIndex + 1]),
+        "frame-%04d.jpeg",
+      );
+
+      // Poster carries the jpeg extension and the recorded summary agrees.
+      assert.equal(summary.poster, "poster.jpeg");
+      const posterStat = await fs.stat(path.join(runDir, "poster.jpeg"));
+      assert.ok(posterStat.size > 0, "poster.jpeg exists and is non-empty");
+
+      // Peek still resolves a jpeg frame for a kept-frames jpeg run.
+      const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
+      assert.equal(peekResult.status, 0, peekResult.stderr);
+      const payload = JSON.parse(peekResult.stdout);
+      assert.match(payload.path, /frame-0003\.jpeg$/);
+    }, "success");
+  } finally {
+    await fs.rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("start rejects --quality combined with --format png", async () => {
+  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-quality-png-"));
+  try {
+    const result = runCli(
+      [
+        "start",
+        "http://example.test/",
+        "--duration",
+        "1s",
+        "--interval",
+        "1s",
+        "--format",
+        "png",
+        "--quality",
+        "80",
+        "--out",
+        runDir,
+        "--json",
+      ],
+      { TIMELAPSE_SIMULATE_FRAMES: "1" },
+    );
+    assert.notEqual(result.status, 0, "start should reject quality+png");
+    assert.match(result.stderr, /quality/i);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -1869,13 +1944,19 @@ test("start command uses PRD desktop default viewport when omitted", async () =>
       await fs.readFile(path.join(runDir, "config.json"), "utf8"),
     );
     assert.deepEqual(config.viewport, { width: 1440, height: 900 });
+    // Default capture format is JPEG q90.
+    assert.equal(config.format, "jpeg");
+    assert.equal(config.quality, 90);
     assert.equal(
       config.estimatedDiskBytes,
-      Math.max(1, config.targetFrames) * Math.ceil((1440 * 900 * 3) / 4) + 4096,
+      Math.max(1, config.targetFrames) *
+        Math.ceil(1440 * 900 * (0.07 + 0.0125 * (90 / 100))) +
+        4096,
     );
 
     const status = await waitForTerminalStatus(runDir);
     assert.deepEqual(status.viewport, { width: 1440, height: 900 });
+    assert.equal(status.format, "jpeg");
 
     const manifest = (
       await fs.readFile(path.join(runDir, "manifest.jsonl"), "utf8")
@@ -1885,6 +1966,7 @@ test("start command uses PRD desktop default viewport when omitted", async () =>
       .filter(Boolean)
       .map((line) => JSON.parse(line));
     assert.deepEqual(manifest[0].viewport, { width: 1440, height: 900 });
+    assert.match(manifest[0].path, /^frames\/frame-\d{4}\.jpeg$/);
   } finally {
     await fs.rm(runDir, { recursive: true, force: true });
   }
@@ -1922,7 +2004,9 @@ test("start command preserves explicit viewport override", async () => {
     assert.deepEqual(config.viewport, { width: 800, height: 600 });
     assert.equal(
       config.estimatedDiskBytes,
-      Math.max(1, config.targetFrames) * Math.ceil((800 * 600 * 3) / 4) + 4096,
+      Math.max(1, config.targetFrames) *
+        Math.ceil(800 * 600 * (0.07 + 0.0125 * (90 / 100))) +
+        4096,
     );
 
     const status = await waitForTerminalStatus(runDir);
@@ -2579,7 +2663,7 @@ test("peek --latest exits non-zero with a clear error when no frames or fallback
       "peek should exit non-zero when no frames or artifacts",
     );
     assert.match(peekResult.stderr, /Raw frames were cleaned up/);
-    assert.match(peekResult.stderr, /poster\.png/);
+    assert.match(peekResult.stderr, /poster/);
     assert.doesNotMatch(peekResult.stderr, /latest-retained\.png/);
     assert.ok(
       !peekResult.stdout.includes("frames/"),
@@ -2721,7 +2805,7 @@ test("start retention keepLatest is honored by render without render flags", asy
     });
 
     const frames = await fs.readdir(path.join(runDir, "frames"));
-    assert.deepEqual(frames.sort(), ["frame-0003.png"]);
+    assert.deepEqual(frames.sort(), ["frame-0003.jpeg"]);
     const summary = JSON.parse(
       await fs.readFile(path.join(runDir, "run-summary.json"), "utf8"),
     );

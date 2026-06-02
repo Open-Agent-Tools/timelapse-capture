@@ -38,13 +38,13 @@ test("failed frame attempts preserve prior successful latestFrame", async () => 
     assert.equal(status.frames.captured, 2);
     assert.equal(status.frames.failed, 1);
     assert.equal(typeof status.latestFrame, "string");
-    assert.equal(path.basename(status.latestFrame), "frame-0003.png");
+    assert.equal(path.basename(status.latestFrame), "frame-0003.jpeg");
 
     const latestFrame = JSON.parse(
       await fs.readFile(path.join(runDir, "latest-frame.json"), "utf8"),
     );
     assert.equal(latestFrame.status, "captured");
-    assert.equal(path.basename(latestFrame.path), "frame-0003.png");
+    assert.equal(path.basename(latestFrame.path), "frame-0003.jpeg");
 
     const manifestPath = path.join(runDir, "manifest.jsonl");
     const manifestLines = (await fs.readFile(manifestPath, "utf8"))

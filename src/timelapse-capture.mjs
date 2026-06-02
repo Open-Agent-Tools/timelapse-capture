@@ -40,6 +40,14 @@ export function migrateLegacyState(state) {
 const SIMULATION_FRAME_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAC0lEQVR4nGNgYAAAAAIAAdde3rAAAAAElFTkSuQmCA==";
 const SIMULATION_FRAME_PNG = Buffer.from(SIMULATION_FRAME_PNG_BASE64, "base64");
+// Matching 1x1 baseline JPEG so simulated `--format jpeg` runs produce valid
+// JPEG bytes that render/peek end-to-end in tests.
+const SIMULATION_FRAME_JPEG_BASE64 =
+  "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==";
+const SIMULATION_FRAME_JPEG = Buffer.from(
+  SIMULATION_FRAME_JPEG_BASE64,
+  "base64",
+);
 const BENIGN_EMPTY_DIR_REMOVAL_CODES = new Set([
   "ENOENT",
   "ENOTEMPTY",
@@ -49,6 +57,9 @@ const MIN_COMPUTED_INTERVAL_WARNING_MS = 1000;
 const FRAME_EXT_REGEX = /\.(png|jpg|jpeg)$/i;
 const isFrameFile = (name) => FRAME_EXT_REGEX.test(name);
 const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
+const SUPPORTED_FORMATS = Object.freeze(["png", "jpeg"]);
+const DEFAULT_FORMAT = "jpeg";
+const DEFAULT_JPEG_QUALITY = 90;
 // No-flags `start` runs for up to 12h at a cadence that yields 1 minute of
 // output video per hour of capture (at fps=24 that's 2500ms between frames).
 const INDEFINITE_DURATION_MS = 12 * 60 * 60 * 1000;
@@ -78,6 +89,8 @@ const COMMAND_SCHEMAS = {
       "video-length",
       "fps",
       "viewport",
+      "format",
+      "quality",
       "out",
       "cleanup",
       "keep-samples",
@@ -405,6 +418,12 @@ function parseValueFlag(flag, value) {
   if (flag === "viewport") {
     return parseViewport(value);
   }
+  if (flag === "format") {
+    return parseFormat(value);
+  }
+  if (flag === "quality") {
+    return parseQuality(value);
+  }
   if (flag === "interval") {
     const parsed = parseDuration(value);
     if (parsed.ms === 0) {
@@ -527,6 +546,35 @@ export function parseViewport(input) {
   return { input, width, height };
 }
 
+export function parseFormat(input) {
+  const normalized = String(input).trim().toLowerCase();
+  const canonical = normalized === "jpg" ? "jpeg" : normalized;
+  if (!SUPPORTED_FORMATS.includes(canonical)) {
+    throw new ParseError(
+      "E_BAD_FORMAT",
+      `Invalid format: ${input}. Supported values: png, jpeg.`,
+    );
+  }
+  return canonical;
+}
+
+export function parseQuality(input) {
+  const raw = String(input).trim();
+  const parsed = Number.parseInt(raw, 10);
+  if (
+    !/^\d+$/.test(raw) ||
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > 100
+  ) {
+    throw new ParseError(
+      "E_BAD_QUALITY",
+      `Invalid quality: ${input}. Expected an integer between 1 and 100.`,
+    );
+  }
+  return parsed;
+}
+
 async function runDoctorCli(parsed) {
   const result = await commandDoctor();
   if (parsed.options.json) {
@@ -541,8 +589,8 @@ async function runDoctorCli(parsed) {
 
 // ---------- Start / Capture ----------
 
-function frameName(index) {
-  return `frame-${String(index).padStart(4, "0")}.png`;
+function frameName(index, ext = "png") {
+  return `frame-${String(index).padStart(4, "0")}.${ext}`;
 }
 
 function nowIso() {
@@ -719,14 +767,30 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-function estimateFrameBytes(viewport) {
+function estimateFrameBytes(
+  viewport,
+  format = DEFAULT_FORMAT,
+  quality = DEFAULT_JPEG_QUALITY,
+) {
   const width = viewport?.width || DEFAULT_VIEWPORT.width;
   const height = viewport?.height || DEFAULT_VIEWPORT.height;
+  if (format === "jpeg") {
+    // Rough order-of-magnitude only (feeds the pre-run disk warning).
+    return Math.ceil(width * height * (0.07 + 0.0125 * (quality / 100)));
+  }
   return Math.ceil((width * height * 3) / 4);
 }
 
-function estimateDiskBytes(viewport, targetFrames) {
-  return Math.max(1, targetFrames) * estimateFrameBytes(viewport) + 4096;
+function estimateDiskBytes(
+  viewport,
+  targetFrames,
+  format = DEFAULT_FORMAT,
+  quality = DEFAULT_JPEG_QUALITY,
+) {
+  return (
+    Math.max(1, targetFrames) * estimateFrameBytes(viewport, format, quality) +
+    4096
+  );
 }
 
 function formatDuration(ms) {
@@ -804,6 +868,8 @@ async function writeStartArtifacts(runDir, state) {
     targetFrames: state.targetFrames,
     fps: state.fps,
     viewport: state.viewport,
+    format: state.format ?? DEFAULT_FORMAT,
+    quality: state.quality ?? null,
     estimatedDiskBytes: state.estimatedDiskBytes,
     outDir: runDir,
     cleanup: state.cleanup,
@@ -911,6 +977,8 @@ function buildStatusPayload(state) {
     viewport: state.viewport
       ? { width: state.viewport.width, height: state.viewport.height }
       : null,
+    format: state.format ?? DEFAULT_FORMAT,
+    quality: state.quality ?? null,
     estimatedDiskBytes: state.estimatedDiskBytes ?? null,
     error: state.error || null,
   };
@@ -933,9 +1001,11 @@ function inferStateFromStatus(status) {
   return "idle";
 }
 
-async function writeFakeFrame(runDir, index) {
-  const filename = path.join(runDir, "frames", frameName(index));
-  await fsp.writeFile(filename, SIMULATION_FRAME_PNG);
+async function writeFakeFrame(runDir, index, format = "png") {
+  const filename = path.join(runDir, "frames", frameName(index, format));
+  const payload =
+    format === "jpeg" ? SIMULATION_FRAME_JPEG : SIMULATION_FRAME_PNG;
+  await fsp.writeFile(filename, payload);
   return filename;
 }
 
@@ -970,7 +1040,8 @@ async function recordCapturedFrame({
   state.state = "running";
   await appendJsonLine(manifestPath, record);
   await writeJsonAtomic(path.join(runDir, "latest-frame.json"), record);
-  await fsp.copyFile(filename, path.join(runDir, "latest.png"));
+  const latestExt = state.format ?? DEFAULT_FORMAT;
+  await fsp.copyFile(filename, path.join(runDir, `latest.${latestExt}`));
   await writeStatus(runDir, state);
 }
 
@@ -1136,15 +1207,21 @@ async function captureWithPlaywright({
       });
       if (captureStopRequested) break;
 
-      const filename = path.join(framesDir, frameName(index));
-      const relativeFramePath = `frames/${frameName(index)}`;
+      const filename = path.join(framesDir, frameName(index, state.format));
+      const relativeFramePath = `frames/${frameName(index, state.format)}`;
       const tempPath = path.join(
         framesDir,
-        `.tmp-${process.pid}-${frameName(index)}`,
+        `.tmp-${process.pid}-${frameName(index, state.format)}`,
       );
       const scheduledAt = new Date(scheduledAtMs).toISOString();
       try {
-        await page.screenshot({ path: tempPath, fullPage: false });
+        const shotOptions = {
+          path: tempPath,
+          fullPage: false,
+          type: state.format,
+        };
+        if (state.format === "jpeg") shotOptions.quality = state.quality;
+        await page.screenshot(shotOptions);
         await fsp.rename(tempPath, filename);
         const title = await safePageTitle(page);
         await recordCapturedFrame({
@@ -1242,8 +1319,8 @@ async function captureSimulated({ runDir, state, framesDir, manifestPath }) {
       });
       continue;
     }
-    const filename = await writeFakeFrame(runDir, index);
-    const relativeFramePath = `frames/${frameName(index)}`;
+    const filename = await writeFakeFrame(runDir, index, state.format);
+    const relativeFramePath = `frames/${frameName(index, state.format)}`;
     await recordCapturedFrame({
       state,
       runDir,
@@ -1293,6 +1370,15 @@ function buildInitialCaptureState({ target, options = {} }) {
   const viewport = options.viewport
     ? { width: options.viewport.width, height: options.viewport.height }
     : { width: DEFAULT_VIEWPORT.width, height: DEFAULT_VIEWPORT.height };
+  const format = options.format ?? DEFAULT_FORMAT;
+  if (options.quality !== undefined && format !== "jpeg") {
+    throw new ParseError(
+      "E_QUALITY_REQUIRES_JPEG",
+      "--quality applies only to --format jpeg.",
+    );
+  }
+  const quality =
+    format === "jpeg" ? (options.quality ?? DEFAULT_JPEG_QUALITY) : null;
   const targetFrames = (() => {
     const fromEnv = Number.parseInt(
       process.env.TIMELAPSE_SIMULATE_FRAMES || "",
@@ -1301,7 +1387,12 @@ function buildInitialCaptureState({ target, options = {} }) {
     if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
     return timing.targetFrames;
   })();
-  const estimatedDiskBytes = estimateDiskBytes(viewport, targetFrames);
+  const estimatedDiskBytes = estimateDiskBytes(
+    viewport,
+    targetFrames,
+    format,
+    quality ?? DEFAULT_JPEG_QUALITY,
+  );
   const cleanup = options["keep-frames"]
     ? "never"
     : (options.cleanup ?? "after-render");
@@ -1328,6 +1419,8 @@ function buildInitialCaptureState({ target, options = {} }) {
     durationMs,
     fps,
     viewport,
+    format,
+    quality,
     estimatedDiskBytes,
     cleanup,
     keepSamples:
@@ -1418,6 +1511,8 @@ function stateFromConfig({ runDir, config, status }) {
     durationMs: config.durationMs,
     fps: config.fps,
     viewport: config.viewport,
+    format: config.format ?? DEFAULT_FORMAT,
+    quality: config.quality ?? null,
     estimatedDiskBytes: config.estimatedDiskBytes,
     cleanup: config.cleanup,
     keepSamples: Number(config.keepSamples ?? 0),
@@ -1560,8 +1655,12 @@ export async function commandStart({ target, options = {} } = {}) {
   if (!options.json) {
     console.log(
       `estimated disk: ${formatBytes(state.estimatedDiskBytes)} (${state.targetFrames} frames x ${formatBytes(
-        estimateFrameBytes(state.viewport),
-      )}/frame, approximate)`,
+        estimateFrameBytes(
+          state.viewport,
+          state.format,
+          state.quality ?? DEFAULT_JPEG_QUALITY,
+        ),
+      )}/frame ${state.format}, approximate)`,
     );
   }
 
@@ -2010,12 +2109,12 @@ export async function commandPeek({ runDir, options = {} }) {
   const records = await readCapturedFrameRecords(resolved, names);
 
   if (!names.length) {
-    const posterPath = path.join(resolved, "poster.png");
-    if (fs.existsSync(posterPath)) {
+    const posterPath = findArtifact(resolved, /^poster\.(png|jpe?g)$/i);
+    if (posterPath) {
       return buildPeekFallbackPayload(resolved, "poster", posterPath);
     }
     throw new Error(
-      "No frames available. Raw frames were cleaned up. Use poster.png or output.mp4 from the run directory.",
+      "No frames available. Raw frames were cleaned up. Use the poster image or output.mp4 from the run directory.",
     );
   }
 
@@ -2340,10 +2439,28 @@ function listFrameFilesSync(framesDir) {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+// Read-side helper: a run's frames are always a single format, so the
+// extension of the first frame on disk is authoritative (robust to a missing
+// or hand-edited config.json). Defaults to "png" when no frames are present.
+function frameExtFromDir(framesDir) {
+  const names = listFrameFilesSync(framesDir);
+  if (names.length === 0) return "png";
+  return path.extname(names[0]).slice(1).toLowerCase() || "png";
+}
+
+// Find a format-agnostic artifact (e.g. poster.png/poster.jpeg) in a directory.
+// Returns the absolute path of the first match, or null when none exists.
+function findArtifact(dir, pattern) {
+  if (!fs.existsSync(dir)) return null;
+  const match = fs.readdirSync(dir).find((name) => pattern.test(name));
+  return match ? path.join(dir, match) : null;
+}
+
 function stageContiguousFrames(framesDir) {
   const names = listFrameFilesSync(framesDir);
   if (names.length === 0) return { dir: framesDir, staged: false };
-  const isContiguous = names.every((name, i) => name === frameName(i + 1));
+  const ext = frameExtFromDir(framesDir);
+  const isContiguous = names.every((name, i) => name === frameName(i + 1, ext));
   if (isContiguous) return { dir: framesDir, staged: false };
   const stagingDir = path.join(framesDir, ".render-staging");
   removeStagingDir(stagingDir);
@@ -2352,7 +2469,7 @@ function stageContiguousFrames(framesDir) {
     for (let i = 0; i < names.length; i++) {
       fs.linkSync(
         path.join(framesDir, names[i]),
-        path.join(stagingDir, frameName(i + 1)),
+        path.join(stagingDir, frameName(i + 1, ext)),
       );
     }
   } catch (err) {
@@ -2377,9 +2494,11 @@ function copyPosterSync(framesDir, runDir) {
   if (names.length === 0) return null;
   const middleIndex = Math.floor((names.length - 1) / 2);
   const src = path.join(framesDir, names[middleIndex]);
-  const dest = path.join(runDir, "poster.png");
+  const ext = path.extname(names[middleIndex]).toLowerCase() || ".png";
+  const posterName = `poster${ext}`;
+  const dest = path.join(runDir, posterName);
   fs.copyFileSync(src, dest);
-  return "poster.png";
+  return posterName;
 }
 
 function processOutputToString(output) {
@@ -2473,7 +2592,10 @@ function finalizeRenderSuccess(runDir, status, summary, outputPath, result) {
 
 function runFfmpeg({ framesDir, framerate, outputPath, ffmpegPath, runDir }) {
   const staging = stageContiguousFrames(framesDir);
-  const framePattern = path.join(staging.dir, "frame-%04d.png");
+  const framePattern = path.join(
+    staging.dir,
+    `frame-%04d.${frameExtFromDir(framesDir)}`,
+  );
   const ffmpegArgs = [
     "-framerate",
     String(framerate),
@@ -2842,16 +2964,16 @@ const CLEANUP_STRATEGIES = {
   frames: {
     reason: "frames",
     resolve({ resolved, framesDir, frameFiles }) {
-      const latestPng = path.join(resolved, "latest.png");
-      const latestPngExists = fs.existsSync(latestPng);
+      const latestPath = findArtifact(resolved, /^latest\.(png|jpe?g)$/i);
+      const latestExists = latestPath !== null;
       const toDelete = frameFiles.map((f) => path.join(framesDir, f));
-      if (latestPngExists) toDelete.push(latestPng);
+      if (latestExists) toDelete.push(latestPath);
       return {
         toDelete,
         removed: frameFiles.length,
         retained: 0,
-        message: "Raw frames and latest.png cleaned up",
-        latestPngRemoved: latestPngExists,
+        message: "Raw frames and latest frame cleaned up",
+        latestPngRemoved: latestExists,
         removeFramesDir: true,
       };
     },
@@ -3034,7 +3156,8 @@ function printHelp() {
 Usage:
   timelapse-capture start <url>
     [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
-    [--fps <24>] [--viewport <1440x900>] [--out <dir>] [--cleanup <mode>]
+    [--fps <24>] [--viewport <1440x900>] [--format <png|jpeg>] [--quality <1-100>]
+    [--out <dir>] [--cleanup <mode>]
     [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
     [--json] [--force] [--headed] [--keep-frames] [--keep-latest] [--no-render]
     [--block-websockets]
@@ -3042,6 +3165,8 @@ Usage:
   With no --duration, capture runs until 'stop' or a 12h cap, producing
   ~1 minute of video per hour of capture (at the default fps=24).
   --interval and --video-length are not allowed without --duration.
+  Frames are captured as JPEG (default --quality 90); pass --format png for
+  lossless frames. --quality applies only to --format jpeg.
   timelapse-capture stop <run-dir> [--json]
   timelapse-capture status <run-dir> [--json]
   timelapse-capture peek <run-dir>
@@ -3058,9 +3183,13 @@ Usage:
 // Compatibility re-exports kept lightweight for tests.
 export const __test__ = {
   SIMULATION_FRAME_PNG,
+  SIMULATION_FRAME_JPEG,
   COMMAND_SCHEMAS,
   commandStop,
   frameName,
+  frameExtFromDir,
+  parseFormat,
+  parseQuality,
   slugify,
   formatBytes,
   formatDuration,

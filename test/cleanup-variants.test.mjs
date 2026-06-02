@@ -144,7 +144,7 @@ test("cleanup --keep-samples moves retained frames to samples/ and removes frame
       "peek should fail without raw frames or fallback artifacts",
     );
     assert.match(peekResult.stderr, /Raw frames were cleaned up/);
-    assert.match(peekResult.stderr, /poster\.png/);
+    assert.match(peekResult.stderr, /poster/);
     assert.doesNotMatch(peekResult.stderr, /latest-retained\.png/);
     assert.equal(
       peekResult.stdout,
@@ -290,7 +290,7 @@ test("cleanup --frames removes frames and latest.png and records in summary", as
     const result = await runWithFakeFFmpeg(() =>
       commandCleanup({ runDir, options: { frames: true } }),
     );
-    assert.equal(result.message, "Raw frames and latest.png cleaned up");
+    assert.equal(result.message, "Raw frames and latest frame cleaned up");
     assert.equal(result.removed, 3);
     assert.equal(
       await fs.stat(path.join(runDir, "frames")).then(

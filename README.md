@@ -172,7 +172,8 @@ GitHub Actions runs the same preflight (`npm run ci`) on every push and pull req
 ```bash
 timelapse-capture start <url>
   [--url <url>] [--duration <2h>] [--interval <5s>] [--video-length <1m>]
-  [--fps <24>] [--viewport <1440x900>] [--out <dir>] [--cleanup <mode>]
+  [--fps <24>] [--viewport <1440x900>] [--format <png|jpeg>] [--quality <1-100>]
+  [--out <dir>] [--cleanup <mode>]
   [--keep-samples [N]] [--wait-until <event>] [--backend <name>]
   [--json] [--force] [--headed] [--keep-frames] [--keep-latest] [--no-render]
   [--block-websockets]
@@ -180,6 +181,8 @@ timelapse-capture start <url>
 
 Starts a detached background process that captures screenshots for the target URL. Durations accept values such as `30s`, `5m`, `2h`, or `500ms`.
 Use `--interval <duration>` to set capture cadence directly, or use `--video-length <duration>` with `--fps <number>` to derive the interval from the requested output video length.
+
+Frames are captured as **JPEG** by default (`--quality 90`), since the rendered MP4 is lossy anyway and JPEG frames are roughly 5–10× smaller on disk than PNG. Pass `--format png` for lossless frames; `--quality <1-100>` applies only to `--format jpeg`. The chosen format is recorded in `config.json`, and `latest.*` / `poster.*` artifacts carry the matching extension.
 
 With no `--duration`, `start` runs in **indefinite mode**: it captures until `stop` is called (or 12 hours elapse, whichever comes first) at a rate that produces ~1 minute of video per hour of capture (2500ms between frames at the default `fps=24`). `--interval` and `--video-length` are not allowed without `--duration` — omit `--duration` to get the indefinite defaults.
 
