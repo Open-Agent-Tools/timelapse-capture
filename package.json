@@ -6,9 +6,9 @@
     "timelapse-capture": "src/timelapse-capture.mjs"
   },
   "scripts": {
-    "postinstall": "node -e \"if(process.env.npm_config_global==='true'&&!process.env.CI){const x=require('child_process').execSync;try{x('npx playwright install chromium',{stdio:'inherit'})}catch(e){process.stderr.write('Run: npx playwright install chromium\\n')}const h=c=>{try{x((process.platform==='win32'?'where ':'which ')+c,{stdio:'ignore'});return true}catch(e){return false}};if(!h('ffmpeg')||!h('ffprobe')){const f={darwin:'brew install ffmpeg',linux:'sudo apt-get install ffmpeg'};console.log('\\nffmpeg/ffprobe not found: '+(f[process.platform]||'https://ffmpeg.org/download.html'))}}\"",
+    "postinstall": "node ./scripts/postinstall.mjs",
     "start": "node ./src/timelapse-capture.mjs",
-    "check": "node --check ./src/timelapse-capture.mjs && node --check ./src/doctor.mjs",
+    "check": "node --check ./src/timelapse-capture.mjs && node --check ./src/doctor.mjs && node --check ./src/binaries.mjs && node --check ./scripts/postinstall.mjs",
     "check:local": "bash ./scripts/local-check.sh",
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check .",
@@ -17,10 +17,14 @@
     "ci": "npm run check && npm run format:check && npm run typecheck && npm test"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
     "playwright": "^1.59.1"
   },
   "files": [
-    "src/"
+    "src/",
+    "scripts/postinstall.mjs",
+    "scripts/install-windows.ps1"
   ],
   "engines": {
     "node": ">=24"

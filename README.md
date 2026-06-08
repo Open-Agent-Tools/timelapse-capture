@@ -4,15 +4,49 @@ timelapse-capture turns long-running app behavior into short, reviewable videos.
 
 ## Installation
 
-Requires Node.js 24 or newer and `ffmpeg`/`ffprobe` on `PATH`.
+Requires Node.js 24 or newer and npm. The published package installs the CLI,
+Playwright, Playwright Chromium, and npm-managed FFmpeg/ffprobe binaries.
+
+### Fresh Windows machine
+
+On Windows, use this optional bootstrap only if Node.js/npm are not installed
+yet. It installs Node.js with `winget`, then runs the same published npm install
+and `doctor`:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-timelapse-capture.ps1"
+Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/Open-Agent-Tools/timelapse-capture/main/scripts/install-windows.ps1 -OutFile $installer
+powershell -NoProfile -ExecutionPolicy Bypass -File $installer
+```
+
+The script checks for:
+
+- Node.js 24 or newer (`winget install --id OpenJS.NodeJS -e --source winget`)
+- the latest `timelapse-capture` release
+- Playwright Chromium, installed by the package postinstall step
+- FFmpeg and ffprobe, installed as npm package dependencies
+
+If `winget` is unavailable, install Node.js 24 or newer manually, open a new
+PowerShell window, then rerun the command.
+
+To install the latest unreleased `main` build with the same bootstrap path,
+download the script and pass `-Main`:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-timelapse-capture.ps1"
+Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/Open-Agent-Tools/timelapse-capture/main/scripts/install-windows.ps1 -OutFile $installer
+powershell -NoProfile -ExecutionPolicy Bypass -File $installer -Main
+```
+
+### Existing Node/npm
 
 ```bash
 npm install -g https://github.com/Open-Agent-Tools/timelapse-capture/releases/latest/download/timelapse-capture.tgz
 ```
 
 This installs the CLI globally and automatically installs the Playwright
-Chromium browser. If `ffmpeg` or `ffprobe` are missing, the installer prints
-the platform-specific install command.
+Chromium browser. It also installs npm-managed FFmpeg and ffprobe binaries, so
+system FFmpeg is not required on `PATH`.
 
 To install the latest unreleased code from `main` (useful for testing
 fixes before a release is cut), use the tarball URL instead of the bare
@@ -27,16 +61,6 @@ The same form (`/tarball/<branch-or-commit-sha>`) is also the reinstall
 path; `npm install -g` over an existing global install updates it in
 place.
 
-Install FFmpeg if the installer flagged it as missing:
-
-```bash
-# macOS
-brew install ffmpeg
-
-# Debian / Ubuntu
-sudo apt-get install ffmpeg
-```
-
 Confirm everything is ready:
 
 ```bash
@@ -50,7 +74,7 @@ Clone the repository and link the binary:
 ```bash
 git clone https://github.com/Open-Agent-Tools/timelapse-capture.git
 cd timelapse-capture
-npm install          # also runs postinstall → playwright install chromium
+npm install          # also runs postinstall -> playwright install chromium
 npm link
 timelapse-capture doctor
 ```
@@ -68,8 +92,8 @@ The command checks:
 - `node`: the current Node.js executable satisfies Node.js 24 or newer.
 - `playwright`: the Playwright package can be imported from this checkout.
 - `chromium`: Playwright can launch Chromium in headless mode.
-- `ffmpeg`: the renderer can find and run `ffmpeg`.
-- `ffprobe`: MP4 validation can find and run `ffprobe`.
+- `ffmpeg`: the renderer can find and run the npm-managed or system `ffmpeg`.
+- `ffprobe`: MP4 validation can find and run the npm-managed or system `ffprobe`.
 
 Successful output looks like this:
 
@@ -238,6 +262,9 @@ Deletes raw frame PNGs for a completed run.
 Install Node.js 24 or newer, open a new shell, and run:
 
 ```bash
+# Windows
+winget install --id OpenJS.NodeJS -e --source winget
+
 node --version
 timelapse-capture doctor
 ```
@@ -264,13 +291,16 @@ On Linux CI hosts, Playwright may also need OS libraries. Run the command sugges
 
 ### `ffmpeg` or `ffprobe` is missing
 
-Install FFmpeg and confirm both binaries are visible:
+Reinstall the package so npm restores the managed FFmpeg dependencies, then run
+doctor again:
 
 ```bash
-ffmpeg -version
-ffprobe -version
+npm install -g https://github.com/Open-Agent-Tools/timelapse-capture/releases/latest/download/timelapse-capture.tgz
 timelapse-capture doctor
 ```
+
+System FFmpeg on `PATH` is optional. If present, the CLI can use it; otherwise
+it uses the packaged npm binaries.
 
 ### Start fails with `navigation failed`
 

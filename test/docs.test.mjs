@@ -59,6 +59,10 @@ test("README documents dogfood tester setup and capture workflow", async () => {
   const readme = await readProjectFile("README.md");
   const requiredSnippets = [
     "## Installation",
+    "Fresh Windows machine",
+    "scripts/install-windows.ps1",
+    "winget install --id OpenJS.NodeJS",
+    "npm-managed FFmpeg",
     "Node.js 24",
     "npm install",
     "npx playwright install chromium",
@@ -152,6 +156,7 @@ test("dogfood-protocol.md covers install checklist, all three scenarios, feedbac
   assert.match(doc, /npm install/);
   assert.match(doc, /npx playwright install chromium/);
   assert.match(doc, /ffmpeg/);
+  assert.match(doc, /npm-managed FFmpeg\/ffprobe/);
 
   // Three scenario sections
   assert.match(doc, /## Scenario 1/);

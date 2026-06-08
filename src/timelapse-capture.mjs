@@ -7,11 +7,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { commandDoctor, formatDoctorHuman } from "./doctor.mjs";
 import { aliasFor } from "./aliases.mjs";
+import { resolveBinaryPath } from "./binaries.mjs";
 import { resolveRunDir } from "./run-resolver.mjs";
 import { setTimeout as setTimeoutPromise } from "node:timers/promises";
 
 const __filename = fileURLToPath(import.meta.url);
-export const VERSION = "0.3.1";
+export const VERSION = "0.4.0";
 
 export const CANONICAL_STATES = Object.freeze([
   "starting",
@@ -2275,7 +2276,7 @@ export function validateMP4(outputPath) {
   let probeJson;
   try {
     probeJson = execFileSync(
-      "ffprobe",
+      resolveBinaryPath("ffprobe"),
       [
         "-v",
         "error",
@@ -2787,13 +2788,13 @@ export function renderFrames(runDir, options = {}) {
     return result;
   }
   let sourceFrameCount = 0;
-  let ffmpegCommand = ["ffmpeg"];
+  let ffmpegCommand = [resolveBinaryPath("ffmpeg")];
   const framerate = resolveRenderFramerate(options.framerate);
   try {
     appendRenderLog(runDir, "render attempt started");
     const framesDir = getFramesDir(runDir);
     sourceFrameCount = countOrThrowFrames(framesDir);
-    const ffmpegPath = options.ffmpegPath || "ffmpeg";
+    const ffmpegPath = options.ffmpegPath || resolveBinaryPath("ffmpeg");
     ffmpegCommand = [ffmpegPath];
     const outputPath = resolveValidatedOutputPath(runDir, options);
     const status = readStatusSync(runDir) || {};

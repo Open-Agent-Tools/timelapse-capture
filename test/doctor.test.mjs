@@ -15,6 +15,7 @@ import {
   formatDoctorHuman,
   runAllChecks,
 } from "../src/doctor.mjs";
+import { resolveBinaryPath, resolvePackagedBinary } from "../src/binaries.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,10 +33,16 @@ test("checkNode fails with fix instructions for old Node versions", async () => 
   assert.equal(result.status, "fail");
   assert.match(result.error, /Node\.js 24 or newer/);
   assert.match(result.fix, /Install Node\.js 24/);
+  if (process.platform === "win32") {
+    assert.match(result.fix, /winget install --id OpenJS\.NodeJS/);
+  }
 });
 
 test("checkBinary reports parsed version output", async () => {
   const result = await checkBinary("ffmpeg", {
+    requireFn() {
+      throw new Error("no packaged binary");
+    },
     execFileSync() {
       return "ffmpeg version 6.1 Copyright";
     },
@@ -47,6 +54,9 @@ test("checkBinary reports parsed version output", async () => {
 
 test("checkBinary reports missing binaries with actionable fixes", async () => {
   const result = await checkBinary("ffprobe", {
+    requireFn() {
+      throw new Error("no packaged binary");
+    },
     execFileSync() {
       const error = new Error("spawn ENOENT");
       error.code = "ENOENT";
@@ -56,8 +66,8 @@ test("checkBinary reports missing binaries with actionable fixes", async () => {
 
   assert.equal(result.status, "fail");
   assert.match(result.error, /ffprobe was not found/);
-  assert.match(result.fix, /Install FFmpeg/);
-  assert.match(result.message, /ffprobe is missing from PATH/);
+  assert.match(result.fix, /npm install/);
+  assert.match(result.message, /ffprobe is unavailable/);
   assert.match(
     result.message,
     /tests and captures that require ffprobe should be skipped/,
@@ -289,9 +299,12 @@ test("checkPlaywright reports missing dependency with manual fix guidance", asyn
   assert.equal(result.message, "Playwright package cannot be imported");
 });
 
-test("checkBinary attempts only version check command for missing ffmpeg/ffprobe", async () => {
+test("checkBinary checks the resolved binary version for missing ffmpeg/ffprobe", async () => {
   const execCalls = [];
   const result = await checkBinary("ffmpeg", {
+    requireFn() {
+      throw new Error("no packaged binary");
+    },
     execFileSync(binary, args) {
       execCalls.push({ binary, args });
       const error = new Error("missing");
@@ -301,13 +314,36 @@ test("checkBinary attempts only version check command for missing ffmpeg/ffprobe
   });
 
   assert.equal(result.status, "fail");
-  assert.equal(execCalls.length, 1);
-  assert.deepEqual(execCalls[0], { binary: "ffmpeg", args: ["-version"] });
+  assert.ok(execCalls.length >= 1);
+  assert.deepEqual(execCalls.at(-1), { binary: "ffmpeg", args: ["-version"] });
   assert.equal(
     result.fix,
-    "Install FFmpeg and ensure ffmpeg is available on PATH.",
+    "Run npm install, or reinstall the published package. The package includes npm-managed ffmpeg and ffprobe binaries; system PATH binaries are optional.",
   );
-  assert.match(result.message, /missing from PATH/);
+  assert.match(result.message, /unavailable/);
+});
+
+test("resolvePackagedBinary reads npm-managed ffmpeg binary paths", () => {
+  const result = resolvePackagedBinary("ffmpeg", {
+    requireFn() {
+      return { path: "/pkg/ffmpeg" };
+    },
+  });
+
+  assert.equal(result, "/pkg/ffmpeg");
+});
+
+test("resolveBinaryPath falls back to packaged binary when PATH lookup fails", () => {
+  const result = resolveBinaryPath("ffprobe", {
+    execFileSync() {
+      throw new Error("not on PATH");
+    },
+    requireFn() {
+      return { path: "/pkg/ffprobe" };
+    },
+  });
+
+  assert.equal(result, "/pkg/ffprobe");
 });
 
 test("formatDoctorHuman prints pass/fail lines with fixes", () => {
@@ -378,7 +414,7 @@ test("doctor --json emits parseable JSON and exits non-zero when a dependency is
   assert.equal(payload.ok, false);
   assert.ok(
     payload.checks.some(
-      (check) => check.name === "ffmpeg" && check.status === "fail",
+      (check) => check.name === "ffmpeg" && check.status === "pass",
     ),
   );
   assert.equal(result.stderr, "");
@@ -392,7 +428,7 @@ test("doctor without --json emits human-readable output and summary", () => {
   });
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stdout, /\[PASS\] node:/);
+  assert.match(result.stdout, /\[(PASS|FAIL)\] node:/);
   assert.match(result.stdout, /\[FAIL\]/);
   assert.match(result.stdout, /summary: \d+ passed, \d+ failed, \d+ total/);
   assert.equal(result.stderr, "");

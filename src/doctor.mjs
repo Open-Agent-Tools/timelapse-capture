@@ -1,8 +1,17 @@
 import { execFileSync as nodeExecFileSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { resolveBinaryPath } from "./binaries.mjs";
 
 const MIN_NODE_VERSION = "24.0.0";
 const localRequire = createRequire(import.meta.url);
+
+const NODE_INSTALL_FIX =
+  process.platform === "win32"
+    ? "Install Node.js 24 or newer with: winget install --id OpenJS.NodeJS -e --source winget; then open a new terminal and run doctor again."
+    : "Install Node.js 24 or newer, then run doctor again.";
+
+const FFMPEG_INSTALL_FIX =
+  "Run npm install, or reinstall the published package. The package includes npm-managed ffmpeg and ffprobe binaries; system PATH binaries are optional.";
 
 function checkResult({
   name,
@@ -70,7 +79,7 @@ export async function checkNode({ version = process.versions.node } = {}) {
     message: `Node.js ${version} is below required version ${MIN_NODE_VERSION}`,
     details,
     error: "Node.js 24 or newer is required.",
-    fix: "Install Node.js 24 or newer, then run doctor again.",
+    fix: NODE_INSTALL_FIX,
   });
 }
 
@@ -147,10 +156,17 @@ function parseBinaryVersion(binary, output) {
 
 export async function checkBinary(
   binary,
-  { execFileSync = nodeExecFileSync } = {},
+  { execFileSync = nodeExecFileSync, binaryPath, requireFn } = {},
 ) {
+  const resolvedBinary =
+    binaryPath ||
+    resolveBinaryPath(binary, {
+      preferPackaged: true,
+      execFileSync,
+      requireFn,
+    });
   try {
-    const stdout = execFileSync(binary, ["-version"], {
+    const stdout = execFileSync(resolvedBinary, ["-version"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 5000,
@@ -162,17 +178,17 @@ export async function checkBinary(
       message: parsed.version
         ? `${binary} ${parsed.version} is available`
         : `${binary} is available`,
-      details: parsed,
+      details: { ...parsed, executable: resolvedBinary },
     });
   } catch (error) {
-    const skipHint = `${binary} is missing from PATH; real tests and captures that require ${binary} should be skipped until it is installed`;
+    const skipHint = `${binary} is unavailable; real tests and captures that require ${binary} should be skipped until it is installed`;
     return checkResult({
       name: binary,
       status: "fail",
       message: skipHint,
-      details: {},
+      details: { executable: resolvedBinary },
       error: `${binary} was not found or could not run: ${error?.message || String(error)}`,
-      fix: `Install FFmpeg and ensure ${binary} is available on PATH.`,
+      fix: FFMPEG_INSTALL_FIX,
     });
   }
 }

@@ -13,8 +13,12 @@ Before using the CLI, confirm the environment has:
 
 - Node.js 24 or newer
 - Project dependencies installed with `npm install`
-- Playwright Chromium installed with `npx playwright install chromium`
-- `ffmpeg` and `ffprobe` available on `PATH`
+- Playwright Chromium installed by package postinstall or with `npx playwright install chromium`
+- npm-managed `ffmpeg` and `ffprobe` package dependencies installed
+
+On a fresh Windows machine, use `scripts/install-windows.ps1` from README.md
+only if Node.js/npm are missing. The published npm install handles the CLI
+package, FFmpeg/ffprobe dependencies, and Playwright Chromium before `doctor`.
 
 README.md is the canonical user guide for installation, command details, troubleshooting, and artifact layout.
 

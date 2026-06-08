@@ -15,36 +15,39 @@ These are the steps a brand-new tester runs before any scenario. Treat each
 step as a checkpoint — if it fails, capture the failure in the feedback
 template at the end of this document.
 
-1. Confirm system prerequisites:
+1. On a fresh Windows machine without Node.js/npm, run the bootstrap script
+   from PowerShell:
+
+   ```powershell
+   $installer = Join-Path $env:TEMP "install-timelapse-capture.ps1"
+   Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/Open-Agent-Tools/timelapse-capture/main/scripts/install-windows.ps1 -OutFile $installer
+   powershell -NoProfile -ExecutionPolicy Bypass -File $installer
+   ```
+
+   **Expected:** The script installs missing Node.js/npm with `winget`, installs
+   `timelapse-capture` from the published package, installs Playwright Chromium
+   during package postinstall, uses npm-managed FFmpeg/ffprobe dependencies, and
+   ends with a clean `timelapse-capture doctor` run.
+
+   On macOS, Linux, or Windows machines where you already have Node.js/npm, use
+   the remaining prerequisite checks and npm install steps instead.
+
+2. Confirm system prerequisites:
    - Node.js 24 or newer (`node --version`).
    - `npm` available on `PATH` (`npm --version`).
 
    **Expected:** Each command prints a version string and exits 0.
 
-2. Install `timelapse-capture` with one command:
+3. Install `timelapse-capture` with one command:
 
    ```bash
    npm install -g https://github.com/Open-Agent-Tools/timelapse-capture/releases/latest/download/timelapse-capture.tgz
    ```
 
-   **Expected:** npm downloads the package, installs dependencies, and
-   automatically runs `npx playwright install chromium` to install the Chromium
-   browser. The `timelapse-capture` binary becomes available on `PATH`. If
-   `ffmpeg` or `ffprobe` are missing the installer prints the platform-specific
-   install command — follow it now.
-
-3. Install FFmpeg if step 2 flagged it as missing:
-
-   ```bash
-   # macOS
-   brew install ffmpeg
-
-   # Debian / Ubuntu
-   sudo apt-get install ffmpeg
-   ```
-
-   **Expected:** `ffmpeg -version` and `ffprobe -version` each print a version
-   string and exit 0.
+   **Expected:** npm downloads the package, installs dependencies, installs
+   npm-managed FFmpeg/ffprobe binaries, and automatically runs
+   `npx playwright install chromium` to install the Chromium browser. The
+   `timelapse-capture` binary becomes available on `PATH`.
 
 4. Run `doctor` and confirm every check reports `[PASS]`:
 
