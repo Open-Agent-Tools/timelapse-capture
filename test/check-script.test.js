@@ -1,8 +1,6 @@
-"use strict";
-
-const test = require("node:test");
-const assert = require("node:assert");
-const {
+import test from "node:test";
+import assert from "node:assert";
+import {
   chmodSync,
   existsSync,
   mkdtempSync,
@@ -10,13 +8,15 @@ const {
   readFileSync,
   statSync,
   writeFileSync,
-} = require("node:fs");
-const { join, resolve } = require("node:path");
-const os = require("node:os");
-const { spawnSync } = require("node:child_process");
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import os from "node:os";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const CANONICAL_BIN = "./src/timelapse-capture.mjs";
+const CANONICAL_BIN = "src/timelapse-capture.mjs";
 
 function readJson(relative) {
   return JSON.parse(readFileSync(resolve(REPO_ROOT, relative), "utf8"));
@@ -29,7 +29,7 @@ test("package.json bin points at the canonical CLI entrypoint", () => {
 
 test("package.json scripts target the canonical entry and run Node's test runner", () => {
   const pkg = readJson("package.json");
-  assert.strictEqual(pkg.scripts.start, `node ${CANONICAL_BIN}`);
+  assert.strictEqual(pkg.scripts.start, `node ./${CANONICAL_BIN}`);
   assert.match(
     pkg.scripts.check,
     /node --check \.\/src\/timelapse-capture\.mjs/,

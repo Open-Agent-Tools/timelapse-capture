@@ -21,6 +21,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CLI = path.join(__dirname, "..", "src", "timelapse-capture.mjs");
 
+// Pointing Playwright at a directory with no installed browsers forces the
+// chromium check to fail deterministically. ffmpeg/ffprobe still resolve from
+// their packaged node_modules binaries, so this exercises the "one dependency
+// missing, exit non-zero" path without depending on what happens to be on PATH.
+const MISSING_BROWSERS_PATH = path.join(__dirname, "fixtures", "no-browsers");
+
 test("checkNode passes for supported Node versions", async () => {
   const result = await checkNode({ version: "24.1.0" });
   assert.equal(result.name, "node");
@@ -406,12 +412,17 @@ test('formatDoctorHuman never prints "undefined" for malformed checks', async ()
 test("doctor --json emits parseable JSON and exits non-zero when a dependency is missing", () => {
   const result = spawnSync(process.execPath, [CLI, "doctor", "--json"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: "" },
+    env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: MISSING_BROWSERS_PATH },
   });
 
   assert.notEqual(result.status, 0);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.ok, false);
+  assert.ok(
+    payload.checks.some(
+      (check) => check.name === "chromium" && check.status === "fail",
+    ),
+  );
   assert.ok(
     payload.checks.some(
       (check) => check.name === "ffmpeg" && check.status === "pass",
@@ -424,7 +435,7 @@ test("doctor --json emits parseable JSON and exits non-zero when a dependency is
 test("doctor without --json emits human-readable output and summary", () => {
   const result = spawnSync(process.execPath, [CLI, "doctor"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: "" },
+    env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: MISSING_BROWSERS_PATH },
   });
 
   assert.notEqual(result.status, 0);
