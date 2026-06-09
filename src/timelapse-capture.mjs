@@ -12,7 +12,7 @@ import { resolveRunDir } from "./run-resolver.mjs";
 import { setTimeout as setTimeoutPromise } from "node:timers/promises";
 
 const __filename = fileURLToPath(import.meta.url);
-export const VERSION = "0.4.0";
+export const VERSION = "0.5.0";
 
 export const CANONICAL_STATES = Object.freeze([
   "starting",
