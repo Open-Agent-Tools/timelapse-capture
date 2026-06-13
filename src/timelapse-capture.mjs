@@ -1633,6 +1633,7 @@ async function spawnDetachedCapture(runDir) {
     detached: true,
     stdio: "ignore",
     env: process.env,
+    windowsHide: true,
   });
   child.unref();
   const job = {
