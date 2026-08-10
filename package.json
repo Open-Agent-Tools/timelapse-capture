@@ -19,7 +19,7 @@
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@ffprobe-installer/ffprobe": "^2.1.2",
-    "playwright": "^1.59.1"
+    "playwright": "^1.62.1"
   },
   "files": [
     "src/",
@@ -49,7 +49,7 @@
     "cli"
   ],
   "devDependencies": {
-    "prettier": "^3.8.3",
-    "typescript": "^6.0.3"
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2"
   }
 }
