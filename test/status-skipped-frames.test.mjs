@@ -26,8 +26,8 @@ test("status output includes attempted and skipped frame counters", async () => 
       ],
       {
         TIMELAPSE_SIMULATE_FRAMES: "3",
-        TIMELAPSE_SIMULATE_FRAME_FAILURE: "1", // fails index 2
-        TIMELAPSE_SIMULATE_FRAME_SKIP: "1", // skips index 3
+        TIMELAPSE_SIMULATE_FRAME_FAILURE: "1",
+        TIMELAPSE_SIMULATE_FRAME_SKIP: "1",
       },
     );
     assert.equal(result.status, 0, result.stderr);
@@ -37,16 +37,12 @@ test("status output includes attempted and skipped frame counters", async () => 
     const status = await waitForCompletedStatus(runDir);
     assert.equal(status.state, "completed");
 
-    // index 1: captured
-    // index 2: failed
-    // index 3: skipped
     assert.equal(status.frames.captured, 1);
     assert.equal(status.frames.failed, 1);
     assert.equal(status.frames.skipped, 1);
     assert.equal(status.frames.attempted, 3);
     assert.equal(status.frames.totalExpected, 3);
 
-    // Verify human output also contains the counters
     const humanResult = runCli(["status", runDir]);
     assert.equal(humanResult.status, 0);
     assert.ok(humanResult.stdout.includes("3 attempted"));
@@ -55,7 +51,6 @@ test("status output includes attempted and skipped frame counters", async () => 
     assert.ok(humanResult.stdout.includes("1 skipped"));
     assert.ok(humanResult.stdout.includes("3 expected"));
 
-    // Verify manifest contains the skipped record
     const manifestPath = path.join(runDir, "manifest.jsonl");
     const manifestLines = (await fs.readFile(manifestPath, "utf8"))
       .trim()

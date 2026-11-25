@@ -12,7 +12,6 @@ test("reproduce inconsistency in frame file extension filtering", async (t) => {
   const framesDir = path.join(tmpDir, "frames");
   fs.mkdirSync(framesDir, { recursive: true });
 
-  // Create a mix of files
   fs.writeFileSync(path.join(framesDir, "frame-0001.png"), "");
   fs.writeFileSync(path.join(framesDir, "frame-0002.jpg"), "");
   fs.writeFileSync(path.join(framesDir, "frame-0003.jpeg"), "");
@@ -84,8 +83,8 @@ test("reproduce inconsistency in frame file extension filtering", async (t) => {
 
     fs.writeFileSync(path.join(framesDir2, "frame-0001.jpg"), "");
 
-    const { cleanupFrames: cleanupFramesInternal } = __test__; // Need to re-import or use internal
-    // cleanupFrames actually calls copySamplesSync if keep-samples is set
+    const { cleanupFrames: cleanupFramesInternal } = __test__;
+
     const result = cleanupFrames(tmpDir2, { "keep-samples": 1 });
 
     assert.strictEqual(result.samples.length, 1);
@@ -101,6 +100,5 @@ test("reproduce inconsistency in frame file extension filtering", async (t) => {
     fs.rmSync(tmpDir2, { recursive: true, force: true });
   });
 
-  // Cleanup
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });

@@ -46,9 +46,9 @@ test("aliasFor throws on empty input", () => {
 test("isAlias accepts alias-shaped strings and rejects others", () => {
   assert.equal(isAlias("cheeky-monkey-427"), true);
   assert.equal(isAlias("brave-falcon-001"), true);
-  assert.equal(isAlias("cheeky-monkey-42"), false); // only two digits
-  assert.equal(isAlias("cheeky-monkey-4271"), false); // four digits
-  assert.equal(isAlias("Cheeky-Monkey-427"), false); // uppercase
+  assert.equal(isAlias("cheeky-monkey-42"), false);
+  assert.equal(isAlias("cheeky-monkey-4271"), false);
+  assert.equal(isAlias("Cheeky-Monkey-427"), false);
   assert.equal(isAlias("./timelapse-runs/foo"), false);
   assert.equal(isAlias("localhost-3000-20260518-181109"), false);
   assert.equal(isAlias(""), false);

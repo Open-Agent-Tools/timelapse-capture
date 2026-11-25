@@ -31,7 +31,6 @@ test("cleanup --keep-samples moves retained frames to samples/ and removes frame
       options: { "keep-samples": true, force: true },
     });
 
-    // Check if samples directory exists
     const samplesDir = path.join(runDir, "samples");
     const samplesExist = await fs.stat(samplesDir).then(
       () => true,
@@ -50,7 +49,6 @@ test("cleanup --keep-samples moves retained frames to samples/ and removes frame
       "Should have sample-000002.png",
     );
 
-    // Check if frames directory is gone
     const framesDir = path.join(runDir, "frames");
     const framesExist = await fs.stat(framesDir).then(
       () => true,
@@ -58,7 +56,6 @@ test("cleanup --keep-samples moves retained frames to samples/ and removes frame
     );
     assert.ok(!framesExist, "frames/ directory should be removed");
 
-    // Check summary
     const summaryPath = path.join(runDir, "run-summary.json");
     const summary = JSON.parse(await fs.readFile(summaryPath, "utf8"));
     assert.ok(summary.cleanup.samples, "summary should list samples");
@@ -84,12 +81,10 @@ test("renderFrames with keep-samples copies samples and cleans up frames", async
         const result = renderFrames(runDir, { "keep-samples": 5 });
         assert.ok(result.success, `Render should succeed: ${result.error}`);
 
-        // Check samples
         const samplesDir = path.join(runDir, "samples");
         const samples = await fs.readdir(samplesDir);
         assert.equal(samples.length, 5, "Should have 5 samples");
 
-        // Check frames are gone
         const framesDir = path.join(runDir, "frames");
         const framesExist = await fs.stat(framesDir).then(
           () => true,
@@ -97,7 +92,6 @@ test("renderFrames with keep-samples copies samples and cleans up frames", async
         );
         assert.ok(!framesExist, "frames/ directory should be removed");
 
-        // Check summary
         const summaryPath = path.join(runDir, "run-summary.json");
         const summary = JSON.parse(await fs.readFile(summaryPath, "utf8"));
         assert.equal(summary.cleanup.retained, 5);

@@ -29,7 +29,6 @@ test("CLAUDE.md npm run ci description matches package.json gates exactly", asyn
   ]);
 
   if (claudeMd === null) {
-    // CLAUDE.md is gitignored — only present in local checkouts.
     return;
   }
 
@@ -37,9 +36,6 @@ test("CLAUDE.md npm run ci description matches package.json gates exactly", asyn
   const ciScript = pkg.scripts?.ci;
   assert.ok(ciScript, "Expected package.json to define scripts.ci");
 
-  // Extract gate names from scripts.ci, e.g.:
-  //   "npm run check && npm run format:check && npm run typecheck && npm test"
-  // Handles both "npm run <name>" and "npm <name>" for built-in shorthands like "npm test".
   const scriptGates = [...ciScript.matchAll(/npm (?:run )?(\S+)/g)].map(
     (m) => m[1],
   );
@@ -49,9 +45,6 @@ test("CLAUDE.md npm run ci description matches package.json gates exactly", asyn
     .find((line) => line.trim().startsWith("npm run ci"));
   assert.ok(ciLine, "Expected CLAUDE.md to document npm run ci");
 
-  // Token-split the gate list from the comment, e.g. "# check + format:check + typecheck + test".
-  // Splitting on " + " gives exact token names and avoids substring false positives where
-  // "check" would match inside "format:check" or "typecheck" with a bare regex test.
   const commentMatch = ciLine.match(/#\s*([\w:.-]+(?:\s*\+\s*[\w:.-]+)*)/);
   assert.ok(
     commentMatch,
