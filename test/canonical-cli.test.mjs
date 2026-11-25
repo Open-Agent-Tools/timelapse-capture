@@ -916,12 +916,10 @@ test("render of a jpeg run uses a jpeg input pattern and jpeg poster", async () 
         "frame-%04d.jpeg",
       );
 
-      // Poster carries the jpeg extension and the recorded summary agrees.
       assert.equal(summary.poster, "poster.jpeg");
       const posterStat = await fs.stat(path.join(runDir, "poster.jpeg"));
       assert.ok(posterStat.size > 0, "poster.jpeg exists and is non-empty");
 
-      // Peek still resolves a jpeg frame for a kept-frames jpeg run.
       const peekResult = runCli(["peek", runDir, "--latest", "--json"]);
       assert.equal(peekResult.status, 0, peekResult.stderr);
       const payload = JSON.parse(peekResult.stdout);
@@ -1944,7 +1942,7 @@ test("start command uses PRD desktop default viewport when omitted", async () =>
       await fs.readFile(path.join(runDir, "config.json"), "utf8"),
     );
     assert.deepEqual(config.viewport, { width: 1440, height: 900 });
-    // Default capture format is JPEG q90.
+
     assert.equal(config.format, "jpeg");
     assert.equal(config.quality, 90);
     assert.equal(
@@ -2314,7 +2312,6 @@ test("help output covers all schema flags for each user-facing command", () => {
   ];
   const { COMMAND_SCHEMAS } = __test__;
 
-  // Locate the line index where each command's section starts
   const commandStarts = {};
   for (const [i, line] of lines.entries()) {
     for (const cmd of USER_COMMANDS) {
@@ -2332,7 +2329,6 @@ test("help output covers all schema flags for each user-facing command", () => {
       `Command ${command} not found in help output`,
     );
 
-    // Section ends at the next command's line (or end of output)
     const endIdx = USER_COMMANDS.filter((c) => c !== command)
       .map((c) => commandStarts[c])
       .filter((i) => i !== undefined && i > startIdx)
@@ -2400,7 +2396,6 @@ test("peek --latest returns poster.png after default cleanup removes raw frames"
       });
       assert.equal(renderResult.status, 0, renderResult.stderr);
 
-      // Write poster.png directly since fake-ffmpeg doesn't copy the poster in tests
       const posterPath = path.join(runDir, "poster.png");
       if (
         !(await fs.stat(posterPath).then(
@@ -2479,7 +2474,7 @@ test("status --json includes diskUsage with runDirBytes and framesBytes", async 
 
 test("peek --latest returns remaining frame after cleanup --keep-latest", async () => {
   const { runDir } = await makeRun();
-  // render auto-calls cleanupFrames internally; use --keep-frames to preserve frames for --keep-latest
+
   try {
     await withFakeFFmpeg(async (manager) => {
       const renderResult = runCli(
@@ -2488,13 +2483,11 @@ test("peek --latest returns remaining frame after cleanup --keep-latest", async 
       );
       assert.equal(renderResult.status, 0, renderResult.stderr);
 
-      // cleanup --keep-latest needs fake ffprobe to validate the rendered output.mp4
       const cleanupResult = runCli(["cleanup", runDir, "--keep-latest"], {
         PATH: manager.getPATHEnv(),
       });
       assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
 
-      // With --keep-latest, the last frame remains in frames/ (no latest-retained.png)
       const posterPath = path.join(runDir, "poster.png");
       await fs.rm(posterPath, { force: true });
 

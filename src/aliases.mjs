@@ -1,9 +1,5 @@
 import { createHash } from "node:crypto";
 
-// 20 adjectives x 20 nouns x 1000 digits = 400,000 possible aliases.
-// Aliases are deterministic from the run directory name (sha256-seeded),
-// so the same directory always resolves to the same alias.
-
 export const ALIAS_ADJECTIVES = [
   "brave",
   "breezy",

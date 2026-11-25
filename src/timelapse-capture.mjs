@@ -36,13 +36,10 @@ export function migrateLegacyState(state) {
   return state;
 }
 
-// Simulation-mode placeholder frame, encoded as base64 to keep the canonical
-// CLI source free of any literal scaffold PNG hex sequence (regression check).
 const SIMULATION_FRAME_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAC0lEQVR4nGNgYAAAAAIAAdde3rAAAAAElFTkSuQmCA==";
 const SIMULATION_FRAME_PNG = Buffer.from(SIMULATION_FRAME_PNG_BASE64, "base64");
-// Matching 1x1 baseline JPEG so simulated `--format jpeg` runs produce valid
-// JPEG bytes that render/peek end-to-end in tests.
+
 const SIMULATION_FRAME_JPEG_BASE64 =
   "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==";
 const SIMULATION_FRAME_JPEG = Buffer.from(
@@ -61,8 +58,7 @@ const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
 const SUPPORTED_FORMATS = Object.freeze(["png", "jpeg"]);
 const DEFAULT_FORMAT = "jpeg";
 const DEFAULT_JPEG_QUALITY = 90;
-// No-flags `start` runs for up to 12h at a cadence that yields 1 minute of
-// output video per hour of capture (at fps=24 that's 2500ms between frames).
+
 const INDEFINITE_DURATION_MS = 12 * 60 * 60 * 1000;
 const INDEFINITE_VIDEO_LENGTH_PER_HOUR_MS = 60 * 1000;
 const DEFAULT_BACKEND = "playwright-url";
@@ -164,9 +160,6 @@ const isMain = (() => {
   }
 })();
 
-// Set by SIGTERM/SIGINT inside the capture child process. The capture loops
-// check this between frames so `stop` results in a graceful exit + auto-render
-// rather than aborting mid-run.
 let captureStopRequested = false;
 
 if (isMain) {
@@ -238,8 +231,6 @@ export async function main(argv) {
   }
 }
 
-// ---------- Parser ----------
-
 export function parseArgs(argv) {
   if (!Array.isArray(argv) || argv.length === 0) {
     return { command: "help", options: {}, positionals: [] };
@@ -274,11 +265,11 @@ export function parseArgs(argv) {
     }
 
     if (token.startsWith("--no-") && !token.includes("=")) {
-      const noKey = token.slice(2); // e.g. "no-render"
+      const noKey = token.slice(2);
       if (schema.boolFlags.includes(noKey)) {
         options[noKey] = true;
       } else {
-        const key = token.slice(5); // e.g. "render"
+        const key = token.slice(5);
         assertBoolFlag(command, schema, key, token);
         options[key] = false;
       }
@@ -588,8 +579,6 @@ async function runDoctorCli(parsed) {
   }
 }
 
-// ---------- Start / Capture ----------
-
 function frameName(index, ext = "png") {
   return `frame-${String(index).padStart(4, "0")}.${ext}`;
 }
@@ -776,7 +765,6 @@ function estimateFrameBytes(
   const width = viewport?.width || DEFAULT_VIEWPORT.width;
   const height = viewport?.height || DEFAULT_VIEWPORT.height;
   if (format === "jpeg") {
-    // Rough order-of-magnitude only (feeds the pre-run disk warning).
     return Math.ceil(width * height * (0.07 + 0.0125 * (quality / 100)));
   }
   return Math.ceil((width * height * 3) / 4);
@@ -1100,11 +1088,6 @@ async function recordSkippedFrame({
   await writeStatus(runDir, state);
 }
 
-// Replaces window.WebSocket with a stub that never opens a real connection.
-// Runs in the page context via Playwright addInitScript, before any page script.
-// Prevents capture from holding open a live WS to the captured app while the
-// headless renderer is CPU-saturated and not draining frames (would otherwise
-// backpressure the upstream sender and stall its other clients).
 function blockWebsocketsInitScript() {
   if (!window.WebSocket) return;
   const CONNECTING = 0;
@@ -1568,9 +1551,7 @@ export async function commandCapture({ runDir } = {}) {
     });
     const willAutoRender =
       config.autoRender !== false && captureStatus.state === "completed";
-    // While auto-render is in progress, surface job.state="rendering" so that
-    // consumers polling for a terminal job.state don't see "completed" before
-    // the run dir actually stops being written to.
+
     await writeJob(resolved, {
       runDir: resolved,
       state: willAutoRender ? "rendering" : captureStatus.state,
@@ -1781,8 +1762,6 @@ async function runCaptureCli(parsed) {
   await commandCapture({ runDir: parsed.options.run });
 }
 
-// ---------- Stop ----------
-
 export async function commandStop({ runDir } = {}) {
   if (!runDir) {
     throw new ParseError("E_MISSING_ARGUMENT", "Missing run directory.");
@@ -1838,8 +1817,6 @@ async function runStopCli(parsed) {
     `Capture will finalize and auto-render. Poll: timelapse-capture status ${alias}`,
   );
 }
-
-// ---------- Status ----------
 
 export async function commandStatus({ runDir }) {
   if (!runDir) {
@@ -1950,8 +1927,6 @@ async function runStatusCli(parsed) {
     console.log(`Render: timelapse-capture render ${alias}`);
   }
 }
-
-// ---------- Peek ----------
 
 async function listFrameFiles(runDir) {
   const framesDir = path.join(runDir, "frames");
@@ -2163,8 +2138,6 @@ async function runPeekCli(parsed) {
   console.log(result.path);
 }
 
-// ---------- Render ----------
-
 class RenderError extends Error {
   constructor(message, code) {
     super(message);
@@ -2367,7 +2340,6 @@ export function cleanupFrames(runDir, options = {}) {
     const sampleCount =
       options["keep-samples"] === true ? 2 : Number(options["keep-samples"]);
     samplePaths = copySamplesSync(framesDir, runDir, sampleCount);
-    // Samples are now in runDir/samples, so we don't need to retain any in framesDir
   } else if (options["keep-latest"]) {
     if (files.length > 0) {
       retained.add(files[files.length - 1]);
@@ -2441,17 +2413,12 @@ function listFrameFilesSync(framesDir) {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-// Read-side helper: a run's frames are always a single format, so the
-// extension of the first frame on disk is authoritative (robust to a missing
-// or hand-edited config.json). Defaults to "png" when no frames are present.
 function frameExtFromDir(framesDir) {
   const names = listFrameFilesSync(framesDir);
   if (names.length === 0) return "png";
   return path.extname(names[0]).slice(1).toLowerCase() || "png";
 }
 
-// Find a format-agnostic artifact (e.g. poster.png/poster.jpeg) in a directory.
-// Returns the absolute path of the first match, or null when none exists.
 function findArtifact(dir, pattern) {
   if (!fs.existsSync(dir)) return null;
   const match = fs.readdirSync(dir).find((name) => pattern.test(name));
@@ -2940,8 +2907,6 @@ async function runRenderCli(parsed) {
   console.log(`Rendered: ${result.path}`);
 }
 
-// ---------- Cleanup ----------
-
 async function writeCleanupSummary(runDir, cleanup) {
   const existing = await readJsonOptional(getSummaryPath(runDir));
   await writeJsonAtomic(getSummaryPath(runDir), {
@@ -3150,8 +3115,6 @@ async function runCleanupCli(parsed) {
   console.log(result.message);
 }
 
-// ---------- Help ----------
-
 function printHelp() {
   console.log(`timelapse-capture ${VERSION}
 
@@ -3182,7 +3145,6 @@ Usage:
 `);
 }
 
-// Compatibility re-exports kept lightweight for tests.
 export const __test__ = {
   SIMULATION_FRAME_PNG,
   SIMULATION_FRAME_JPEG,

@@ -130,8 +130,6 @@ test("stop signals graceful exit and capture proceeds to auto-render", async () 
   const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "tlc-stop-graceful-"));
   try {
     await withFakeFFmpeg(async (manager) => {
-      // Start an indefinite run (no --duration) so the loop wouldn't terminate
-      // on its own within the test window.
       const result = runCli(
         ["start", "http://example.test/", "--out", runDir, "--json"],
         {

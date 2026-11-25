@@ -24,8 +24,7 @@ test("failed frame attempts preserve prior successful latestFrame", async () => 
       ],
       {
         TIMELAPSE_SIMULATE_FRAMES: "3",
-        // This test hook fails only the second simulated frame. The third frame
-        // still captures, proving a failed attempt does not poison latestFrame.
+
         TIMELAPSE_SIMULATE_FRAME_FAILURE: "1",
       },
     );
@@ -60,8 +59,7 @@ test("failed frame attempts preserve prior successful latestFrame", async () => 
       manifestLines.filter((record) => record.status === "failed").length,
       1,
     );
-    // TIMELAPSE_SIMULATE_FRAME_FAILURE is intentionally fixed to index 2 so
-    // the test covers a failure between successful frames.
+
     assert.equal(manifestLines[1].index, 2);
     assert.equal(manifestLines[1].status, "failed");
   } finally {

@@ -20,8 +20,7 @@ test("README start synopsis lists every COMMAND_SCHEMAS.start flag", async () =>
   const synopsisBlocks = [];
   for (let i = 1; i < segments.length; i += 2) {
     const block = segments[i];
-    // The first line of a fenced block is the language label (e.g. "bash"),
-    // so skip it and look at the first non-empty content line.
+
     const lines = block.split("\n");
     const contentLines = lines.slice(1);
     const firstNonEmpty = contentLines
@@ -87,11 +86,10 @@ test("README documents dogfood tester setup and capture workflow", async () => {
     );
   }
 
-  // Troubleshooting subsection for ffprobe specifically
   assert.match(readme, /### .*ffprobe/i);
-  // Rendered artifact path is documented
+
   assert.match(readme, /output\.mp4/);
-  // Both manifest files must be documented in the Artifacts section
+
   assert.match(readme, /manifest\.jsonl/);
   assert.match(readme, /manifest\.json/);
   assert.match(readme, /latest-frame\.json/);
@@ -103,9 +101,9 @@ test("README documents dogfood tester setup and capture workflow", async () => {
     /- `samples\/`: retained sample frames copied by `render` or `cleanup` when `--keep-samples` is used, named `sample-NNNNNN\.png`\./,
   );
   assert.match(readme, /poster\.png/);
-  // manifest.jsonl must be described as the per-frame log near its filename
+
   assert.match(readme, /manifest\.jsonl[\s\S]{0,400}per-frame/i);
-  // manifest.json must be described as start-time metadata near its filename
+
   assert.match(
     readme,
     /manifest\.json[^l][\s\S]{0,400}(start-time|run metadata|capture start)/i,
@@ -129,16 +127,15 @@ test("skill requires doctor before capture and describes the agent workflow", as
   );
   assert.match(skill, /README\.md/);
 
-  // Frame inspection discipline: inspect single path, not full frames dir
   assert.match(
     skill,
     /inspect only the returned image path|Do not load the (full|whole) [`']?frames\/?[`']? directory/i,
   );
-  // Explicit rendered MP4 path format
+
   assert.match(skill, /<run-dir>\/output\.mp4/);
-  // Report artifact paths instruction
+
   assert.match(skill, /report.*artifact path/i);
-  // Example run-dir paths should match the canonical README shape.
+
   assert.match(skill, /\.\/timelapse-runs\//);
   assert.doesNotMatch(skill, /\.\/runs\/localhost/);
   assert.doesNotMatch(
@@ -150,7 +147,6 @@ test("skill requires doctor before capture and describes the agent workflow", as
 test("dogfood-protocol.md covers install checklist, all three scenarios, feedback section, and key CLI coverage", async () => {
   const doc = await readProjectFile("docs", "dogfood-protocol.md");
 
-  // Install checklist
   assert.match(doc, /## Tester Install Steps/);
   assert.match(doc, /Node\.js 24/);
   assert.match(doc, /npm install/);
@@ -158,26 +154,21 @@ test("dogfood-protocol.md covers install checklist, all three scenarios, feedbac
   assert.match(doc, /ffmpeg/);
   assert.match(doc, /npm-managed FFmpeg\/ffprobe/);
 
-  // Three scenario sections
   assert.match(doc, /## Scenario 1/);
   assert.match(doc, /## Scenario 2/);
   assert.match(doc, /## Scenario 3/);
 
-  // Feedback section
   assert.match(doc, /## Tester Feedback Template/);
 
-  // Key CLI flag and artifact coverage
   assert.match(doc, /--keep-frames/);
   assert.match(doc, /manifest\.jsonl/);
 
-  // Explicit Expected outcomes throughout (not just Confirm prose)
   const expectedCount = (doc.match(/\*\*Expected:\*\*/g) || []).length;
   assert.ok(
     expectedCount >= 10,
     `Expected at least 10 **Expected:** outcome blocks, found ${expectedCount}`,
   );
 
-  // Scenario 2 must use render --keep-frames, not the broken render+cleanup pattern
   assert.match(
     doc,
     /render "[^"]*" --keep-frames|render \$\w+ --keep-frames|render.*--keep-frames/,
@@ -195,11 +186,10 @@ test("CLAUDE.md contains concrete project guidance instead of template placehold
   try {
     claudeMd = await readProjectFile("CLAUDE.md");
   } catch (error) {
-    if (error.code === "ENOENT") return; // CLAUDE.md is gitignored; only present locally.
+    if (error.code === "ENOENT") return;
     throw error;
   }
 
-  // Must NOT contain any template placeholder text
   assert.doesNotMatch(claudeMd, /_Add your build and test commands here_/);
   assert.doesNotMatch(
     claudeMd,
@@ -208,7 +198,6 @@ test("CLAUDE.md contains concrete project guidance instead of template placehold
   assert.doesNotMatch(claudeMd, /_Add your project-specific conventions here_/);
   assert.doesNotMatch(claudeMd, /# Example:/);
 
-  // Must document real build and validation commands
   assert.match(claudeMd, /npm run check/);
   assert.match(claudeMd, /npm run typecheck/);
   assert.match(claudeMd, /npm test/);
@@ -219,14 +208,10 @@ test("CLAUDE.md contains concrete project guidance instead of template placehold
     /npm run ci\s+#[^\n]*check \+ format:check \+ typecheck \+ test/,
   );
 
-  // Must reference canonical source files
   assert.match(claudeMd, /src\/timelapse-capture\.mjs/);
   assert.match(claudeMd, /src\/doctor\.mjs/);
   assert.match(claudeMd, /test\//);
 
-  // Architecture Overview bullet for src/timelapse-capture.mjs must list
-  // the canonical command set and must not name a nonexistent `report`
-  // command. Source of truth: the `main` switch in src/timelapse-capture.mjs.
   const cliBulletMatch = claudeMd.match(/`src\/timelapse-capture\.mjs`[^\n]*/);
   assert.ok(
     cliBulletMatch,

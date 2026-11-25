@@ -21,10 +21,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CLI = path.join(__dirname, "..", "src", "timelapse-capture.mjs");
 
-// Pointing Playwright at a directory with no installed browsers forces the
-// chromium check to fail deterministically. ffmpeg/ffprobe still resolve from
-// their packaged node_modules binaries, so this exercises the "one dependency
-// missing, exit non-zero" path without depending on what happens to be on PATH.
 const MISSING_BROWSERS_PATH = path.join(__dirname, "fixtures", "no-browsers");
 
 test("checkNode passes for supported Node versions", async () => {
